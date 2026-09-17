@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tally</title>
+  <meta name="description" content="A private, offline budgeting app. Track spending, budgets and recurring bills on your own device." />
+  <meta name="theme-color" content="#F7F8FA" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Tally" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="preload" href="fonts/public-sans.woff2" as="font" type="font/woff2" crossorigin />
+  <script>
+    // Apply the saved theme before the first paint so there's no flash.
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('tally:theme') || 'system'; } catch (e) {}
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
+  <link rel="stylesheet" href="css/app.css" />
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="app" class="app">
+    <main id="main"><p class="boot">Loading your budget…</p></main>
+  </div>
+  <noscript><p class="boot">Tally needs JavaScript turned on to run.</p></noscript>
+</body>
+</html>
