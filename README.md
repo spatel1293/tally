@@ -2,6 +2,8 @@
 
 A personal budgeting app that runs entirely in your browser. Log spending and income, set monthly budgets, schedule repeating bills, and see where your money goes. It works on phones and laptops, keeps working offline, and has no accounts, no server, no tracking and no AI.
 
+> Continuing this project with Claude in VS Code? Open `START-HERE.md`.
+
 ## Run it
 
 You need [Node.js](https://nodejs.org) 20 or newer. There is nothing to install for the app itself.
