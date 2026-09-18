@@ -61,8 +61,8 @@ function renderShell() {
     app,
     html`<a class="skip" href="#main">Skip to content</a>
     <aside class="sidebar" aria-label="Main">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Tally</div>
-      <button type="button" class="btn primary block" data-action="new-tx" title="New transaction (N)">${NAV_ICONS.plus}New transaction</button>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Tally</span></div>
+      <button type="button" class="btn primary rail-cta" data-action="new-tx" title="New transaction (N)">${NAV_ICONS.plus}<span class="rail-label">New transaction</span></button>
       <nav>
         <ul class="plain-list side-nav">
           ${SIDEBAR.map((item) =>
@@ -343,6 +343,7 @@ async function boot() {
   setInterval(wake, 60000);
 
   registerServiceWorker();
+  renderDebugOverlay();
 }
 
 function registerServiceWorker() {
@@ -372,6 +373,39 @@ function registerServiceWorker() {
   }).catch(() => {
     // Offline support is a bonus; the app works without it.
   });
+}
+
+// ---------- Debug overlay (?debug) ----------
+// A temporary on-device readout for measuring real viewport sizes, used to
+// tune breakpoints for the Pixel Fold's cover and inner screens. Not linked
+// from the UI; append ?debug to the URL to see it.
+
+function renderDebugOverlay() {
+  if (!/[?&]debug\b/.test(location.search)) return;
+  const box = document.createElement('div');
+  box.setAttribute('aria-hidden', 'true');
+  Object.assign(box.style, {
+    position: 'fixed', zIndex: '9999', top: '0', insetInlineStart: '0',
+    padding: '6px 8px', font: '11px/1.5 ui-monospace, monospace',
+    background: 'rgba(0,0,0,0.75)', color: '#fff', whiteSpace: 'pre',
+    pointerEvents: 'none',
+  });
+  document.body.appendChild(box);
+  const update = () => {
+    const segs = window.viewport?.segments;
+    const lines = [
+      `${window.innerWidth} × ${window.innerHeight} css px`,
+      `dpr ${window.devicePixelRatio}`,
+      `coarse pointer: ${matchMedia('(pointer: coarse)').matches}`,
+      segs && segs.length > 1
+        ? `segments: ${segs.map((s) => `${Math.round(s.width)}×${Math.round(s.height)} @${Math.round(s.left)},${Math.round(s.top)}`).join('  |  ')}`
+        : 'segments: 1 (flat or unsupported)',
+    ];
+    box.textContent = lines.join('\n');
+  };
+  update();
+  window.addEventListener('resize', update);
+  window.viewport?.addEventListener?.('segmentschange', update);
 }
 
 // Keep the tab from closing while a save is still in flight.

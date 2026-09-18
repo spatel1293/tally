@@ -41,6 +41,7 @@
   --r: 10px;
   --r-lg: 16px;
   --tabbar-h: 64px;
+  --rail-w: 88px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --pad: 16px;
 
@@ -343,20 +344,23 @@ main {
   border-bottom: 1px solid color-mix(in srgb, var(--over) 30%, transparent);
 }
 
-@media (max-width: 899px) {
+@media (max-width: 599px) {
   .desktop-only {
     display: none !important;
   }
 }
 
-@media (min-width: 900px) {
+/* 600–899px: the Fold's inner screen and other medium widths get a slim
+   navigation rail instead of the bottom tab bar, so content can use the
+   full width. Laptops widen the rail into a full sidebar at 900px. */
+@media (min-width: 600px) {
   :root {
-    --pad: 32px;
+    --pad: 24px;
   }
 
   .app {
     display: grid;
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
     grid-template-rows: auto 1fr;
   }
 
@@ -367,8 +371,9 @@ main {
     height: 100dvh;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 20px 14px;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 8px;
     border-right: 1px solid var(--line);
     background: var(--surface);
   }
@@ -387,20 +392,41 @@ main {
   .tabbar {
     display: none;
   }
-
 }
 
+@media (min-width: 900px) {
+  :root {
+    --pad: 32px;
+    --rail-w: 232px;
+  }
+
+  .sidebar {
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px 14px;
+  }
+}
+
+/* Rail (600–899px): icon-mark only, no wordmark; nav items stack icon over a
+   short label. Widened into a full sidebar with the wordmark and row-style
+   nav at 900px, see the override below. */
 .brand {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 4px 8px 8px;
+  padding: 4px 0 8px;
+}
+
+.brand-name {
+  display: none;
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .brand-mark {
+  flex: none;
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -409,21 +435,47 @@ main {
     center / 100% no-repeat;
 }
 
+.rail-cta {
+  flex-direction: column;
+  gap: 2px;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 16px;
+}
+
+.rail-cta svg {
+  margin-left: 0;
+}
+
+.rail-cta .rail-label {
+  display: none;
+}
+
 .side-nav {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
+  width: 100%;
 }
 
 .side-nav a {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 2px;
   border-radius: var(--r-sm);
   color: var(--ink-2);
   text-decoration: none;
-  font-weight: 520;
+  font-weight: 560;
+  font-size: 0.6875rem;
+  line-height: 1.15;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .side-nav a:hover {
@@ -439,15 +491,68 @@ main {
 
 .side-nav .sep {
   height: 1px;
-  margin: 8px 10px;
+  width: 100%;
+  margin: 8px 0;
   background: var(--line);
 }
 
 .side-foot {
-  margin-top: auto;
-  padding: 0 10px;
-  font-size: 0.8125rem;
-  color: var(--ink-3);
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .brand {
+    justify-content: flex-start;
+    padding: 4px 8px 8px;
+  }
+
+  .brand-name {
+    display: inline;
+  }
+
+  .rail-cta {
+    flex-direction: row;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: var(--r);
+  }
+
+  .rail-cta svg {
+    margin-left: -4px;
+  }
+
+  .rail-cta .rail-label {
+    display: inline;
+  }
+
+  .side-nav {
+    align-items: stretch;
+  }
+
+  .side-nav a {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 8px 10px;
+    font-size: 1rem;
+    text-align: left;
+  }
+
+  .side-nav .sep {
+    margin: 8px 10px;
+    width: auto;
+  }
+
+  .side-foot {
+    display: block;
+    margin-top: auto;
+    padding: 0 10px;
+    font-size: 0.8125rem;
+    color: var(--ink-3);
+  }
 }
 
 /* ---------- Page structure ---------- */
@@ -534,7 +639,7 @@ main {
   min-width: 0;
 }
 
-@media (min-width: 1040px) {
+@media (min-width: 760px) {
   .dash-grid {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
     align-items: start;
@@ -1412,9 +1517,9 @@ dialog.confirm[open] {
   pointer-events: none;
 }
 
-@media (min-width: 900px) {
+@media (min-width: 600px) {
   .toasts {
-    left: calc(50% + 116px);
+    left: calc(50% + (var(--rail-w) / 2));
     bottom: 24px;
   }
 }

@@ -7,6 +7,7 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
+  "launch_handler": { "client_mode": "focus-existing" },
   "background_color": "#F7F8FA",
   "theme_color": "#F7F8FA",
   "categories": ["finance", "productivity"],
