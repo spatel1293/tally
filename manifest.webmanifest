@@ -19,5 +19,9 @@
   ],
   "shortcuts": [
     { "name": "Add a transaction", "short_name": "Add", "url": "./#/?add=1" }
+  ],
+  "screenshots": [
+    { "src": "icons/screenshots/narrow-home.png", "sizes": "412x915", "type": "image/png", "form_factor": "narrow", "label": "This month's spending, budgets and recent activity" },
+    { "src": "icons/screenshots/wide-home.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "The laptop dashboard, with spending by category" }
   ]
 }

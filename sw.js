@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v1.1.0';
+const VERSION = 'tally-v1.1.1';
 
 const FILES = [
   './',
@@ -15,6 +15,8 @@ const FILES = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
+  './icons/screenshots/narrow-home.png',
+  './icons/screenshots/wide-home.png',
   './js/app.js',
   './js/store.js',
   './js/storage.js',
