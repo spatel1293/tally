@@ -72,6 +72,10 @@ There is no framework and no build step. Plain ES modules load directly in the b
 - **German number format** puts a non-breaking space before `€`. Normalize whitespace in assertions.
 - **Dates in browser tests:** steps use dates relative to today, but the CSV fixture is fixed (Sep 2025 to Sep 2026). Don't assert current-month numbers that come from fixture data.
 - **`pkill -f`:** never use it with a pattern that also appears in your own shell command; it kills the shell.
+- **Emulating a fold in Playwright.** Postures come from `Emulation.setDeviceMetricsOverride` with a `displayFeature` (via `context.newCDPSession`); `setDisplayFeaturesOverride` on its own is accepted but does nothing. `page.screenshot()` *clears* that override and drops the app back to flat, so capture with `Page.captureScreenshot` through CDP instead. Its captures composite the top layer oddly, so an open sheet looks see-through in them; on the device it's opaque.
+- **Viewport segment indices are (x, y).** Side by side (book) the second segment is `env(… 1 0)`; stacked (tabletop) it's `env(… 0 1)`. Using the wrong pair silently falls back, which looks like a layout bug.
+- **Media queries and `vw` measure the whole viewport, not one page.** In book posture the content sits in a phone-width segment while the viewport spans both halves, so `vw`-based type and `min-width` breakpoints are sized for the spread. `css/app.css` pins `.hero-line`, `.figures dd` and `.dash-grid` back to their narrow values there.
+- **Hovering a toast pauses it.** `pointerenter` clears the dismiss timer on purpose. A test that leaves the pointer where it clicked can sit over the toast and wait forever; move the mouse away first (`page.mouse.move(5, 5)`).
 
 ## Working with the owner
 

@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v1.1.1';
+const VERSION = 'tally-v1.2.0';
 
 const FILES = [
   './',
@@ -31,6 +31,7 @@ const FILES = [
   './js/ui/format.js',
   './js/ui/html.js',
   './js/ui/overlay.js',
+  './js/ui/posture.js',
   './js/views/activity.js',
   './js/views/budgets.js',
   './js/views/components.js',

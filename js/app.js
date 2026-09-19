@@ -1,8 +1,10 @@
 import { html, mount, $ } from './ui/html.js';
 import { toast } from './ui/overlay.js';
 import { resetCharts, hydrateCharts } from './ui/charts.js';
+import { watchPosture } from './ui/posture.js';
+import { txsInMonth, totals } from './core/stats.js';
 import { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } from './store.js';
-import { ui } from './views/components.js';
+import { ui, viewMonth } from './views/components.js';
 import { openTransactionForm } from './views/txForm.js';
 import { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust } from './views/forms.js';
 import { renderHome, shiftMonth } from './views/home.js';
@@ -10,7 +12,7 @@ import { renderActivity, afterActivityMount, resetFilters, showMore } from './vi
 import { renderBudgets } from './views/budgets.js';
 import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, renderReview, reviewState, MORE_LINKS } from './views/pages.js';
 import { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } from './views/settings.js';
-import { money } from './ui/format.js';
+import { money, netMoney, month as monthLabel } from './ui/format.js';
 
 const I = (d) => html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const NAV_ICONS = {
@@ -76,6 +78,7 @@ function renderShell() {
     </aside>
     <div class="banner-slot" data-banner></div>
     <main id="main" tabindex="-1"></main>
+    <aside class="companion" data-companion aria-label="This month at a glance"></aside>
     <nav class="tabbar" aria-label="Main">
       <a href="#/" data-route="home">${NAV_ICONS.home}<span>Home</span></a>
       <a href="#/activity" data-route="activity">${NAV_ICONS.activity}<span>Activity</span></a>
@@ -84,6 +87,29 @@ function renderShell() {
       <a href="#/more" data-route="more">${NAV_ICONS.more}<span>More</span></a>
     </nav>
     <div id="toasts" class="toasts" aria-live="polite"></div>`
+  );
+}
+
+// The facing page in book posture: the right half of the spread shows where
+// the month stands, so half-folding gains a second page instead of just
+// making the first one narrower. Hidden by CSS in every other posture, so
+// there's no point building it then.
+function renderCompanion() {
+  const el = $('[data-companion]');
+  if (!el || document.documentElement.dataset.posture !== 'book') return;
+  const key = viewMonth();
+  const t = totals(txsInMonth(state.transactions, key));
+  mount(
+    el,
+    html`<p class="companion-label">${monthLabel(key)}</p>
+      ${state.transactions.length
+        ? html`<dl class="companion-figures">
+            <div><dt>Coming in</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
+            <div><dt>Going out</dt><dd class="amt">${money(t.expenses)}</dd></div>
+            <div><dt>Net</dt><dd>${netMoney(t.net)}</dd></div>
+          </dl>
+          <p class="companion-count">${t.count === 1 ? '1 transaction' : `${t.count} transactions`} this month</p>`
+        : html`<p class="companion-empty">Add your first transaction and this page keeps the running total.</p>`}`
   );
 }
 
@@ -105,6 +131,7 @@ function updateChrome(route) {
         : ''
     );
   }
+  renderCompanion();
   const foot = $('[data-side-foot]');
   if (foot) {
     const { lastExportAt } = state.settings;
@@ -326,6 +353,14 @@ async function boot() {
   }
 
   window.addEventListener('hashchange', () => render());
+
+  // Folding or unfolding changes how much room each half has: redraw the
+  // charts at the new width and fill in the facing page.
+  watchPosture(() => {
+    renderCompanion();
+    hydrateCharts(document);
+  });
+
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);

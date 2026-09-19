@@ -2419,6 +2419,193 @@ dialog .toasts {
   align-self: flex-start;
 }
 
+/* ---------- Foldable postures ---------- */
+
+/* Half-folding a phone makes the browser report two viewport segments with
+   the hinge between them. Everything below is additive: a device that can't
+   report segments never matches these queries and keeps the normal layout.
+   Both postures hand the crease a job instead of letting it cut through
+   content — the page stays on one side of it, the sheet opens on the other. */
+
+.companion {
+  display: none;
+}
+
+.companion-label {
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.companion-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.companion-figures > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.companion-figures dt {
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+
+.companion-figures dd {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.companion-count,
+.companion-empty {
+  font-size: 0.875rem;
+  color: var(--ink-3);
+}
+
+/* Book posture: the hinge runs top to bottom and the phone is held open like
+   a book. The left page becomes a phone-sized app, and the right page is the
+   facing page — the month's running total, or the sheet when one is open. */
+@media (horizontal-viewport-segments: 2) {
+  :root {
+    --pad: 16px;
+    --page-w: env(viewport-segment-width 0 0, 50vw);
+    --page2-left: env(viewport-segment-left 1 0, 50vw);
+    --page2-w: env(viewport-segment-width 1 0, 50vw);
+  }
+
+  .app {
+    display: block;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .banner-slot,
+  main {
+    width: var(--page-w);
+    max-width: none;
+  }
+
+  main {
+    /* Sit against the outer edge, not centred across the crease. */
+    margin: 0;
+    padding: 12px var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 40px);
+  }
+
+  .tabbar {
+    display: grid;
+    width: var(--page-w);
+  }
+
+  /* A page is phone-width even though the viewport spans both, so type that
+     scales with vw would be sized for the whole spread and break figures
+     onto two lines. Pin it to the narrow end of each scale. */
+  .hero-line {
+    font-size: 1.625rem;
+  }
+
+  .hero.small .hero-line {
+    font-size: 1.375rem;
+  }
+
+  .figures dd {
+    font-size: 1.0625rem;
+  }
+
+  /* Likewise the dashboard: two columns fit the spread, not a single page. */
+  .dash-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .companion {
+    display: flex;
+    position: fixed;
+    z-index: 5;
+    top: 0;
+    left: var(--page2-left);
+    width: var(--page2-w);
+    height: 100dvh;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+    padding: 32px var(--pad);
+    border-left: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  dialog.sheet {
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0 0 0 var(--page2-left);
+  }
+
+  .sheet-panel {
+    width: var(--page2-w);
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .toasts {
+    left: calc(var(--page-w) / 2);
+    bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
+    width: min(560px, calc(var(--page-w) - 24px));
+  }
+}
+
+/* Tabletop posture: the hinge runs left to right and the phone stands like a
+   small laptop. The top half stays upright and readable, so the sheet opens
+   in the bottom half, flat under your hands. */
+@media (vertical-viewport-segments: 2) {
+  :root {
+    /* Stacked segments are indexed down the y axis: the lower half is 0 1. */
+    --bottom-h: env(viewport-segment-height 0 1, 50dvh);
+  }
+
+  .app {
+    display: block;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  main {
+    max-width: none;
+    padding: 12px var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 40px);
+  }
+
+  .tabbar {
+    display: grid;
+  }
+
+  dialog.sheet {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .sheet-panel {
+    width: 100%;
+    max-width: none;
+    height: var(--bottom-h);
+    max-height: none;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+
+  /* Keep confirmations above the crease, where the screen is upright. */
+  .toasts {
+    left: 50%;
+    bottom: calc(var(--bottom-h) + 12px);
+  }
+}
+
 /* ---------- Motion preferences ---------- */
 
 @media (prefers-reduced-motion: reduce) {
