@@ -56,9 +56,14 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
 ## Design
 
-- **Look:** cool paper background, ink-blue accent for actions only, green only for money coming in, amber for warnings, red for over budget.
-- **Structure:** hairline rules rather than boxed cards, and tabular figures (the `.amt` class) wherever numbers appear.
-- **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, grids of identical rounded cards, arrows in button text, and middle-dot separators in text.
+The owner asked for a deeper, more tactile look in September 2026, replacing the original flat "quiet ledger". Don't quietly restore hairline sections and the old ink-blue palette.
+
+- **Look:** layered surfaces on a cool blue-grey ground. The indigo→violet gradient (`--accent-grad`) is reserved for primary actions — the save button, the FAB — and never used behind text that carries meaning. Green only for money coming in, amber for warnings, red for over budget.
+- **Structure:** sections are raised cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated. Tabular figures (the `.amt` class) wherever numbers appear.
+- **Elevation:** `--shadow-1` for a resting card, `--shadow-2` for the hero and for hover, `--shadow` for dialogs and the FAB. Inputs are recessed (`--surface-2`) against the raised surfaces around them.
+- **Semantic colour wins.** A tinted or gradient surface must never make `s-over`, `s-warning` or income green unreadable; that's why the hero is a tinted surface rather than a saturated one.
+- **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate card per list row (a transaction list is rows in one card), arrows in button text, and middle-dot separators in text.
+- **A card inside a card** is the usual mistake: `.figures.compact` exists because that one already sits inside a `.panel`.
 - **Theme:** set on `<html data-theme>` by `app.js`, and by an inline script in `index.html` before first paint.
 - **Review your work visually.** Take screenshots of changed screens at every target size, in light and dark, before calling anything done.
 
