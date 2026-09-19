@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Tally</title>
   <meta name="description" content="A private, offline budgeting app. Track spending, budgets and recurring bills on your own device." />
-  <meta name="theme-color" content="#F7F8FA" />
+  <meta name="theme-color" content="#E8E8E3" />
   <meta name="color-scheme" content="light dark" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -23,7 +23,7 @@
     })();
   </script>
   <style>
-/* Tally — quiet ledger. Cool paper, ink-blue actions, green only for money in. */
+/* Tally — ink and paper. The interface is monochrome; colour only ever means money. */
 
 @font-face {
   font-family: 'Public Sans';
@@ -36,41 +36,55 @@
 :root {
   --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  --bg: #eef1f7;
+  /* Ink and paper. The interface itself is monochrome: every colour below
+     that isn't ink means something about money, and nothing else is allowed
+     to use one. That's what makes a red number impossible to miss. */
+  --bg: #e8e8e3;
   --surface: #ffffff;
-  --surface-2: #f3f5fb;
-  --surface-3: #e6eaf4;
-  --line: #e3e8f1;
-  --line-strong: #ccd4e3;
-  --ink: #131726;
-  --ink-2: #414a60;
-  --ink-3: #6b7489;
-  --ink-4: #9aa3b8;
-  --accent: #4f46e5;
-  --accent-2: #7c3aed;
-  --accent-hover: #4338ca;
-  --accent-ink: #ffffff;
-  --accent-soft: #ecebfe;
-  --pos: #059669;
-  --ok: #059669;
-  --warn: #d97706;
-  --warn-soft: #fdf2e0;
-  --over: #e11d48;
-  --over-soft: #fdeaef;
-  --goal: #4f46e5;
-  --bar-in: #10b981;
-  --bar-out: #6366f1;
-  --scrim: rgb(12 15 26 / 0.5);
+  --surface-2: #f2f2ee;
+  --surface-3: #e2e2db;
+  --line: #d9d9d1;
+  --line-strong: #12100f;
+  --edge: #12100f;
+  --ink: #12100f;
+  --ink-2: #3d3b38;
+  --ink-3: #6a6763;
+  --ink-4: #9b9792;
 
-  /* Elevation: surfaces sit above the page rather than being ruled off it. */
-  --shadow-1: 0 1px 2px rgb(19 23 38 / 0.05), 0 1px 3px rgb(19 23 38 / 0.04);
-  --shadow-2: 0 2px 4px rgb(19 23 38 / 0.04), 0 10px 22px -8px rgb(19 23 38 / 0.16);
-  --shadow: 0 12px 34px -10px rgb(19 23 38 / 0.28), 0 2px 8px rgb(19 23 38 / 0.06);
-  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  /* Actions are ink, never a decorative colour. */
+  --accent: #12100f;
+  --accent-hover: #000000;
+  --accent-ink: #fffffe;
+  --accent-soft: #e2e2db;
 
-  --r-sm: 8px;
-  --r: 12px;
-  --r-lg: 18px;
+  /* Money, and only money. */
+  --pos: #0b7a3b;
+  --ok: #0b7a3b;
+  --warn: #a86400;
+  --warn-soft: #f6e6c8;
+  --over: #c62516;
+  --over-soft: #f6d9d5;
+  --goal: #12100f;
+  --bar-in: #0b7a3b;
+  --bar-out: #12100f;
+
+  --scrim: rgb(18 16 15 / 0.55);
+
+  /* Depth is stamped, not blurred: a hard offset block behind each edge. */
+  --stamp: #12100f;
+  --shadow-1: 3px 3px 0 var(--stamp);
+  --shadow-2: 5px 5px 0 var(--stamp);
+  --shadow: 8px 8px 0 var(--stamp);
+  --bw: 2px;
+
+  --r-sm: 0px;
+  --r: 0px;
+  --r-lg: 0px;
+  --pill: 999px;
+
+  /* Slight overshoot, so things arrive rather than just stop. */
+  --spring: cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  --ease: cubic-bezier(0.2, 0.85, 0.25, 1);
   --tabbar-h: 64px;
   --rail-w: 88px;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -80,35 +94,38 @@
 }
 
 :root[data-theme='dark'] {
-  --bg: #0e1118;
-  --surface: #171c27;
-  --surface-2: #1e2532;
-  --surface-3: #27303f;
-  --line: #262e3c;
-  --line-strong: #39435a;
-  --ink: #e9edf6;
-  --ink-2: #b4bdd0;
-  --ink-3: #8790a6;
-  --ink-4: #5b647a;
-  --accent: #8b8cf9;
-  --accent-2: #b28cfb;
-  --accent-hover: #a3a4ff;
-  --accent-ink: #0f1020;
-  --accent-soft: #242452;
-  --pos: #34d399;
-  --ok: #34d399;
-  --warn: #f0b04a;
-  --warn-soft: #3a2c13;
-  --over: #fb6f8a;
-  --over-soft: #3d1a25;
-  --goal: #8b8cf9;
-  --bar-in: #34d399;
-  --bar-out: #8b8cf9;
-  --scrim: rgb(0 0 0 / 0.66);
+  /* Inverted: the paper becomes ink and the ink becomes bone. Same rule. */
+  --bg: #0b0b0a;
+  --surface: #151513;
+  --surface-2: #1d1d1a;
+  --surface-3: #27271f;
+  --line: #2e2e28;
+  --line-strong: #f2f1ea;
+  --edge: #f2f1ea;
+  --ink: #f2f1ea;
+  --ink-2: #c4c2b9;
+  --ink-3: #95928b;
+  --ink-4: #66645e;
 
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.36), 0 1px 3px rgb(0 0 0 / 0.3);
-  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.36), 0 12px 26px -8px rgb(0 0 0 / 0.55);
-  --shadow: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 10px rgb(0 0 0 / 0.4);
+  --accent: #f2f1ea;
+  --accent-hover: #ffffff;
+  --accent-ink: #0b0b0a;
+  --accent-soft: #27271f;
+
+  --pos: #45c178;
+  --ok: #45c178;
+  --warn: #e0a233;
+  --warn-soft: #3a2c12;
+  --over: #f4604c;
+  --over-soft: #3d1a16;
+  --goal: #f2f1ea;
+  --bar-in: #45c178;
+  --bar-out: #f2f1ea;
+
+  --scrim: rgb(0 0 0 / 0.72);
+
+  /* The stamp stays dark so it reads as a cast block, not a glow. */
+  --stamp: #46453d;
   color-scheme: dark;
 }
 
@@ -329,8 +346,7 @@ main {
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  border-top: 1px solid var(--line);
-  box-shadow: 0 -6px 20px -8px rgb(19 23 38 / 0.18);
+  border-top: var(--bw) solid var(--edge);
 }
 
 .tabbar a {
@@ -357,16 +373,25 @@ main {
   margin-top: -18px;
   display: grid;
   place-items: center;
-  border: 0;
-  border-radius: 20px;
-  background: var(--accent-grad);
+  border: var(--bw) solid var(--edge);
+  border-radius: var(--pill);
+  background: var(--accent);
   color: var(--accent-ink);
-  box-shadow: 0 8px 20px -4px color-mix(in srgb, var(--accent) 60%, transparent), 0 2px 6px rgb(19 23 38 / 0.2);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: var(--shadow-2);
+  transition: transform 0.16s var(--spring), box-shadow 0.16s var(--spring);
+}
+
+.fab svg {
+  transition: transform 0.24s var(--spring);
+}
+
+.fab:hover svg {
+  transform: rotate(90deg);
 }
 
 .fab:active {
-  transform: scale(0.94);
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--stamp);
 }
 
 .banner {
@@ -410,7 +435,7 @@ main {
     align-items: center;
     gap: 12px;
     padding: 16px 8px;
-    border-right: 1px solid var(--line);
+    border-right: var(--bw) solid var(--edge);
     background: var(--surface);
   }
 
@@ -463,12 +488,12 @@ main {
 
 .brand-mark {
   flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--accent)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Cg stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M8 8v12M12 8v12M16 8v12M20 8v12M6 18l16-8'/%3E%3C/g%3E%3C/svg%3E")
-    center / 100% no-repeat;
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: var(--bw) solid var(--edge);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .rail-cta {
@@ -657,10 +682,28 @@ main {
 
 .panel {
   padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border: var(--bw) solid var(--edge);
   background: var(--surface);
   box-shadow: var(--shadow-1);
+}
+
+/* A single tally stroke marks every section heading. */
+.panel > h2,
+.section-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.panel > h2::before,
+.section-head h2::before {
+  content: '';
+  flex: none;
+  width: 3px;
+  height: 1.05em;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: stroke-in 340ms cubic-bezier(0.2, 0.9, 0.2, 1) backwards;
 }
 
 .panel + .panel {
@@ -688,12 +731,9 @@ main {
 /* ---------- Hero and figures ---------- */
 
 .hero {
-  padding: 22px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  /* A whisper of the accent, so the month's headline reads as the one
-     raised surface on the page without tinting the figures on it. */
-  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 58%);
+  padding: 24px 20px;
+  border: var(--bw) solid var(--edge);
+  background: var(--surface);
   box-shadow: var(--shadow-2);
 }
 
@@ -731,8 +771,7 @@ main {
   gap: 12px;
   margin-top: 16px;
   padding: 16px 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border: var(--bw) solid var(--edge);
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
@@ -893,25 +932,28 @@ main {
   gap: 6px;
   min-height: 44px;
   padding: 0 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r);
+  border: var(--bw) solid var(--edge);
+  border-radius: var(--pill);
   background: var(--surface);
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 620;
   font-size: 0.9375rem;
   text-decoration: none;
   white-space: nowrap;
   box-shadow: var(--shadow-1);
-  transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease;
+  transition: background-color 0.14s ease, transform 0.14s var(--spring), box-shadow 0.14s var(--spring);
 }
 
 .btn:hover:not(:disabled) {
   background: var(--surface-2);
+  transform: translate(-1px, -1px);
   box-shadow: var(--shadow-2);
 }
 
+/* Pressing pushes the button down into its own stamp. */
 .btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--stamp);
 }
 
 .btn:disabled {
@@ -925,16 +967,13 @@ main {
 }
 
 .btn.primary {
-  background: var(--accent-grad);
-  border-color: transparent;
+  background: var(--accent);
+  border-color: var(--edge);
   color: var(--accent-ink);
-  box-shadow: 0 1px 2px rgb(19 23 38 / 0.12), 0 8px 18px -6px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--accent-hover), var(--accent-2));
-  border-color: transparent;
-  box-shadow: 0 1px 2px rgb(19 23 38 / 0.14), 0 12px 24px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--accent-hover);
 }
 
 .btn.danger {
@@ -1028,10 +1067,14 @@ main {
   text-decoration-thickness: 1px;
 }
 
+/* Nothing is tinted blue any more, so a link has to say so with a rule
+   under it rather than with colour. */
 .link {
   font-size: 0.875rem;
   font-weight: 600;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .link:hover {
@@ -1085,10 +1128,10 @@ textarea {
   width: 100%;
   min-height: 46px;
   padding: 10px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r);
-  /* Recessed against the raised surfaces around them. */
+  border: var(--bw) solid var(--edge);
+  border-radius: 0;
   background: var(--surface-2);
+  transition: box-shadow 0.14s var(--ease), background-color 0.14s ease;
   font-size: 1rem;
   appearance: none;
   -webkit-appearance: none;
@@ -1114,8 +1157,9 @@ input:not([type='radio']):not([type='checkbox']):focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--edge);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 
 [aria-invalid='true'] {
@@ -1318,18 +1362,20 @@ fieldset .field-error {
   gap: 6px;
   min-height: 40px;
   padding: 0 12px 0 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 20px;
+  border: var(--bw) solid var(--edge);
+  border-radius: var(--pill);
   background: var(--surface);
-  box-shadow: var(--shadow-1);
+  box-shadow: 2px 2px 0 var(--stamp);
   font-size: 0.9375rem;
-  font-weight: 540;
+  font-weight: 560;
   white-space: nowrap;
-  transition: transform 0.08s ease, box-shadow 0.12s ease;
+  transition: transform 0.14s var(--spring), box-shadow 0.14s var(--spring), background-color 0.14s ease;
 }
 
-.chip:active span {
-  transform: translateY(1px);
+.chip:active span,
+.chip-add:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--stamp);
 }
 
 .chip small {
@@ -1457,15 +1503,16 @@ dialog.sheet[open] {
   flex-direction: column;
   width: 100%;
   max-height: 94dvh;
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  border: var(--bw) solid var(--edge);
+  border-bottom: 0;
   background: var(--surface);
   box-shadow: var(--shadow);
-  animation: sheet-up 0.24s cubic-bezier(0.2, 0.85, 0.25, 1);
+  animation: sheet-up 0.34s var(--spring);
 }
 
 @keyframes sheet-up {
   from {
-    transform: translateY(40px);
+    transform: translateY(64px);
     opacity: 0;
   }
 }
@@ -1519,7 +1566,7 @@ dialog[open]::backdrop {
   .sheet-panel {
     max-width: 480px;
     max-height: min(820px, 92dvh);
-    border-radius: var(--r-lg);
+    border: var(--bw) solid var(--edge);
     animation-name: sheet-pop;
   }
 
@@ -1533,7 +1580,7 @@ dialog[open]::backdrop {
 
   @keyframes sheet-pop {
     from {
-      transform: translateY(8px) scale(0.985);
+      transform: translate(-10px, 14px) scale(0.97);
       opacity: 0;
     }
   }
@@ -1620,7 +1667,7 @@ dialog[open]::backdrop {
     position: sticky;
     top: 0;
     padding-left: 28px;
-    border-left: 1px solid var(--line);
+    border-left: var(--bw) solid var(--edge);
   }
 }
 
@@ -1637,7 +1684,7 @@ dialog.confirm[open] {
   width: 100%;
   max-width: 420px;
   padding: 20px;
-  border-radius: var(--r-lg);
+  border: var(--bw) solid var(--edge);
   background: var(--surface);
   box-shadow: var(--shadow);
   display: flex;
@@ -2136,8 +2183,7 @@ dialog .toasts {
   gap: 8px 16px;
   margin: 4px 0 12px;
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
-  border-radius: var(--r-lg);
+  border: var(--bw) solid var(--edge);
   background: var(--warn-soft);
   box-shadow: var(--shadow-1);
   font-size: 0.9375rem;
@@ -2672,8 +2718,15 @@ dialog .toasts {
     font-size: 1.375rem;
   }
 
+  /* The card's own padding eats into a 400px page, so give the three
+     figures their room back before a number breaks across lines. */
+  .figures {
+    padding: 14px 12px;
+    gap: 8px;
+  }
+
   .figures dd {
-    font-size: 1.0625rem;
+    font-size: 1rem;
   }
 
   /* Likewise the dashboard: two columns fit the spread, not a single page. */
@@ -2693,7 +2746,7 @@ dialog .toasts {
     justify-content: center;
     gap: 16px;
     padding: 32px var(--pad);
-    border-left: 1px solid var(--line);
+    border-left: var(--bw) solid var(--edge);
     background: var(--surface);
   }
 
@@ -2770,6 +2823,180 @@ dialog .toasts {
     left: 50%;
     bottom: calc(var(--bottom-h) + 12px);
   }
+}
+
+/* ---------- Motion ---------- */
+
+/* Everything here is a transform or an opacity, so it stays on the compositor
+   and costs nothing on a phone. All of it is switched off wholesale by the
+   reduced-motion block below. */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes stroke-in {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes fill-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes ring-in {
+  from {
+    stroke-width: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Arriving on a screen: blocks come up in sequence, top first. Set only on a
+   route change (app.js), so saving a transaction doesn't replay the whole
+   page. */
+main[data-enter] > * {
+  animation: rise 300ms var(--ease) backwards;
+}
+
+main[data-enter] > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+main[data-enter] > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+main[data-enter] > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+main[data-enter] > *:nth-child(5) {
+  animation-delay: 180ms;
+}
+
+main[data-enter] > *:nth-child(n + 6) {
+  animation-delay: 215ms;
+}
+
+/* Bars and budget fills wipe out from the left every time the figure changes,
+   which doubles as feedback that what you just saved landed. */
+.bar-fill,
+.pace-fill,
+.goal .bar-fill {
+  transform-origin: left center;
+  animation: fill-x 560ms var(--ease) backwards;
+}
+
+/* Chart columns grow from the baseline, left to right. */
+.chart rect {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: grow-y 460ms var(--ease) backwards;
+}
+
+.chart rect:nth-of-type(1) { animation-delay: 0ms; }
+.chart rect:nth-of-type(2) { animation-delay: 30ms; }
+.chart rect:nth-of-type(3) { animation-delay: 60ms; }
+.chart rect:nth-of-type(4) { animation-delay: 90ms; }
+.chart rect:nth-of-type(5) { animation-delay: 120ms; }
+.chart rect:nth-of-type(6) { animation-delay: 150ms; }
+.chart rect:nth-of-type(7) { animation-delay: 180ms; }
+.chart rect:nth-of-type(8) { animation-delay: 210ms; }
+.chart rect:nth-of-type(9) { animation-delay: 240ms; }
+.chart rect:nth-of-type(10) { animation-delay: 270ms; }
+.chart rect:nth-of-type(n + 11) { animation-delay: 300ms; }
+
+/* The donut thickens into place a segment at a time. Animating stroke-width
+   leaves the inline dasharray that positions each segment alone. */
+.donut svg circle:not(.donut-track) {
+  animation: ring-in 560ms var(--ease) backwards;
+}
+
+.donut svg circle:nth-of-type(2) { animation-delay: 60ms; }
+.donut svg circle:nth-of-type(3) { animation-delay: 120ms; }
+.donut svg circle:nth-of-type(4) { animation-delay: 180ms; }
+.donut svg circle:nth-of-type(5) { animation-delay: 240ms; }
+.donut svg circle:nth-of-type(6) { animation-delay: 300ms; }
+.donut svg circle:nth-of-type(n + 7) { animation-delay: 340ms; }
+
+.donut-center {
+  animation: pop-in 380ms var(--spring) 200ms backwards;
+}
+
+.toast {
+  animation: toast-in 260ms var(--spring);
+}
+
+/* The tab bar's current page is marked with a tally stroke that wipes in. */
+.tabbar a::after {
+  content: '';
+  display: block;
+  width: 16px;
+  height: 3px;
+  margin-top: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transition: transform 220ms var(--spring);
+}
+
+.tabbar a[aria-current='page']::after {
+  transform: scaleX(1);
+}
+
+/* The mark draws itself, stroke by stroke, the way you'd actually tally. */
+.brand-mark path {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: draw 420ms var(--ease) forwards;
+}
+
+.brand-mark path:nth-child(1) { animation-delay: 80ms; }
+.brand-mark path:nth-child(2) { animation-delay: 160ms; }
+.brand-mark path:nth-child(3) { animation-delay: 240ms; }
+.brand-mark path:nth-child(4) { animation-delay: 320ms; }
+.brand-mark path:nth-child(5) { animation-delay: 430ms; }
+
+/* Rows lift toward the pointer rather than just tinting. */
+.tx-row,
+.list-btn {
+  transition: background-color 0.14s ease, transform 0.14s var(--spring);
+}
+
+.tx-row:active,
+.list-btn:active {
+  transform: translateX(3px);
 }
 
 /* ---------- Motion preferences ---------- */
@@ -3439,7 +3666,7 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '2.0.0';
 const BACKUP_FORMAT = 1;
 
 function makeId() {
@@ -3460,9 +3687,12 @@ function makeId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Printer's inks for category identity in charts. Deliberately no strong red
+// or green: those two carry meaning about money elsewhere, and a category
+// swatch must never be mistaken for a signal.
 const PALETTE = [
-  '#3D8B5A', '#4A6FA5', '#C28A1E', '#5B7C99', '#C4553B', '#8A5BB0',
-  '#2F9A9A', '#6C6FD1', '#2E7D6F', '#7D8591', '#B5487A', '#8C6D3F',
+  '#1F4E8C', '#1B6F6A', '#A65A1E', '#5A4A96', '#9C3C6B', '#3A6E8F',
+  '#7A5A2E', '#4C5A6B', '#8A3C52', '#6E7A2E', '#6E4E9E', '#2F6B7A',
 ];
 
 const ICONS = [
@@ -3471,18 +3701,21 @@ const ICONS = [
   '🐾', '👶', '🎓', '📚', '✈️', '🏨', '🧾', '🛠️', '🧹', '🌱', '❤️', '📦',
 ];
 
+// Printer's inks, same rule as PALETTE: no expense category is green or red,
+// so a swatch is never mistaken for money coming in or a budget blown. Income
+// is the exception, and green there means exactly what it says.
 const DEFAULT_CATEGORY_SPECS = [
-  ['Groceries', '🛒', '#3D8B5A', 'expense'],
-  ['Rent / Housing', '🏠', '#4A6FA5', 'expense'],
-  ['Utilities', '💡', '#C28A1E', 'expense'],
-  ['Transportation', '🚌', '#B5487A', 'expense'],
-  ['Dining Out', '🍜', '#C4553B', 'expense'],
-  ['Entertainment', '🎬', '#8A5BB0', 'expense'],
-  ['Health', '🩺', '#2F9A9A', 'expense'],
-  ['Subscriptions', '🔁', '#6C6FD1', 'expense'],
-  ['Savings', '🏦', '#8C6D3F', 'expense'],
-  ['Other', '📦', '#7D8591', 'expense'],
-  ['Income', '💼', '#2F8F4E', 'income'],
+  ['Groceries', '🛒', '#6E7A2E', 'expense'],
+  ['Rent / Housing', '🏠', '#1F4E8C', 'expense'],
+  ['Utilities', '💡', '#A65A1E', 'expense'],
+  ['Transportation', '🚌', '#9C3C6B', 'expense'],
+  ['Dining Out', '🍜', '#8A3C52', 'expense'],
+  ['Entertainment', '🎬', '#6E4E9E', 'expense'],
+  ['Health', '🩺', '#1B6F6A', 'expense'],
+  ['Subscriptions', '🔁', '#5A4A96', 'expense'],
+  ['Savings', '🏦', '#3A6E8F', 'expense'],
+  ['Other', '📦', '#4C5A6B', 'expense'],
+  ['Income', '💼', '#0B7A3B', 'income'],
 ];
 
 function defaultCategories(idFn = makeId) {
@@ -8013,6 +8246,12 @@ const NAV_ICONS = {
   plus: html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
 };
 
+// Four strokes and the fifth struck through them: the app's own mark, inline
+// so each stroke can draw itself.
+const BRAND_MARK = html`<svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+  <path d="M8 8v12"/><path d="M12 8v12"/><path d="M16 8v12"/><path d="M20 8v12"/><path d="M6 18l16-8"/>
+</svg>`;
+
 const ROUTES = {
   home: { title: 'Home', render: renderHome },
   activity: { title: 'Activity', render: renderActivity, after: afterActivityMount },
@@ -8047,7 +8286,7 @@ function renderShell() {
     app,
     html`<a class="skip" href="#main">Skip to content</a>
     <aside class="sidebar" aria-label="Main">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Tally</span></div>
+      <div class="brand">${BRAND_MARK}<span class="brand-name">Tally</span></div>
       <button type="button" class="btn primary rail-cta" data-action="new-tx" title="New transaction (N)">${NAV_ICONS.plus}<span class="rail-label">New transaction</span></button>
       <nav>
         <ul class="plain-list side-nav">
@@ -8128,6 +8367,7 @@ function updateChrome(route) {
 }
 
 let lastRoute = null;
+let enterTimer;
 function render({ keepScroll = false } = {}) {
   if (!state.ready) return;
   const route = currentRoute();
@@ -8148,6 +8388,11 @@ function render({ keepScroll = false } = {}) {
     lastRoute = route;
     if (!keepScroll) window.scrollTo(0, 0);
     main.focus({ preventScroll: true });
+    // Play the entrance only when the screen actually changes, so saving a
+    // transaction doesn't replay the whole page.
+    main.dataset.enter = '1';
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => delete main.dataset.enter, 700);
   } else {
     window.scrollTo(0, scroll);
     if (focusId) {
@@ -8171,7 +8416,7 @@ function applyTheme() {
   const pref = state.settings.theme;
   const dark = pref === 'dark' || (pref === 'system' && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#14171C' : '#F7F8FA');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0B0B0A' : '#E8E8E3');
   try {
     localStorage.setItem('tally:theme', pref);
   } catch {

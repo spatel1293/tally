@@ -1,7 +1,7 @@
 export const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '2.0.0';
 export const BACKUP_FORMAT = 1;
 
 export function makeId() {
@@ -22,9 +22,12 @@ export function makeId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Printer's inks for category identity in charts. Deliberately no strong red
+// or green: those two carry meaning about money elsewhere, and a category
+// swatch must never be mistaken for a signal.
 export const PALETTE = [
-  '#3D8B5A', '#4A6FA5', '#C28A1E', '#5B7C99', '#C4553B', '#8A5BB0',
-  '#2F9A9A', '#6C6FD1', '#2E7D6F', '#7D8591', '#B5487A', '#8C6D3F',
+  '#1F4E8C', '#1B6F6A', '#A65A1E', '#5A4A96', '#9C3C6B', '#3A6E8F',
+  '#7A5A2E', '#4C5A6B', '#8A3C52', '#6E7A2E', '#6E4E9E', '#2F6B7A',
 ];
 
 export const ICONS = [
@@ -33,18 +36,21 @@ export const ICONS = [
   '🐾', '👶', '🎓', '📚', '✈️', '🏨', '🧾', '🛠️', '🧹', '🌱', '❤️', '📦',
 ];
 
+// Printer's inks, same rule as PALETTE: no expense category is green or red,
+// so a swatch is never mistaken for money coming in or a budget blown. Income
+// is the exception, and green there means exactly what it says.
 const DEFAULT_CATEGORY_SPECS = [
-  ['Groceries', '🛒', '#3D8B5A', 'expense'],
-  ['Rent / Housing', '🏠', '#4A6FA5', 'expense'],
-  ['Utilities', '💡', '#C28A1E', 'expense'],
-  ['Transportation', '🚌', '#B5487A', 'expense'],
-  ['Dining Out', '🍜', '#C4553B', 'expense'],
-  ['Entertainment', '🎬', '#8A5BB0', 'expense'],
-  ['Health', '🩺', '#2F9A9A', 'expense'],
-  ['Subscriptions', '🔁', '#6C6FD1', 'expense'],
-  ['Savings', '🏦', '#8C6D3F', 'expense'],
-  ['Other', '📦', '#7D8591', 'expense'],
-  ['Income', '💼', '#2F8F4E', 'income'],
+  ['Groceries', '🛒', '#6E7A2E', 'expense'],
+  ['Rent / Housing', '🏠', '#1F4E8C', 'expense'],
+  ['Utilities', '💡', '#A65A1E', 'expense'],
+  ['Transportation', '🚌', '#9C3C6B', 'expense'],
+  ['Dining Out', '🍜', '#8A3C52', 'expense'],
+  ['Entertainment', '🎬', '#6E4E9E', 'expense'],
+  ['Health', '🩺', '#1B6F6A', 'expense'],
+  ['Subscriptions', '🔁', '#5A4A96', 'expense'],
+  ['Savings', '🏦', '#3A6E8F', 'expense'],
+  ['Other', '📦', '#4C5A6B', 'expense'],
+  ['Income', '💼', '#0B7A3B', 'income'],
 ];
 
 export function defaultCategories(idFn = makeId) {

@@ -29,6 +29,12 @@ const NAV_ICONS = {
   plus: html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
 };
 
+// Four strokes and the fifth struck through them: the app's own mark, inline
+// so each stroke can draw itself.
+const BRAND_MARK = html`<svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+  <path d="M8 8v12"/><path d="M12 8v12"/><path d="M16 8v12"/><path d="M20 8v12"/><path d="M6 18l16-8"/>
+</svg>`;
+
 const ROUTES = {
   home: { title: 'Home', render: renderHome },
   activity: { title: 'Activity', render: renderActivity, after: afterActivityMount },
@@ -63,7 +69,7 @@ function renderShell() {
     app,
     html`<a class="skip" href="#main">Skip to content</a>
     <aside class="sidebar" aria-label="Main">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Tally</span></div>
+      <div class="brand">${BRAND_MARK}<span class="brand-name">Tally</span></div>
       <button type="button" class="btn primary rail-cta" data-action="new-tx" title="New transaction (N)">${NAV_ICONS.plus}<span class="rail-label">New transaction</span></button>
       <nav>
         <ul class="plain-list side-nav">
@@ -144,6 +150,7 @@ function updateChrome(route) {
 }
 
 let lastRoute = null;
+let enterTimer;
 function render({ keepScroll = false } = {}) {
   if (!state.ready) return;
   const route = currentRoute();
@@ -164,6 +171,11 @@ function render({ keepScroll = false } = {}) {
     lastRoute = route;
     if (!keepScroll) window.scrollTo(0, 0);
     main.focus({ preventScroll: true });
+    // Play the entrance only when the screen actually changes, so saving a
+    // transaction doesn't replay the whole page.
+    main.dataset.enter = '1';
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => delete main.dataset.enter, 700);
   } else {
     window.scrollTo(0, scroll);
     if (focusId) {
@@ -187,7 +199,7 @@ function applyTheme() {
   const pref = state.settings.theme;
   const dark = pref === 'dark' || (pref === 'system' && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#14171C' : '#F7F8FA');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0B0B0A' : '#E8E8E3');
   try {
     localStorage.setItem('tally:theme', pref);
   } catch {

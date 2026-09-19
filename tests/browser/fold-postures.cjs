@@ -52,7 +52,15 @@ const TABLETOP = { width: 701, height: 841, feature: { orientation: 'horizontal'
     fs.writeFileSync(SHOTS + name + '.png', Buffer.from(data, 'base64'));
   };
   const posture = () => page.evaluate(() => document.documentElement.dataset.posture);
-  const box = (sel) => page.locator(sel).boundingBox();
+  // Measuring geometry while the entrance animation is still springing gives
+  // the mid-flight box, not the resting one. Wait for it to land first.
+  const box = async (sel) => {
+    const el = page.locator(sel);
+    if (await el.count()) {
+      await el.evaluate((node) => Promise.all(node.getAnimations().map((a) => a.finished.catch(() => {}))));
+    }
+    return el.boundingBox();
+  };
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
   await page.goto(BASE_URL);

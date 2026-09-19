@@ -56,14 +56,26 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
 ## Design
 
-The owner asked for a deeper, more tactile look in September 2026, replacing the original flat "quiet ledger". Don't quietly restore hairline sections and the old ink-blue palette.
+**Ink and paper**, adopted September 2026 after the owner rejected both the original flat "quiet ledger" and a soft indigo/violet version as boring. Don't drift back toward a tinted accent or soft blurred elevation.
 
-- **Look:** layered surfaces on a cool blue-grey ground. The indigo→violet gradient (`--accent-grad`) is reserved for primary actions — the save button, the FAB — and never used behind text that carries meaning. Green only for money coming in, amber for warnings, red for over budget.
-- **Structure:** sections are raised cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated. Tabular figures (the `.amt` class) wherever numbers appear.
-- **Elevation:** `--shadow-1` for a resting card, `--shadow-2` for the hero and for hover, `--shadow` for dialogs and the FAB. Inputs are recessed (`--surface-2`) against the raised surfaces around them.
-- **Semantic colour wins.** A tinted or gradient surface must never make `s-over`, `s-warning` or income green unreadable; that's why the hero is a tinted surface rather than a saturated one.
-- **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate card per list row (a transaction list is rows in one card), arrows in button text, and middle-dot separators in text.
+- **The one rule that drives everything: the interface is monochrome, and colour only ever means money.** Ink on paper in light, bone on ink in dark. Green is money coming in, amber is nearing a limit, red is over. Because nothing else on screen is coloured, those three read instantly. Never introduce a decorative accent colour — actions are ink (`--accent` is ink, not a hue).
+- **Depth is stamped, not blurred.** `--shadow-1/-2/--shadow` are hard offset blocks (`3px 3px 0` and up) in `--stamp`, never soft shadows. Pressing something moves it into its own stamp (`translate(3px, 3px)` + shadow to zero).
+- **Edges are hard.** `var(--bw) solid var(--edge)` — 2px ink. Cards and inputs are square (`--r*` are all `0`); buttons and chips are pills (`--pill`). That contrast is the point; don't round the cards.
+- **The motif is the tally stroke.** Section headings carry one (`.panel > h2::before`), the tab bar marks the current page with one, and the brand mark draws its five strokes in sequence.
+- **Links need underlines**, not colour — `.link` carries a 2px rule. A link that relies on hue is invisible here.
+- **Category colours** (`PALETTE` in `core/defaults.js`) are printer's inks for chart identity only, deliberately containing no strong red or green so a category swatch is never mistaken for a signal.
+- **Structure:** sections are cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated (`--line` is the only soft grey left). Tabular figures (`.amt`) wherever numbers appear.
+- **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate card per list row, arrows in button text, and middle-dot separators in text.
 - **A card inside a card** is the usual mistake: `.figures.compact` exists because that one already sits inside a `.panel`.
+
+### Motion
+
+Animation is load-bearing here, not decoration — see the `Motion` section of `css/app.css`.
+
+- Everything animated is a **transform or opacity** (plus `stroke-width` on the donut), so it stays off the main thread.
+- **Entrances play on route change only.** `app.js` sets `main[data-enter]` when the route actually changes and clears it after 700ms; without that, saving a transaction would replay the whole page.
+- Bars, chart columns and donut segments **re-animate whenever their figures change** — that's deliberate feedback that a save landed.
+- Durations sit at 220–560ms with `--spring` (slight overshoot) or `--ease`. The reduced-motion block at the end of the file switches all of it off, so never rely on an animation to make something readable.
 - **Theme:** set on `<html data-theme>` by `app.js`, and by an inline script in `index.html` before first paint.
 - **Review your work visually.** Take screenshots of changed screens at every target size, in light and dark, before calling anything done.
 
@@ -80,6 +92,7 @@ The owner asked for a deeper, more tactile look in September 2026, replacing the
 - **Emulating a fold in Playwright.** Postures come from `Emulation.setDeviceMetricsOverride` with a `displayFeature` (via `context.newCDPSession`); `setDisplayFeaturesOverride` on its own is accepted but does nothing. `page.screenshot()` *clears* that override and drops the app back to flat, so capture with `Page.captureScreenshot` through CDP instead. Its captures composite the top layer oddly, so an open sheet looks see-through in them; on the device it's opaque.
 - **Viewport segment indices are (x, y).** Side by side (book) the second segment is `env(… 1 0)`; stacked (tabletop) it's `env(… 0 1)`. Using the wrong pair silently falls back, which looks like a layout bug.
 - **Media queries and `vw` measure the whole viewport, not one page.** In book posture the content sits in a phone-width segment while the viewport spans both halves, so `vw`-based type and `min-width` breakpoints are sized for the spread. `css/app.css` pins `.hero-line`, `.figures dd` and `.dash-grid` back to their narrow values there.
+- **Measuring geometry races the entrance animation.** `boundingBox()` on something that's still springing returns the mid-flight box, not the resting one — which looks exactly like a layout bug (a sheet reading 438px instead of 441px). Await `el.getAnimations()` finishing first; `tests/browser/fold-postures.cjs` has the helper.
 - **Hovering a toast pauses it.** `pointerenter` clears the dismiss timer on purpose. A test that leaves the pointer where it clicked can sit over the toast and wait forever; move the mouse away first (`page.mouse.move(5, 5)`).
 
 ## Working with the owner
