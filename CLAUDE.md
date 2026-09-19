@@ -44,7 +44,7 @@ There is no framework and no build step. Plain ES modules load directly in the b
 3. **Write first.** Every data change goes through `store.js`, which commits to storage before touching `state`. Views never write to storage directly. If a write fails, the user's input stays on screen with a plain-language error.
 4. **Escape everything.** Build markup only with `html\`\``. Never put user text into `innerHTML` directly. `raw()` is only for SVG the app generates itself.
 5. **Keep `js/core` browser-free** and add or adjust unit tests for any change there.
-6. **Service worker:** when a shipped file is added, removed or renamed, update `FILES` in `sw.js` (a unit test enforces this). Bump `VERSION` in `sw.js` on every change that ships.
+6. **Service worker:** when a shipped file is added, removed or renamed, update `FILES` in `sw.js` (a unit test enforces this). Bump `VERSION` in `sw.js` on every change that ships, and `APP_VERSION` in `core/defaults.js` with it — a test keeps the two in step, because the version in Settings is how someone tells which build a device is actually running (it matters most for hand-copied `dist/tally.html`).
 7. **Single-file bundler limits.** It only understands:
    - single-line `import { a, b as c } from './x.js';`
    - `export function|const|let|class` and `export { … }`

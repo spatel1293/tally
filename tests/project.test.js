@@ -36,6 +36,12 @@ describe('offline cache', () => {
     assert.deepEqual(gone, []);
   });
 
+  test('the shown version matches the cache version', () => {
+    const shown = readFileSync(join(root, 'js/core/defaults.js'), 'utf8').match(/APP_VERSION = '([^']+)'/)?.[1];
+    const cached = sw.match(/VERSION = '([^']+)'/)?.[1];
+    assert.equal(cached, `tally-v${shown}`, 'bump APP_VERSION in core/defaults.js and VERSION in sw.js together');
+  });
+
   test('manifest icons exist', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.webmanifest'), 'utf8'));
     for (const icon of manifest.icons) assert.ok(existsSync(join(root, icon.src)), icon.src);
