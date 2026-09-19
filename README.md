@@ -93,6 +93,21 @@ The first row must hold column names. Tally recognizes common names, case-insens
 - **Savings goals** track a target and an optional date, and show how much a month gets you there.
 - **Year in review** summarizes income, spending, the savings rate, top categories and highlights for any year.
 
+### On a folding phone
+
+Tally follows the hinge. Chrome reports the two halves only while the phone is *half* folded, so opened flat or closed it simply uses the layout that fits the screen.
+
+| How you're holding it | What you get |
+| --- | --- |
+| Closed (cover screen) | The phone layout: tab bar at the bottom, one column, quick to log something one-handed. |
+| Half folded, hinge top to bottom (book) | A two-page spread. The left page is the app; the right page shows the month's running total, and the add or edit form opens there, so the crease never cuts through what you're typing. |
+| Half folded, hinge left to right (tabletop) | Propped up like a small laptop. The month's numbers stay in the upper half while the form opens in the lower half, flat under your hands. |
+| Opened flat | The navigation rail, a two-column dashboard, and the add form gains a second column showing how the category you picked is tracking this month. |
+
+Folding or unfolding mid-entry keeps the form open with everything you'd typed.
+
+One thing that isn't possible: showing something on the cover screen while the phone is open. Android only gives an app the display it's running on, and there's no web API for the second one — a native wrapper wouldn't help either, since the Pixel Fold doesn't offer its cover screen to third-party apps that way.
+
 ### Keyboard shortcuts (desktop)
 
 | Key | Action |

@@ -4,10 +4,10 @@ import { state, saveTransaction, deleteTransactions, restoreTransactions, descri
 import { drafts } from '../storage.js';
 import { validateTransactionInput, NOTE_MAX } from '../core/validate.js';
 import { centsToInput } from '../core/money.js';
-import { addDays } from '../core/dates.js';
-import { categoryUsage } from '../core/stats.js';
+import { addDays, monthKey } from '../core/dates.js';
+import { categoryUsage, budgetOverview, txsInMonth, categoryFamily, incomeAmount } from '../core/stats.js';
 import { FREQUENCIES } from '../core/recurring.js';
-import { money, date as fmtDate } from '../ui/format.js';
+import { money, signedMoney, date as fmtDate, month as fmtMonth } from '../ui/format.js';
 import { openCategoryForm } from './forms.js';
 
 function currencySymbol() {
@@ -55,6 +55,64 @@ function noteMemory() {
     if (map.size >= 300) break;
   }
   return map;
+}
+
+// How the chosen category is tracking this month. CSS shows this beside the
+// form only where there's room for it, so unfolding the phone reveals the
+// context instead of just making the form wider.
+function contextPane(categoryId, currentId) {
+  const cat = categoryId ? state.categories.find((c) => c.id === categoryId) : null;
+  if (!cat) return html`<p class="tx-context-hint">Pick a category to see how it’s tracking this month.</p>`;
+
+  const key = monthKey(state.today);
+  const family = new Set(categoryFamily(cat.id, state.categories));
+  const recent = sortedTransactions()
+    .filter((t) => family.has(t.categoryId) && t.id !== currentId)
+    .slice(0, 3);
+
+  let figures;
+  if (cat.type === 'income') {
+    const received = txsInMonth(state.transactions, key)
+      .filter((t) => family.has(t.categoryId))
+      .reduce((sum, t) => sum + incomeAmount(t), 0);
+    figures = html`<div><dt>Received in ${fmtMonth(key)}</dt><dd class="amt amt-in">${money(received)}</dd></div>`;
+  } else {
+    const overview = budgetOverview(state.transactions, state.categories, key, state.settings.warnPercent);
+    let row = null;
+    for (const r of overview.rows) {
+      if (r.categoryId === cat.id) {
+        row = r;
+        break;
+      }
+      const kid = r.children.find((k) => k.categoryId === cat.id);
+      if (kid) {
+        row = kid;
+        break;
+      }
+    }
+    const spent = row?.spent ?? 0;
+    figures = html`<div><dt>Spent in ${fmtMonth(key)}</dt><dd class="amt">${money(spent)}</dd></div>
+      ${row && row.limit != null
+        ? html`<div>
+            <dt>${row.state === 'over' ? 'Over its' : 'Left of'} ${money(row.limit)} budget</dt>
+            <dd class="amt s-${row.state}">${money(Math.abs(row.remaining))}</dd>
+          </div>`
+        : html`<div><dt>Budget</dt><dd class="tx-context-none">None set</dd></div>`}`;
+  }
+
+  return html`<p class="tx-context-cat"><i aria-hidden="true">${cat.icon}</i>${cat.name}</p>
+    <dl class="tx-context-figs">${figures}</dl>
+    ${recent.length
+      ? html`<p class="tx-context-title">Recent</p>
+          <ul class="plain-list tx-context-recent">
+            ${recent.map(
+              (t) => html`<li>
+                <span class="tx-context-when">${t.note.trim() || fmtDate(t.date, { month: 'short', day: 'numeric' })}</span>
+                ${signedMoney(t)}
+              </li>`
+            )}
+          </ul>`
+      : html`<p class="tx-context-none">Nothing recorded here yet.</p>`}`;
 }
 
 function hasContent(d) {
@@ -167,7 +225,8 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         </p>`
       : ''}
     <button type="submit" hidden></button>
-  </form>`;
+  </form>
+  <aside class="tx-context" data-tx-context aria-live="polite">${contextPane(values.categoryId, id)}</aside>`;
 
   const saveLabel = (type) => (existing ? 'Save changes' : type === 'income' ? 'Save income' : 'Save expense');
   const footer = html`
@@ -197,6 +256,8 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         else drafts.clear();
       };
 
+      const refreshContext = () => mount($('[data-tx-context]', dialog), contextPane(current().categoryId, id));
+
       const setType = (type) => {
         const selected = current().categoryId;
         const keep = state.categories.find((c) => c.id === selected)?.type === type ? selected : '';
@@ -205,11 +266,15 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         $('[data-refund]', form).hidden = type === 'income';
         $('.amount-field', form).dataset.type = type;
         saveBtn.textContent = saveLabel(type);
+        refreshContext();
       };
 
       form.addEventListener('change', (e) => {
         if (e.target.name === 'type') setType(e.target.value);
-        if (e.target.name === 'categoryId') categoryTouched = true;
+        if (e.target.name === 'categoryId') {
+          categoryTouched = true;
+          refreshContext();
+        }
         persistDraft();
       });
       form.addEventListener('input', (e) => {
@@ -222,6 +287,7 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
             }
             const radio = $(`input[name="categoryId"][value="${hit.categoryId}"]`, form);
             if (radio) radio.checked = true;
+            refreshContext();
           }
         }
         if (e.target.getAttribute('aria-invalid')) {
@@ -293,6 +359,7 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
             $('input[name="refund"]', form).checked = false;
             categoryTouched = false;
             $('[data-restored]', form)?.remove();
+            refreshContext();
             amount.focus();
           }
         } catch (err) {

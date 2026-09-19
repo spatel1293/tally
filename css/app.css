@@ -1469,6 +1469,91 @@ dialog[open]::backdrop {
   }
 }
 
+/* Context beside the add and edit form: how the chosen category is tracking.
+   Hidden until there's room for a second column, so a wider screen — the
+   Fold opened flat, or a laptop — reveals it instead of stretching the form. */
+.tx-context {
+  display: none;
+}
+
+.tx-context-cat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.tx-context-figs {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.tx-context-figs > div {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tx-context-figs dt {
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+
+.tx-context-figs dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.tx-context-title {
+  margin-top: 14px;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+
+.tx-context-recent li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 0.875rem;
+}
+
+.tx-context-when {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-context-hint,
+.tx-context-none {
+  font-size: 0.875rem;
+  color: var(--ink-3);
+}
+
+@media (min-width: 760px) {
+  dialog.sheet.tx .sheet-panel {
+    max-width: 740px;
+  }
+
+  dialog.sheet.tx .sheet-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 236px);
+    gap: 0 28px;
+    align-items: start;
+  }
+
+  .tx-context {
+    display: block;
+    position: sticky;
+    top: 0;
+    padding-left: 28px;
+    border-left: 1px solid var(--line);
+  }
+}
+
 dialog.confirm[open] {
   display: grid;
   place-items: center;
@@ -2551,6 +2636,15 @@ dialog .toasts {
     max-width: none;
     max-height: none;
     border-radius: 0;
+  }
+
+  /* A facing page is phone-width, so the form keeps its single column. */
+  dialog.sheet.tx .sheet-body {
+    display: block;
+  }
+
+  .tx-context {
+    display: none;
   }
 
   .toasts {

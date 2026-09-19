@@ -43,6 +43,7 @@ const INNER = { width: 841, height: 701 };
   await page.click('label.chip:has-text("Groceries")');
   await page.screenshot({ path: SHOTS + 'fold01-cover-sheet.png' });
   step(`cover overflow: ${await overflow()}px`);
+  expect(!(await page.locator('.tx-context').isVisible()), 'category context stays out of the way on the cover screen');
 
   // Unfold: resize to the inner screen width. The sheet should stay open
   // with the same values, now as a centered dialog with the nav rail showing.
@@ -54,6 +55,8 @@ const INNER = { width: 841, height: 701 };
   expect((await page.inputValue('input[name=note]')) === 'Fold test note', 'note survives the resize');
   expect(await page.locator('label.chip:has-text("Groceries")').evaluate((el) => el.querySelector('input')?.checked) === true, 'category selection survives the resize');
   step(`inner overflow: ${await overflow()}px`);
+  // Unfolding should reveal more, not just stretch the form.
+  expect(await page.locator('.tx-context').isVisible(), 'unfolding reveals the category context beside the form');
   await page.screenshot({ path: SHOTS + 'fold02-inner-sheet.png' });
 
   // Fold back to the cover width; same checks in reverse.
@@ -64,6 +67,7 @@ const INNER = { width: 841, height: 701 };
   expect((await page.inputValue('input[name=amount]')) === '18.42', 'amount survives the refold');
   expect((await page.inputValue('input[name=note]')) === 'Fold test note', 'note survives the refold');
   step(`refolded overflow: ${await overflow()}px`);
+  expect(!(await page.locator('.tx-context').isVisible()), 'folding back tucks the context away again');
   await page.screenshot({ path: SHOTS + 'fold03-cover-again.png' });
 
   // Saving still works after all that.
