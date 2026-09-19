@@ -24,16 +24,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Assemble the published site
-        run: |
-          mkdir site
-          cp index.html manifest.webmanifest sw.js site/
-          cp -r css fonts icons js site/
+        run: npm run build:site
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: dist/site
 
       - id: deployment
         uses: actions/deploy-pages@v4
