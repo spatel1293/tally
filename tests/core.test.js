@@ -28,7 +28,7 @@ const cats = [
 ];
 
 function tx(date, type, amount, categoryId, extra = {}) {
-  return { id: nextId(), type, amount, refund: false, categoryId, accountId: null, date, note: '', recurringId: null, createdAt: NOW, updatedAt: NOW, ...extra };
+  return { id: nextId(), type, amount, refund: false, categoryId, accountId: null, date, note: '', recurringId: null, planId: null, createdAt: NOW, updatedAt: NOW, ...extra };
 }
 
 const june = [
@@ -541,7 +541,7 @@ describe('validation', () => {
   test('accepts a valid transaction and normalizes it', () => {
     const r = validateTransactionInput(base, ctx);
     assert.equal(r.ok, true);
-    assert.deepEqual(r.value, { type: 'expense', amount: 1250, refund: false, categoryId: 'groc', date: '2024-06-01', note: 'Milk', accountId: 'chk' });
+    assert.deepEqual(r.value, { type: 'expense', amount: 1250, refund: false, categoryId: 'groc', date: '2024-06-01', note: 'Milk', accountId: 'chk', planId: null });
   });
 
   test('explains every problem', () => {
@@ -585,7 +585,7 @@ describe('backups', () => {
     accounts: [{ id: 'acc-000001', name: 'Checking', kind: 'checking', openingBalance: -500, order: 0 }],
     transactions: june,
     recurring: [{ id: 'rule-000001', type: 'expense', amount: 100, categoryId: 'groc', accountId: null, note: '', frequency: 'monthly', startDate: '2024-01-01', endDate: null, mode: 'remind', paused: false, generatedThrough: null }],
-    goals: [{ id: 'goal-000001', name: 'Trip', target: 50000, saved: 1000, targetDate: null, color: '#3D8B5A', createdAt: NOW }],
+    goals: [{ id: 'goal-000001', name: 'Trip', kind: 'fund', target: 50000, saved: 1000, targetDate: null, startDate: null, endDate: null, color: '#3D8B5A', createdAt: NOW }],
   };
 
   test('round trip is lossless', () => {

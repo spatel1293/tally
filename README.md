@@ -90,7 +90,12 @@ The first row must hold column names. Tally recognizes common names, case-insens
   - Dates stay on the same day of the month, falling back to the last day for short months (the 31st becomes Feb 28 or 29).
 - **Deleting a category** asks where its transactions should go. Its subcategories move to the top level. Nothing is ever silently uncategorized.
 - **Accounts** are optional. Each has a starting balance, and its balance is that plus income and refunds, minus spending. With two or more accounts, the add form asks which one you used. Transfers between accounts aren't tracked.
-- **Savings goals** track a target and an optional date, and show how much a month gets you there.
+- **Plans** are the nest eggs you're filling and the trips you're saving for, on one page.
+  - A **nest egg** is money you set aside and hold: an emergency fund, a deposit, a new laptop.
+  - A **trip** works the same way, but spending can be charged to it, so you can see what it actually cost against what you put by. Pick the plan in the *Part of a plan* field when adding an expense — a flight booked months early still counts.
+  - **What if** asks the question that matters: put a monthly amount in (and optionally a one-off), and every plan gets a projected finish date and a plain verdict on whether it makes the date you wanted. Tally starts from what you've actually had left over each month, taken from your own history, rather than a number you guessed.
+  - Plans are filled in date order — the soonest deadline is funded first — so the projection reflects what would really happen rather than an even split.
+  - Setting money aside is a counter, not a transaction. Moving money between your own accounts is neither income nor spending, and logging it as either would distort every total in the app.
 - **Year in review** summarizes income, spending, the savings rate, top categories and highlights for any year.
 
 ### On a folding phone

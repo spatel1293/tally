@@ -1,8 +1,8 @@
 export const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-export const APP_VERSION = '2.1.0';
-export const BACKUP_FORMAT = 1;
+export const APP_VERSION = '2.2.0';
+export const BACKUP_FORMAT = 2;
 
 export function makeId() {
   const c = globalThis.crypto;

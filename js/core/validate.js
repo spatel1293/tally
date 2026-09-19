@@ -13,7 +13,7 @@ function yearOk(iso) {
 
 // input: { amount (text), type, refund, categoryId, date, note, accountId }
 // Returns { ok, errors: { field: message }, value }.
-export function validateTransactionInput(input, { locale, categories, accounts }) {
+export function validateTransactionInput(input, { locale, categories, accounts, plans = [] }) {
   const errors = {};
   const type = input.type === 'income' ? 'income' : input.type === 'expense' ? 'expense' : null;
   if (!type) errors.type = 'Choose expense or income.';
@@ -41,11 +41,16 @@ export function validateTransactionInput(input, { locale, categories, accounts }
   let accountId = input.accountId || null;
   if (accountId && !accounts.some((a) => a.id === accountId)) accountId = null;
 
+  // Only spending can belong to a plan: a plan is filled by setting money
+  // aside, not by earning, so income tagged to one would be counted twice.
+  let planId = input.planId || null;
+  if (type !== 'expense' || !plans.some((p) => p.id === planId)) planId = null;
+
   const ok = Object.keys(errors).length === 0;
   return {
     ok,
     errors,
-    value: ok ? { type, amount, refund: type === 'expense' && Boolean(input.refund), categoryId: category.id, date: input.date, note, accountId } : null,
+    value: ok ? { type, amount, refund: type === 'expense' && Boolean(input.refund), categoryId: category.id, date: input.date, note, accountId, planId } : null,
   };
 }
 
@@ -111,6 +116,7 @@ export function sanitizeTransaction(t) {
     date: t.date,
     note: str(t.note, NOTE_MAX),
     recurringId: idOk(t.recurringId) ? t.recurringId : null,
+    planId: idOk(t.planId) ? t.planId : null,
     createdAt: str(t.createdAt, 40) || null,
     updatedAt: str(t.updatedAt, 40) || null,
   };
@@ -165,16 +171,26 @@ export function sanitizeRule(r) {
   };
 }
 
+// Plans are stored under the older `goals` name so that existing data and
+// backups keep working; `kind` is what separates a nest egg from a trip.
+// A backup written before plans existed has no kind, and reads as a fund.
 export function sanitizeGoal(g) {
   if (!g || typeof g !== 'object' || !idOk(g.id)) return null;
   const name = str(g.name, NAME_MAX).trim();
   if (!name || !isValidCents(g.target)) return null;
+  const startDate = isValidISODate(g.startDate) ? g.startDate : null;
+  const endDate = isValidISODate(g.endDate) ? g.endDate : null;
   return {
     id: g.id,
     name,
+    kind: g.kind === 'trip' ? 'trip' : 'fund',
     target: g.target,
     saved: isValidSignedCents(g.saved) ? Math.max(0, g.saved) : 0,
     targetDate: isValidISODate(g.targetDate) ? g.targetDate : null,
+    startDate,
+    // A trip that somehow ends before it starts would make every date
+    // calculation lie, so drop the end rather than keep an impossible range.
+    endDate: endDate && startDate && endDate < startDate ? null : endDate,
     color: /^#[0-9a-f]{6}$/i.test(g.color ?? '') ? g.color : PALETTE[0],
     createdAt: str(g.createdAt, 40) || null,
   };

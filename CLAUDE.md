@@ -9,8 +9,8 @@ Tally is a personal budgeting web app (installable PWA) that runs entirely in th
 ## Commands
 
 - `npm start`: local server on http://localhost:5173. It also prints a LAN address for the phone; that address is plain HTTP, so install and offline mode won't work there, but layouts will.
-- `npm test`: 80 unit tests with Node's built-in runner. No install needed.
-- `npm run test:browser`: 4 Playwright test files at phone and laptop sizes. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
+- `npm test`: 108 unit tests with Node's built-in runner. No install needed.
+- `npm run test:browser`: 7 Playwright test files at phone and laptop sizes. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
 - `npm run build`: rebuilds `dist/tally.html`, the single-file version.
 
 Run `npm test` and `npm run test:browser` before saying something works. If the browser tests can't run in this environment, say so plainly.
@@ -21,6 +21,7 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
 - `js/core/`: pure logic with no DOM or browser globals, all unit tested.
   - `money.js`, `dates.js`, `stats.js` (totals, budgets, balances, search, year review)
+  - `plans.js` (nest eggs, trips, surplus and projections)
   - `recurring.js`, `csv.js`, `validate.js` (forms and backup parsing), `defaults.js`
 - `js/storage.js`: IndexedDB, falling back to localStorage, then memory. Also holds drafts, which are saved synchronously.
 - `js/store.js`: the `state` object and every mutation. It writes to storage first, then updates state and calls `emit()`. BroadcastChannel keeps tabs in sync.
@@ -68,6 +69,18 @@ There is no framework and no build step. Plain ES modules load directly in the b
 - **Structure:** sections are cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated. Tabular figures (`.amt`) wherever numbers appear.
 - **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate card per list row, arrows in button text, and middle-dot separators in text.
 - **A card inside a card** is the usual mistake: `.figures.compact` exists because that one already sits inside a `.panel`.
+
+### Plans
+
+Nest eggs, trips and scenario planning are deliberately **one feature**, because they are one shape at different moments: a named pot with a target and a date, that you fill over time and sometimes spend down. Don't split them into separate pages.
+
+- Stored under the older **`goals`** name — store, state key and mutations all still say `goals`, and renaming them would mean an IndexedDB migration for no user-visible gain. `kind` (`'fund' | 'trip'`) is what separates a nest egg from a trip.
+- **Setting money aside stays a counter (`saved`), not a transaction.** Moving money between your own accounts is neither income nor spending, and logging it as either would distort every total in the app.
+- **Spending is what carries a `planId`.** A transaction charged to a plan draws its pot down, which is how a trip shows what it actually cost — and why a flight booked six months early still counts. Income can never carry one (`validateTransactionInput` drops it), or the same money would be counted twice.
+- `js/core/plans.js` is the whole engine and is pure: `planProgress`, `monthlySurplus`, `planOrder`, `projectPlans`, `requiredMonthly`. Anything that answers "will I make it?" belongs there, with a test, not in a view.
+- **The surplus comes from whole months only.** The current month is part-finished and would always look like a bad one. `typical` is the median, not the mean, so a single bonus month doesn't set the expectation for every month after it.
+- Plans are funded **in date order** — soonest deadline first — because that is what would really happen; an even split would flatter every projection.
+- The what-if levers (`planScenario` in `views/pages.js`) are **not persisted**: they're a question you ask, not a setting. `afterPlansMount` re-mounts only `#plan-results`, so typing doesn't rebuild the page under the cursor.
 
 ### The second page
 

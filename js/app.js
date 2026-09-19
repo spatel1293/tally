@@ -4,6 +4,7 @@ import { resetCharts, hydrateCharts } from './ui/charts.js';
 import { watchPosture } from './ui/posture.js';
 import { txsInMonth, totals, spendingByCategory, sortTransactions } from './core/stats.js';
 import { monthRange, daysBetween } from './core/dates.js';
+import { planOrder, planProgress } from './core/plans.js';
 import { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } from './store.js';
 import { ui, viewMonth } from './views/components.js';
 import { openTransactionForm } from './views/txForm.js';
@@ -11,7 +12,7 @@ import { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGo
 import { renderHome, shiftMonth } from './views/home.js';
 import { renderActivity, afterActivityMount, resetFilters, showMore } from './views/activity.js';
 import { renderBudgets } from './views/budgets.js';
-import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, renderReview, reviewState, MORE_LINKS } from './views/pages.js';
+import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS } from './views/pages.js';
 import { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } from './views/settings.js';
 import { money, netMoney, month as monthLabel, badge } from './ui/format.js';
 
@@ -43,7 +44,7 @@ const ROUTES = {
   recurring: { title: 'Repeating', render: renderRecurring },
   categories: { title: 'Categories', render: renderCategories },
   accounts: { title: 'Accounts', render: renderAccounts },
-  goals: { title: 'Savings goals', render: renderGoals },
+  goals: { title: 'Plans', render: renderGoals, after: afterPlansMount },
   review: { title: 'Year in review', render: renderReview },
   settings: { title: 'Settings', render: renderSettings, after: afterSettingsMount },
   more: { title: 'More', render: renderMore },
@@ -52,7 +53,7 @@ const SECONDARY = new Set(MORE_LINKS.map((l) => l.route).concat('more'));
 const SIDEBAR = [
   ['home', 'Home'], ['activity', 'Activity'], ['budgets', 'Budgets'],
   null,
-  ['recurring', 'Repeating'], ['goals', 'Savings goals'], ['accounts', 'Accounts'], ['review', 'Year in review'],
+  ['recurring', 'Repeating'], ['goals', 'Plans'], ['accounts', 'Accounts'], ['review', 'Year in review'],
   null,
   ['categories', 'Categories'], ['settings', 'Settings'],
 ];
@@ -118,6 +119,10 @@ function renderCompanion() {
   const left = Math.max(0, daysBetween(state.today, end) + 1);
   const perDay = left > 0 && t.net > 0 ? Math.round(t.net / left) : null;
 
+  // The plan with the nearest date, and what it costs a month to make it.
+  const nextPlan = planOrder(state.goals).find((g) => planProgress(g, state.transactions, state.today).toSave > 0) ?? null;
+  const nextProgress = nextPlan ? planProgress(nextPlan, state.transactions, state.today) : null;
+
   // The categories you've used most recently, for logging another one.
   const again = [];
   const seen = new Set();
@@ -155,6 +160,16 @@ function renderCompanion() {
                       </li>`;
                     })}
                   </ul>
+                </div>`
+              : ''}
+            ${nextPlan
+              ? html`<div class="companion-block">
+                  <h2>Next plan</h2>
+                  <a class="companion-plan" href="#/goals">
+                    <span class="companion-plan-name">${nextPlan.name}</span>
+                    <span class="amt">${money(nextProgress.toSave)} to go</span>
+                    ${nextProgress.perMonth ? html`<small>${money(nextProgress.perMonth)} a month to make ${monthLabel(nextPlan.targetDate.slice(0, 7))}</small>` : ''}
+                  </a>
                 </div>`
               : ''}
             ${again.length
@@ -320,6 +335,10 @@ const actions = {
   'edit-account': (el) => openAccountForm(el.dataset.id),
   'new-rule': () => openRuleForm(),
   'edit-rule': (el) => openRuleForm(el.dataset.id),
+  'plan-use-surplus': () => {
+    resetPlanScenario();
+    render({ keepScroll: true });
+  },
   'new-goal': () => openGoalForm(),
   'edit-goal': (el) => openGoalForm(el.dataset.id),
   'adjust-goal': (el) => openGoalAdjust(el.dataset.id),

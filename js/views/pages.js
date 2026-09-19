@@ -1,9 +1,11 @@
-import { html } from '../ui/html.js';
+import { html, mount, $ } from '../ui/html.js';
 import { state } from '../store.js';
-import { accountBalances, goalProgress, yearReview, yearsWithData } from '../core/stats.js';
+import { accountBalances, yearReview, yearsWithData, sortTransactions } from '../core/stats.js';
+import { planProgress, monthlySurplus, projectPlans, requiredMonthly, planTransactions, PLAN_KINDS } from '../core/plans.js';
 import { FREQUENCIES, nextDue, monthlyEquivalent, isFinished } from '../core/recurring.js';
 import { ACCOUNT_KINDS } from '../core/defaults.js';
 import { formatMonth } from '../core/dates.js';
+import { centsToInput, parseAmount } from '../core/money.js';
 import { money, badge, categoryById, date, plural, percent, timeAgo, month, relativeDay } from '../ui/format.js';
 import { progressBar, barChart } from '../ui/charts.js';
 import { pageHead, emptyState, icons } from './components.js';
@@ -15,7 +17,7 @@ export const MORE_LINKS = [
   { route: 'recurring', label: 'Repeating', desc: 'Rent, salary, subscriptions' },
   { route: 'categories', label: 'Categories', desc: 'Names, colors, icons and order' },
   { route: 'accounts', label: 'Accounts', desc: 'Checking, cards, cash and balances' },
-  { route: 'goals', label: 'Savings goals', desc: 'Track what you’re saving toward' },
+  { route: 'goals', label: 'Plans', desc: 'Nest eggs, trips and what-ifs' },
   { route: 'review', label: 'Year in review', desc: 'How the year added up' },
   { route: 'settings', label: 'Settings and backup', desc: 'Currency, theme, export and import' },
 ];
@@ -154,41 +156,168 @@ export function renderAccounts() {
     <p class="muted small footnote">Balance is the starting balance plus income and refunds, minus spending. Transfers between accounts aren’t tracked, so log a card payment as an expense from checking only if you don’t also log the card purchases.</p>`;
 }
 
-// ---------- Goals ----------
+// ---------- Plans ----------
+
+// A plan is one shape doing three jobs: a nest egg you fill, a trip you fill
+// and then spend down, and — through the what-if panel — a way to ask what
+// any of it costs per month. Stored under the older `goals` name.
+
+// What-if levers. Not saved: they're a question you ask, not a setting, and
+// the honest default is what you have actually been putting aside.
+export const planScenario = { monthly: null, lumpSum: 0 };
+
+export function resetPlanScenario() {
+  planScenario.monthly = null;
+  planScenario.lumpSum = 0;
+}
+
+function scenarioMonthly(surplus) {
+  return planScenario.monthly == null ? Math.max(0, surplus.typical) : planScenario.monthly;
+}
+
+function whenLabel(key, locale) {
+  return key ? formatMonth(key, locale, { month: 'short', year: 'numeric' }) : null;
+}
+
+// What has been charged to a trip. A total you can't check isn't much use,
+// so the newest few are named outright.
+function chargedList(plan) {
+  const charged = sortTransactions(planTransactions(state.transactions, plan.id));
+  if (!charged.length) return '';
+  const shown = charged.slice(0, 4);
+  return html`<ul class="plain-list plan-charges">
+      ${shown.map((t) => {
+        const cat = categoryById(t.categoryId);
+        return html`<li>
+          <span class="plan-charge-what">${cat ? badge(cat, 'sm') : ''}${t.note || (cat ? cat.name : 'Uncategorized')}</span>
+          <span class="amt">${money(t.refund ? -t.amount : t.amount)}</span>
+        </li>`;
+      })}
+      ${charged.length > shown.length ? html`<li class="muted small">and ${plural(charged.length - shown.length, 'more charge')}</li>` : ''}
+    </ul>`;
+}
+
+function planCard(row, locale) {
+  const { plan: g, progress: p } = row;
+  const trip = p.kind === 'trip';
+  const when = whenLabel(row.fundedKey, locale);
+
+  let note;
+  if (p.done && trip) note = `Fully funded. ${money(p.spent)} spent so far, ${money(Math.max(0, p.available))} still in the pot.`;
+  else if (p.done) note = 'Fully funded.';
+  else if (row.fundedKey && row.monthsAway === 0) note = `${money(p.toSave)} to go.`;
+  else if (row.fundedKey) note = `${money(p.toSave)} to go — funded by ${when} at this rate.`;
+  else note = `${money(p.toSave)} to go. Set something aside each month and a date appears here.`;
+
+  let verdict = '';
+  if (row.onTime === true) verdict = html`<p class="plan-verdict ok">Makes ${date(g.targetDate)}${row.monthsAway === 0 ? ' — already funded' : ` — ready ${when}`}</p>`;
+  else if (row.onTime === false) verdict = html`<p class="plan-verdict late">Misses ${date(g.targetDate)} — not ready until ${when}</p>`;
+  else if (!row.fundedKey && g.targetDate) verdict = html`<p class="plan-verdict late">Nothing going in, so ${date(g.targetDate)} isn’t reachable</p>`;
+
+  return html`<li class="panel plan" style="--c:${g.color}">
+    <div class="plan-top">
+      <h2>${g.name}</h2>
+      <span class="plan-kind">${trip ? PLAN_KINDS.trip : PLAN_KINDS.fund}</span>
+    </div>
+    <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(g.target)}</span> <span class="goal-pct">${percent(p.ratio)}</span></p>
+    ${progressBar(p.ratio, p.done ? 'done' : 'goal', `${g.name}: ${money(p.saved)} of ${money(g.target)}`)}
+    ${trip && p.spent !== 0
+      ? html`<p class="plan-spend"><span>Spent on this trip</span> <span class="amt">${money(p.spent)}</span></p>
+          ${progressBar(p.spentRatio, p.overspent ? 'over' : 'spend', `${g.name}: ${money(p.spent)} spent`)}
+          ${p.overspent ? html`<p class="plan-verdict late">That’s ${money(p.spent - p.saved)} more than the pot holds.</p>` : ''}
+          ${chargedList(g)}`
+      : ''}
+    ${trip && g.startDate ? html`<p class="muted small">${date(g.startDate)}${g.endDate ? ` to ${date(g.endDate)}` : ''}</p>` : ''}
+    <p class="muted small">${note}</p>
+    ${verdict}
+    <div class="btn-row">
+      <button type="button" class="btn small primary" data-action="adjust-goal" data-id="${g.id}">${trip ? 'Add or take out money' : 'Add or take out money'}</button>
+      <button type="button" class="btn small ghost" data-action="edit-goal" data-id="${g.id}">Edit</button>
+    </div>
+  </li>`;
+}
+
+// The part that changes as you move the levers, mounted on its own so typing
+// in the what-if fields doesn't rebuild the whole page under your cursor.
+function planResults() {
+  const { locale } = state.settings;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const monthly = scenarioMonthly(surplus);
+  const projection = projectPlans(state.goals, state.transactions, {
+    monthly,
+    lumpSum: planScenario.lumpSum,
+    todayIso: state.today,
+  });
+  const needed = requiredMonthly(state.goals, state.transactions, state.today);
+
+  let headline;
+  if (!monthly && !planScenario.lumpSum) headline = html`<p class="plan-headline">Nothing set aside each month, so nothing has a finish date yet.</p>`;
+  else if (projection.unfunded.length) headline = html`<p class="plan-headline late">At ${money(monthly)} a month, ${projection.unfunded.length === 1 ? 'one plan never fills up' : `${projection.unfunded.length} plans never fill up`}.</p>`;
+  else if (projection.late.length) headline = html`<p class="plan-headline late">${projection.late.length === 1 ? 'One plan misses its date' : `${projection.late.length} plans miss their dates`} at ${money(monthly)} a month. Everything is funded by ${whenLabel(projection.allFundedKey, locale)}.</p>`;
+  else headline = html`<p class="plan-headline ok">Everything funded by ${whenLabel(projection.allFundedKey, locale)} at ${money(monthly)} a month.</p>`;
+
+  const gap = needed > 0 && monthly < needed
+    ? html`<p class="plan-note">Hitting every date needs ${money(needed)} a month — ${money(needed - monthly)} more than this.</p>`
+    : needed > 0
+      ? html`<p class="plan-note">Hitting every date needs ${money(needed)} a month, which this covers.</p>`
+      : '';
+
+  return html`${headline}${gap}
+    <ul class="plain-list goal-list">${projection.rows.map((row) => planCard(row, locale))}</ul>`;
+}
 
 export function renderGoals() {
-  const head = pageHead('Savings goals', html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add</button>`);
+  const head = pageHead('Plans', html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add</button>`);
   if (!state.goals.length) {
     return html`${head}${emptyState({
       title: 'Save toward something',
-      body: 'Set a target, and optionally a date. Tally shows how much to set aside each month to get there.',
-      actions: html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add a goal</button>`,
+      body: 'A nest egg you’re filling, or a trip you’ll spend down. Set a target and a date, and Tally works out what it costs a month and whether you’ll make it.',
+      actions: html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add a plan</button>`,
     })}`;
   }
+
+  const { locale } = state.settings;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const monthly = scenarioMonthly(surplus);
+  const history = surplus.monthsUsed
+    ? html`<p class="muted small">Over the last ${plural(surplus.monthsUsed, 'month')} with activity you’ve had about ${money(Math.max(0, surplus.typical))} a month left over${surplus.typical > 0 ? '' : ' — nothing spare'}${surplus.monthsUsed > 1 && surplus.worst < surplus.typical ? `, and as little as ${money(surplus.worst)} in the leanest month` : ''}. ${planScenario.monthly != null && planScenario.monthly !== Math.max(0, surplus.typical) ? html`<button type="button" class="link-btn" data-action="plan-use-surplus">Use that figure</button>` : ''}</p>`
+    : html`<p class="muted small">Once there are a few months of history here, Tally can tell you what you usually have spare.</p>`;
+
   return html`${head}
-    <ul class="plain-list goal-list">
-      ${state.goals.map((g) => {
-        const p = goalProgress(g, state.today);
-        let note;
-        if (p.done) note = 'Fully funded.';
-        else if (p.overdue) note = `The target date (${date(g.targetDate)}) has passed. ${money(p.remaining)} to go.`;
-        else if (p.perMonth != null) note = `${money(p.remaining)} to go. About ${money(p.perMonth)} a month reaches it by ${date(g.targetDate)}.`;
-        else note = `${money(p.remaining)} to go.`;
-        return html`<li class="panel goal" style="--c:${g.color}">
-          <div class="goal-top">
-            <h2>${g.name}</h2>
-            <span class="goal-pct">${percent(p.ratio)}</span>
-          </div>
-          <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(g.target)}</span></p>
-          ${progressBar(p.ratio, p.done ? 'done' : 'goal', `${g.name}: ${money(p.saved)} of ${money(g.target)}`)}
-          <p class="muted small">${note}</p>
-          <div class="btn-row">
-            <button type="button" class="btn small primary" data-action="adjust-goal" data-id="${g.id}">Add or take out money</button>
-            <button type="button" class="btn small ghost" data-action="edit-goal" data-id="${g.id}">Edit</button>
-          </div>
-        </li>`;
-      })}
-    </ul>`;
+    <section class="panel plan-whatif">
+      <h2>What if</h2>
+      <form class="plan-levers" data-plan-levers novalidate autocomplete="off">
+        <label class="field">
+          <span class="label">Set aside each month</span>
+          <input type="text" inputmode="decimal" name="monthly" value="${centsToInput(monthly, { locale })}" aria-describedby="plan-headline" />
+        </label>
+        <label class="field">
+          <span class="label">Plus a one-off, now <span class="opt">Optional</span></span>
+          <input type="text" inputmode="decimal" name="lumpSum" value="${planScenario.lumpSum ? centsToInput(planScenario.lumpSum, { locale }) : ''}" placeholder="0" />
+        </label>
+      </form>
+      ${history}
+    </section>
+    <div id="plan-results">${planResults()}</div>`;
+}
+
+export function afterPlansMount(root) {
+  const form = root.querySelector('[data-plan-levers]');
+  if (!form) return;
+  const { locale } = state.settings;
+  let timer;
+  form.addEventListener('input', (e) => {
+    const { name, value } = e.target;
+    if (name !== 'monthly' && name !== 'lumpSum') return;
+    // A half-typed number shouldn't read as zero and blank every date, so an
+    // unparseable value leaves the last good one in place.
+    const parsed = parseAmount(value, { locale });
+    const cents = value.trim() === '' ? 0 : parsed.ok && !parsed.negative ? parsed.cents : null;
+    if (cents == null) return;
+    planScenario[name] = cents;
+    clearTimeout(timer);
+    timer = setTimeout(() => mount($('#plan-results', root), planResults()), 140);
+  });
 }
 
 // ---------- Year in review ----------

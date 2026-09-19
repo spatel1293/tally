@@ -7,6 +7,7 @@ import { centsToInput } from '../core/money.js';
 import { addDays, monthKey } from '../core/dates.js';
 import { categoryUsage, budgetOverview, txsInMonth, categoryFamily, incomeAmount } from '../core/stats.js';
 import { FREQUENCIES } from '../core/recurring.js';
+import { planOrder } from '../core/plans.js';
 import { money, signedMoney, date as fmtDate, month as fmtMonth } from '../ui/format.js';
 import { openCategoryForm } from './forms.js';
 
@@ -127,6 +128,7 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
   }
   const { locale } = state.settings;
   const validAccount = (aid) => (aid && state.accounts.some((a) => a.id === aid) ? aid : '');
+  const validPlan = (pid) => (pid && state.goals.some((g) => g.id === pid) ? pid : '');
   const defaultAccount =
     validAccount(preset.accountId) ||
     validAccount(state.lastAccountId) ||
@@ -141,6 +143,7 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         date: existing.date,
         note: existing.note ?? '',
         accountId: validAccount(existing.accountId),
+        planId: validPlan(existing.planId),
         refund: Boolean(existing.refund),
       }
     : {
@@ -150,6 +153,7 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         date: preset.date ?? state.today,
         note: '',
         accountId: defaultAccount,
+        planId: validPlan(preset.planId),
         refund: false,
       };
 
@@ -213,6 +217,17 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         </label>`
       : html`<input type="hidden" name="accountId" value="${values.accountId}" />`}
 
+    ${state.goals.length
+      ? html`<label class="field" data-plan-field ${values.type === 'income' ? 'hidden' : ''}>
+          <span class="label">Part of a plan <span class="opt">Optional</span></span>
+          <select name="planId">
+            <option value="">Not part of a plan</option>
+            ${planOrder(state.goals).map((g) => html`<option value="${g.id}" ${g.id === values.planId ? 'selected' : ''}>${g.name}</option>`)}
+          </select>
+          <small class="hint">Charges this to the plan's pot, so a trip shows what it actually cost.</small>
+        </label>`
+      : ''}
+
     <label class="check" data-refund ${values.type === 'income' ? 'hidden' : ''}>
       <input type="checkbox" name="refund" ${values.refund ? 'checked' : ''} />
       <span>This is a refund<small>Money back from a purchase. It lowers spending in this category.</small></span>
@@ -264,6 +279,8 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
         mount($('[data-chips]', form), chips(type, keep));
         if (!keep) categoryTouched = false;
         $('[data-refund]', form).hidden = type === 'income';
+        const planField = $('[data-plan-field]', form);
+        if (planField) planField.hidden = type === 'income';
         $('.amount-field', form).dataset.type = type;
         saveBtn.textContent = saveLabel(type);
         refreshContext();
@@ -330,7 +347,7 @@ export function openTransactionForm({ id = null, preset = {} } = {}) {
       const save = async (addAnother) => {
         if (busy) return;
         const v = current();
-        const result = validateTransactionInput(v, { locale, categories: state.categories, accounts: state.accounts });
+        const result = validateTransactionInput(v, { locale, categories: state.categories, accounts: state.accounts, plans: state.goals });
         if (!result.ok) {
           showErrors(form, result.errors);
           return;

@@ -318,6 +318,10 @@ export function prepareImport(rows, existing, options) {
       date,
       note,
       recurringId: null,
+      // CSV is an interchange format and carries no plan column, so an
+      // imported row belongs to no plan. The field is still set so every
+      // transaction in the app has the same shape.
+      planId: null,
       createdAt: now,
       updatedAt: now,
     };

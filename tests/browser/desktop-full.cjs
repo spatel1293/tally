@@ -155,8 +155,8 @@ const CSV = FIXTURES + 'history.csv';
   await page.fill('input[name=amount]', '300');
   await page.click('[data-save]');
   await closed();
-  expect((await text('.goal')).includes('$3,500.00 of $10,000.00'), 'goal progress');
-  step('goal: ' + await text('.goal'));
+  expect((await text('.plan')).includes('$3,500.00 of $10,000.00'), 'goal progress');
+  step('plan: ' + await text('.plan'));
   await shot('d06-goals');
 
   // ---- Categories ----

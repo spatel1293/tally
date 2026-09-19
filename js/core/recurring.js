@@ -104,6 +104,10 @@ export function transactionFromRule(rule, date, id, nowIso) {
     date,
     note: rule.note ?? '',
     recurringId: rule.id,
+    // A repeating entry belongs to no plan; set explicitly so every
+    // transaction the app creates has the same shape as one that has been
+    // through a backup and back.
+    planId: null,
     createdAt: nowIso,
     updatedAt: nowIso,
   };

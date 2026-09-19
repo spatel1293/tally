@@ -452,35 +452,58 @@ export function openGoalForm(id = null) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
   const { locale } = state.settings;
   const body = html`<form class="stack" novalidate autocomplete="off">
+    <div class="seg" role="radiogroup" aria-label="Kind of plan">
+      <label><input type="radio" name="kind" value="fund" ${(existing?.kind ?? 'fund') !== 'trip' ? 'checked' : ''} /><span>Nest egg</span></label>
+      <label><input type="radio" name="kind" value="trip" ${existing?.kind === 'trip' ? 'checked' : ''} /><span>Trip</span></label>
+    </div>
     <label class="field">
-      <span class="label">Goal</span>
+      <span class="label">Name</span>
       <input name="name" value="${existing?.name ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Emergency fund" aria-describedby="err-name" />
     </label>
     ${errorSlot('name')}
     ${moneyField('target', existing ? centsToInput(existing.target, { locale }) : '', { label: 'Target amount' })}
     ${moneyField('saved', existing ? centsToInput(existing.saved ?? 0, { locale }) : '', { label: 'Saved so far', optional: true })}
     <label class="field">
-      <span class="label">Target date <span class="opt">Optional</span></span>
+      <span class="label">Want it by <span class="opt">Optional</span></span>
       <input type="date" name="targetDate" value="${existing?.targetDate ?? ''}" min="1900-01-01" max="2199-12-31" />
     </label>
+    <div class="trip-dates" ${existing?.kind === 'trip' ? '' : 'hidden'}>
+      <div class="row-2">
+        <label class="field">
+          <span class="label">Leaves <span class="opt">Optional</span></span>
+          <input type="date" name="startDate" value="${existing?.startDate ?? ''}" min="1900-01-01" max="2199-12-31" />
+        </label>
+        <label class="field">
+          <span class="label">Comes back <span class="opt">Optional</span></span>
+          <input type="date" name="endDate" value="${existing?.endDate ?? ''}" min="1900-01-01" max="2199-12-31" />
+        </label>
+      </div>
+      ${errorSlot('endDate')}
+    </div>
     <fieldset class="field">
       <legend class="label">Color</legend>
       <div class="swatches">${PALETTE.map((c) => html`<label class="swatch" style="--c:${c}"><input type="radio" name="color" value="${c}" ${(existing?.color ?? PALETTE[state.goals.length % PALETTE.length]) === c ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}</div>
     </fieldset>
-    <p class="hint">Goals are tracked separately from your budget. Add money to a goal whenever you set some aside.</p>
+    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost.</p>
   </form>`;
   openSheet({
-    title: existing ? 'Edit goal' : 'New savings goal',
+    title: existing ? 'Edit plan' : 'New plan',
     body,
     footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add goal', deletable: Boolean(existing) }),
     onMount(dialog, sheet) {
       const form = $('form', dialog);
       if (!existing) $('input[name="name"]', form).focus();
+      // Trip dates only make sense for a trip, so they appear with one.
+      form.addEventListener('change', (e) => {
+        if (e.target.name !== 'kind') return;
+        $('.trip-dates', form).hidden = e.target.value !== 'trip';
+      });
       wireSave(dialog, form, async () => {
         const d = formData(form);
         const errors = {};
+        const kind = d.kind === 'trip' ? 'trip' : 'fund';
         const name = d.name.trim();
-        if (!name) errors.name = 'Name your goal.';
+        if (!name) errors.name = 'Name your plan.';
         const target = parseAmount(d.target, { locale });
         if (!target.ok) errors.target = target.error;
         else if (target.negative || target.cents === 0) errors.target = 'Enter a target greater than zero.';
@@ -491,18 +514,21 @@ export function openGoalForm(id = null) {
           else if (s.negative) errors.saved = 'Saved so far can’t be negative.';
           else saved = s.cents;
         }
+        const startDate = kind === 'trip' ? d.startDate || null : null;
+        const endDate = kind === 'trip' ? d.endDate || null : null;
+        if (startDate && endDate && endDate < startDate) errors.endDate = 'The return date is before the departure date.';
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveGoal({ name, target: target.cents, saved, targetDate: d.targetDate || null, color: d.color || PALETTE[0] }, id);
+        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0] }, id);
         sheet.close({ silent: true });
-        toast(existing ? 'Goal saved' : `Added ${name}`);
+        toast(existing ? 'Plan saved' : `Added ${name}`);
       });
       $('[data-delete]', dialog)?.addEventListener('click', async () => {
-        const ok = await confirmDialog({ title: `Delete “${existing.name}”?`, message: 'This removes the goal and its progress. Your transactions are not affected.', confirmLabel: 'Delete goal', danger: true });
+        const ok = await confirmDialog({ title: `Delete “${existing.name}”?`, message: 'This removes the plan and its progress. Your transactions are not affected — any that were charged to it simply stop being.', confirmLabel: 'Delete plan', danger: true });
         if (!ok) return;
         try {
           await deleteGoal(id);
           sheet.close({ silent: true });
-          toast('Goal deleted');
+          toast('Plan deleted');
         } catch (err) {
           fail(err);
         }

@@ -958,6 +958,12 @@ main {
   background: var(--ok);
 }
 
+/* Money already spent out of a trip's pot: the same hue as the plan, drawn
+   lighter so it reads as coming out of the bar above it, not adding to it. */
+.bar-fill.s-spend {
+  background: color-mix(in srgb, var(--c, var(--goal)) 55%, var(--surface));
+}
+
 .bar {
   height: 8px;
   border-radius: 4px;
@@ -2469,6 +2475,139 @@ dialog .toasts {
   letter-spacing: -0.02em;
 }
 
+/* Plans */
+
+.plan {
+  border-top: 3px solid var(--c);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.plan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.plan-top h2 {
+  font-size: 1.125rem;
+  min-width: 0;
+}
+
+/* Nest egg or trip, said once and quietly — the bars below carry the story. */
+.plan-kind {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  font-weight: 620;
+}
+
+.plan .goal-amt {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plan .goal-amt .goal-pct {
+  margin-left: auto;
+}
+
+.plan-spend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 6px;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.plan-charges {
+  margin-top: 10px;
+  font-size: 0.875rem;
+}
+
+.plan-charges > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-charges > li:last-child {
+  border-bottom: 0;
+}
+
+.plan-charge-what {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan .bar + .muted,
+.plan .bar + .plan-verdict {
+  margin-top: 10px;
+}
+
+.plan .btn-row {
+  margin-top: 12px;
+}
+
+/* The one line that answers "will I make it?". Colour is allowed here
+   because it is a statement about money, not decoration. */
+.plan-verdict {
+  font-size: 0.875rem;
+  font-weight: 560;
+}
+
+.plan-verdict.ok {
+  color: var(--ok);
+}
+
+.plan-verdict.late {
+  color: var(--over);
+}
+
+.plan-whatif .plan-levers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.plan-headline {
+  font-size: 1.0625rem;
+  font-weight: 620;
+  line-height: 1.35;
+  margin: 18px 0 4px;
+  text-wrap: balance;
+}
+
+.plan-headline.ok {
+  color: var(--ok);
+}
+
+.plan-headline.late {
+  color: var(--over);
+}
+
+.plan-note {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  margin-bottom: 14px;
+}
+
 .goal .bar {
   height: 10px;
   margin-bottom: 8px;
@@ -2776,6 +2915,33 @@ dialog .toasts {
   opacity: 0.55;
   transform-origin: left center;
   animation: fill-x 620ms var(--ease) backwards;
+}
+
+.companion-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.16s var(--spring), background-color 0.14s ease;
+}
+
+.companion-plan:hover {
+  background: var(--surface-3);
+  transform: translateY(-2px);
+}
+
+.companion-plan-name {
+  font-weight: 620;
+  font-size: 0.9375rem;
+}
+
+.companion-plan small {
+  color: var(--ink-3);
+  font-size: 0.75rem;
 }
 
 .companion-again {
@@ -4041,8 +4207,8 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '2.1.0';
-const BACKUP_FORMAT = 1;
+const APP_VERSION = '2.2.0';
+const BACKUP_FORMAT = 2;
 
 function makeId() {
   const c = globalThis.crypto;
@@ -4434,6 +4600,181 @@ function goalProgress(goal, todayIso) {
 }
 
 return { signedAmount, expenseAmount, incomeAmount, totals, txsInMonth, txsInRange, monthlySeries, categoryMap, rootCategoryId, categoryFamily, spendingByCategory, budgetStatus, compareBudgetRows, budgetOverview, accountBalances, sortTransactions, filterTransactions, groupByDay, yearsWithData, yearReview, categoryUsage, goalProgress };
+})();
+
+// js/core/plans.js
+const __m_js_core_plans_js = (() => {
+// Plans: the nest eggs you are filling, and the trips you fill one for and
+// then spend down.
+//
+// plan = { id, name, kind: 'fund' | 'trip', target, saved, targetDate,
+//          startDate, endDate, color, createdAt }
+//
+// `saved` is money you have deliberately set aside. It stays a counter you
+// move by hand rather than a transaction, because moving money between your
+// own accounts is neither income nor spending and would distort every total
+// in the app. Transactions instead carry a `planId` when they are spending
+// *against* a plan, which is how a trip draws its pot down — and why a flight
+// booked six months early still counts toward the trip.
+//
+// Everything here is pure: given plans, transactions and today's date, the
+// same numbers come out every time.
+
+const { monthKey, monthKeyAdd } = __m_js_core_dates_js;
+const { expenseAmount, totals, txsInMonth, goalProgress } = __m_js_core_stats_js;
+const PLAN_KINDS = { fund: 'Nest egg', trip: 'Trip' };
+
+// How far ahead a projection will look before giving up. Ten years is longer
+// than any plan anyone sensibly makes, and it stops a tiny monthly amount
+// against a large target from looping for ever.
+const PROJECTION_HORIZON = 120;
+
+function planSpend(txs, planId) {
+  let spent = 0;
+  for (const t of txs) {
+    if (t.planId === planId) spent += expenseAmount(t);
+  }
+  return spent;
+}
+
+function planTransactions(txs, planId) {
+  return txs.filter((t) => t.planId === planId);
+}
+
+function planProgress(plan, txs, todayIso) {
+  const base = goalProgress(plan, todayIso);
+  const target = plan.target ?? 0;
+  const spent = planSpend(txs, plan.id);
+  // What's still in the pot after what the plan has already cost.
+  const available = base.saved - spent;
+  return {
+    ...base,
+    kind: plan.kind === 'trip' ? 'trip' : 'fund',
+    toSave: base.remaining,
+    spent,
+    available,
+    spentRatio: target > 0 ? Math.min(1, Math.max(0, spent / target)) : 0,
+    overspent: spent > base.saved,
+  };
+}
+
+// What every plan with a date needs each month to arrive on time. This is the
+// honest number to compare against what's actually left over each month.
+function requiredMonthly(plans, txs, todayIso) {
+  let total = 0;
+  for (const plan of plans) {
+    const p = planProgress(plan, txs, todayIso);
+    if (p.perMonth) total += p.perMonth;
+  }
+  return total;
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+// What's actually been left over each month, from whole months only — the
+// current month is part-finished and would always look like a bad one.
+// `typical` is the median rather than the mean, so a single unusual month
+// (a bonus, a new laptop) doesn't set expectations for every month after it.
+function monthlySurplus(txs, todayIso, months = 6) {
+  const list = [];
+  let key = monthKeyAdd(monthKey(todayIso), -1);
+  for (let i = 0; i < months; i++) {
+    const t = totals(txsInMonth(txs, key));
+    list.push({ key, income: t.income, expenses: t.expenses, net: t.net, count: t.count });
+    key = monthKeyAdd(key, -1);
+  }
+  list.reverse();
+  const used = list.filter((m) => m.count > 0);
+  const nets = used.map((m) => m.net);
+  return {
+    months: list,
+    monthsUsed: used.length,
+    average: used.length ? Math.round(nets.reduce((s, n) => s + n, 0) / used.length) : 0,
+    typical: median(nets),
+    best: used.length ? Math.max(...nets) : 0,
+    worst: used.length ? Math.min(...nets) : 0,
+  };
+}
+
+// Soonest target date first, then oldest. Dated plans come before undated
+// ones because a date is a commitment and "someday" isn't.
+function planOrder(plans) {
+  return plans.slice().sort((a, b) => {
+    const ad = a.targetDate || '9999-12-31';
+    const bd = b.targetDate || '9999-12-31';
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    return String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''));
+  });
+}
+
+// Pour a monthly amount into the plans in order, one month at a time, and
+// report when each one fills up. This is the whole scenario engine: change
+// `monthly` or `lumpSum` and every projected date moves with it.
+function projectPlans(plans, txs, { monthly = 0, lumpSum = 0, todayIso, horizon = PROJECTION_HORIZON }) {
+  const startKey = monthKey(todayIso);
+  const rows = planOrder(plans).map((plan) => ({
+    plan,
+    progress: planProgress(plan, txs, todayIso),
+    fundedKey: null,
+    monthsAway: null,
+    onTime: null,
+  }));
+  const left = new Map(rows.map((r) => [r.plan.id, r.progress.toSave]));
+
+  const pour = (amount, key, monthsAway) => {
+    let pot = amount;
+    for (const row of rows) {
+      if (pot <= 0) break;
+      const need = left.get(row.plan.id);
+      if (need <= 0) continue;
+      const put = Math.min(need, pot);
+      left.set(row.plan.id, need - put);
+      pot -= put;
+      if (need - put === 0) {
+        row.fundedKey = key;
+        row.monthsAway = monthsAway;
+      }
+    }
+    return pot;
+  };
+
+  for (const row of rows) {
+    if (left.get(row.plan.id) <= 0) {
+      row.fundedKey = startKey;
+      row.monthsAway = 0;
+    }
+  }
+
+  let spare = pour(Math.max(0, lumpSum), startKey, 0);
+  if (monthly > 0) {
+    for (let i = 1; i <= horizon && rows.some((r) => !r.fundedKey); i++) {
+      spare = pour(monthly, monthKeyAdd(startKey, i), i);
+    }
+  }
+
+  for (const row of rows) {
+    if (row.plan.targetDate && row.fundedKey) row.onTime = row.fundedKey <= monthKey(row.plan.targetDate);
+  }
+
+  const unfunded = rows.filter((r) => !r.fundedKey);
+  const late = rows.filter((r) => r.onTime === false);
+  const funded = rows.filter((r) => r.fundedKey);
+  return {
+    rows,
+    unfunded,
+    late,
+    spare,
+    // The month the last plan fills up, or null if any of them never does.
+    allFundedKey: rows.length && !unfunded.length ? funded.map((r) => r.fundedKey).sort().at(-1) : null,
+  };
+}
+
+return { PLAN_KINDS, PROJECTION_HORIZON, planSpend, planTransactions, planProgress, requiredMonthly, monthlySurplus, planOrder, projectPlans };
 })();
 
 // js/storage.js
@@ -4987,6 +5328,10 @@ function transactionFromRule(rule, date, id, nowIso) {
     date,
     note: rule.note ?? '',
     recurringId: rule.id,
+    // A repeating entry belongs to no plan; set explicitly so every
+    // transaction the app creates has the same shape as one that has been
+    // through a backup and back.
+    planId: null,
     createdAt: nowIso,
     updatedAt: nowIso,
   };
@@ -5052,7 +5397,7 @@ function yearOk(iso) {
 
 // input: { amount (text), type, refund, categoryId, date, note, accountId }
 // Returns { ok, errors: { field: message }, value }.
-function validateTransactionInput(input, { locale, categories, accounts }) {
+function validateTransactionInput(input, { locale, categories, accounts, plans = [] }) {
   const errors = {};
   const type = input.type === 'income' ? 'income' : input.type === 'expense' ? 'expense' : null;
   if (!type) errors.type = 'Choose expense or income.';
@@ -5080,11 +5425,16 @@ function validateTransactionInput(input, { locale, categories, accounts }) {
   let accountId = input.accountId || null;
   if (accountId && !accounts.some((a) => a.id === accountId)) accountId = null;
 
+  // Only spending can belong to a plan: a plan is filled by setting money
+  // aside, not by earning, so income tagged to one would be counted twice.
+  let planId = input.planId || null;
+  if (type !== 'expense' || !plans.some((p) => p.id === planId)) planId = null;
+
   const ok = Object.keys(errors).length === 0;
   return {
     ok,
     errors,
-    value: ok ? { type, amount, refund: type === 'expense' && Boolean(input.refund), categoryId: category.id, date: input.date, note, accountId } : null,
+    value: ok ? { type, amount, refund: type === 'expense' && Boolean(input.refund), categoryId: category.id, date: input.date, note, accountId, planId } : null,
   };
 }
 
@@ -5150,6 +5500,7 @@ function sanitizeTransaction(t) {
     date: t.date,
     note: str(t.note, NOTE_MAX),
     recurringId: idOk(t.recurringId) ? t.recurringId : null,
+    planId: idOk(t.planId) ? t.planId : null,
     createdAt: str(t.createdAt, 40) || null,
     updatedAt: str(t.updatedAt, 40) || null,
   };
@@ -5204,16 +5555,26 @@ function sanitizeRule(r) {
   };
 }
 
+// Plans are stored under the older `goals` name so that existing data and
+// backups keep working; `kind` is what separates a nest egg from a trip.
+// A backup written before plans existed has no kind, and reads as a fund.
 function sanitizeGoal(g) {
   if (!g || typeof g !== 'object' || !idOk(g.id)) return null;
   const name = str(g.name, NAME_MAX).trim();
   if (!name || !isValidCents(g.target)) return null;
+  const startDate = isValidISODate(g.startDate) ? g.startDate : null;
+  const endDate = isValidISODate(g.endDate) ? g.endDate : null;
   return {
     id: g.id,
     name,
+    kind: g.kind === 'trip' ? 'trip' : 'fund',
     target: g.target,
     saved: isValidSignedCents(g.saved) ? Math.max(0, g.saved) : 0,
     targetDate: isValidISODate(g.targetDate) ? g.targetDate : null,
+    startDate,
+    // A trip that somehow ends before it starts would make every date
+    // calculation lie, so drop the end rather than keep an impossible range.
+    endDate: endDate && startDate && endDate < startDate ? null : endDate,
     color: /^#[0-9a-f]{6}$/i.test(g.color ?? '') ? g.color : PALETTE[0],
     createdAt: str(g.createdAt, 40) || null,
   };
@@ -5680,7 +6041,12 @@ async function handleReminder(ruleId, date, action) {
 
 async function saveGoal(value, id = null) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
-  const record = existing ? { ...existing, ...value } : { id: makeId(), saved: 0, ...value, createdAt: nowIso() };
+  // Defaults first so a record always has the full plan shape, whatever the
+  // caller passed — a backup and restore would fill them in anyway, and the
+  // two need to match.
+  const record = existing
+    ? { ...existing, ...value }
+    : { id: makeId(), kind: 'fund', saved: 0, targetDate: null, startDate: null, endDate: null, ...value, createdAt: nowIso() };
   await commit([put('goals', record)]);
   state.goals = existing ? state.goals.map((g) => (g.id === id ? record : g)) : [...state.goals, record];
   emit();
@@ -6439,35 +6805,58 @@ function openGoalForm(id = null) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
   const { locale } = state.settings;
   const body = html`<form class="stack" novalidate autocomplete="off">
+    <div class="seg" role="radiogroup" aria-label="Kind of plan">
+      <label><input type="radio" name="kind" value="fund" ${(existing?.kind ?? 'fund') !== 'trip' ? 'checked' : ''} /><span>Nest egg</span></label>
+      <label><input type="radio" name="kind" value="trip" ${existing?.kind === 'trip' ? 'checked' : ''} /><span>Trip</span></label>
+    </div>
     <label class="field">
-      <span class="label">Goal</span>
+      <span class="label">Name</span>
       <input name="name" value="${existing?.name ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Emergency fund" aria-describedby="err-name" />
     </label>
     ${errorSlot('name')}
     ${moneyField('target', existing ? centsToInput(existing.target, { locale }) : '', { label: 'Target amount' })}
     ${moneyField('saved', existing ? centsToInput(existing.saved ?? 0, { locale }) : '', { label: 'Saved so far', optional: true })}
     <label class="field">
-      <span class="label">Target date <span class="opt">Optional</span></span>
+      <span class="label">Want it by <span class="opt">Optional</span></span>
       <input type="date" name="targetDate" value="${existing?.targetDate ?? ''}" min="1900-01-01" max="2199-12-31" />
     </label>
+    <div class="trip-dates" ${existing?.kind === 'trip' ? '' : 'hidden'}>
+      <div class="row-2">
+        <label class="field">
+          <span class="label">Leaves <span class="opt">Optional</span></span>
+          <input type="date" name="startDate" value="${existing?.startDate ?? ''}" min="1900-01-01" max="2199-12-31" />
+        </label>
+        <label class="field">
+          <span class="label">Comes back <span class="opt">Optional</span></span>
+          <input type="date" name="endDate" value="${existing?.endDate ?? ''}" min="1900-01-01" max="2199-12-31" />
+        </label>
+      </div>
+      ${errorSlot('endDate')}
+    </div>
     <fieldset class="field">
       <legend class="label">Color</legend>
       <div class="swatches">${PALETTE.map((c) => html`<label class="swatch" style="--c:${c}"><input type="radio" name="color" value="${c}" ${(existing?.color ?? PALETTE[state.goals.length % PALETTE.length]) === c ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}</div>
     </fieldset>
-    <p class="hint">Goals are tracked separately from your budget. Add money to a goal whenever you set some aside.</p>
+    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost.</p>
   </form>`;
   openSheet({
-    title: existing ? 'Edit goal' : 'New savings goal',
+    title: existing ? 'Edit plan' : 'New plan',
     body,
     footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add goal', deletable: Boolean(existing) }),
     onMount(dialog, sheet) {
       const form = $('form', dialog);
       if (!existing) $('input[name="name"]', form).focus();
+      // Trip dates only make sense for a trip, so they appear with one.
+      form.addEventListener('change', (e) => {
+        if (e.target.name !== 'kind') return;
+        $('.trip-dates', form).hidden = e.target.value !== 'trip';
+      });
       wireSave(dialog, form, async () => {
         const d = formData(form);
         const errors = {};
+        const kind = d.kind === 'trip' ? 'trip' : 'fund';
         const name = d.name.trim();
-        if (!name) errors.name = 'Name your goal.';
+        if (!name) errors.name = 'Name your plan.';
         const target = parseAmount(d.target, { locale });
         if (!target.ok) errors.target = target.error;
         else if (target.negative || target.cents === 0) errors.target = 'Enter a target greater than zero.';
@@ -6478,18 +6867,21 @@ function openGoalForm(id = null) {
           else if (s.negative) errors.saved = 'Saved so far can’t be negative.';
           else saved = s.cents;
         }
+        const startDate = kind === 'trip' ? d.startDate || null : null;
+        const endDate = kind === 'trip' ? d.endDate || null : null;
+        if (startDate && endDate && endDate < startDate) errors.endDate = 'The return date is before the departure date.';
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveGoal({ name, target: target.cents, saved, targetDate: d.targetDate || null, color: d.color || PALETTE[0] }, id);
+        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0] }, id);
         sheet.close({ silent: true });
-        toast(existing ? 'Goal saved' : `Added ${name}`);
+        toast(existing ? 'Plan saved' : `Added ${name}`);
       });
       $('[data-delete]', dialog)?.addEventListener('click', async () => {
-        const ok = await confirmDialog({ title: `Delete “${existing.name}”?`, message: 'This removes the goal and its progress. Your transactions are not affected.', confirmLabel: 'Delete goal', danger: true });
+        const ok = await confirmDialog({ title: `Delete “${existing.name}”?`, message: 'This removes the plan and its progress. Your transactions are not affected — any that were charged to it simply stop being.', confirmLabel: 'Delete plan', danger: true });
         if (!ok) return;
         try {
           await deleteGoal(id);
           sheet.close({ silent: true });
-          toast('Goal deleted');
+          toast('Plan deleted');
         } catch (err) {
           fail(err);
         }
@@ -6546,6 +6938,7 @@ const { centsToInput } = __m_js_core_money_js;
 const { addDays, monthKey } = __m_js_core_dates_js;
 const { categoryUsage, budgetOverview, txsInMonth, categoryFamily, incomeAmount } = __m_js_core_stats_js;
 const { FREQUENCIES } = __m_js_core_recurring_js;
+const { planOrder } = __m_js_core_plans_js;
 const { money, signedMoney, date: fmtDate, month: fmtMonth } = __m_js_ui_format_js;
 const { openCategoryForm } = __m_js_views_forms_js;
 function currencySymbol() {
@@ -6665,6 +7058,7 @@ function openTransactionForm({ id = null, preset = {} } = {}) {
   }
   const { locale } = state.settings;
   const validAccount = (aid) => (aid && state.accounts.some((a) => a.id === aid) ? aid : '');
+  const validPlan = (pid) => (pid && state.goals.some((g) => g.id === pid) ? pid : '');
   const defaultAccount =
     validAccount(preset.accountId) ||
     validAccount(state.lastAccountId) ||
@@ -6679,6 +7073,7 @@ function openTransactionForm({ id = null, preset = {} } = {}) {
         date: existing.date,
         note: existing.note ?? '',
         accountId: validAccount(existing.accountId),
+        planId: validPlan(existing.planId),
         refund: Boolean(existing.refund),
       }
     : {
@@ -6688,6 +7083,7 @@ function openTransactionForm({ id = null, preset = {} } = {}) {
         date: preset.date ?? state.today,
         note: '',
         accountId: defaultAccount,
+        planId: validPlan(preset.planId),
         refund: false,
       };
 
@@ -6751,6 +7147,17 @@ function openTransactionForm({ id = null, preset = {} } = {}) {
         </label>`
       : html`<input type="hidden" name="accountId" value="${values.accountId}" />`}
 
+    ${state.goals.length
+      ? html`<label class="field" data-plan-field ${values.type === 'income' ? 'hidden' : ''}>
+          <span class="label">Part of a plan <span class="opt">Optional</span></span>
+          <select name="planId">
+            <option value="">Not part of a plan</option>
+            ${planOrder(state.goals).map((g) => html`<option value="${g.id}" ${g.id === values.planId ? 'selected' : ''}>${g.name}</option>`)}
+          </select>
+          <small class="hint">Charges this to the plan's pot, so a trip shows what it actually cost.</small>
+        </label>`
+      : ''}
+
     <label class="check" data-refund ${values.type === 'income' ? 'hidden' : ''}>
       <input type="checkbox" name="refund" ${values.refund ? 'checked' : ''} />
       <span>This is a refund<small>Money back from a purchase. It lowers spending in this category.</small></span>
@@ -6802,6 +7209,8 @@ function openTransactionForm({ id = null, preset = {} } = {}) {
         mount($('[data-chips]', form), chips(type, keep));
         if (!keep) categoryTouched = false;
         $('[data-refund]', form).hidden = type === 'income';
+        const planField = $('[data-plan-field]', form);
+        if (planField) planField.hidden = type === 'income';
         $('.amount-field', form).dataset.type = type;
         saveBtn.textContent = saveLabel(type);
         refreshContext();
@@ -6868,7 +7277,7 @@ function openTransactionForm({ id = null, preset = {} } = {}) {
       const save = async (addAnother) => {
         if (busy) return;
         const v = current();
-        const result = validateTransactionInput(v, { locale, categories: state.categories, accounts: state.accounts });
+        const result = validateTransactionInput(v, { locale, categories: state.categories, accounts: state.accounts, plans: state.goals });
         if (!result.ok) {
           showErrors(form, result.errors);
           return;
@@ -7526,12 +7935,14 @@ return { renderBudgets };
 
 // js/views/pages.js
 const __m_js_views_pages_js = (() => {
-const { html } = __m_js_ui_html_js;
+const { html, mount, $ } = __m_js_ui_html_js;
 const { state } = __m_js_store_js;
-const { accountBalances, goalProgress, yearReview, yearsWithData } = __m_js_core_stats_js;
+const { accountBalances, yearReview, yearsWithData, sortTransactions } = __m_js_core_stats_js;
+const { planProgress, monthlySurplus, projectPlans, requiredMonthly, planTransactions, PLAN_KINDS } = __m_js_core_plans_js;
 const { FREQUENCIES, nextDue, monthlyEquivalent, isFinished } = __m_js_core_recurring_js;
 const { ACCOUNT_KINDS } = __m_js_core_defaults_js;
 const { formatMonth } = __m_js_core_dates_js;
+const { centsToInput, parseAmount } = __m_js_core_money_js;
 const { money, badge, categoryById, date, plural, percent, timeAgo, month, relativeDay } = __m_js_ui_format_js;
 const { progressBar, barChart } = __m_js_ui_charts_js;
 const { pageHead, emptyState, icons } = __m_js_views_components_js;
@@ -7542,7 +7953,7 @@ const MORE_LINKS = [
   { route: 'recurring', label: 'Repeating', desc: 'Rent, salary, subscriptions' },
   { route: 'categories', label: 'Categories', desc: 'Names, colors, icons and order' },
   { route: 'accounts', label: 'Accounts', desc: 'Checking, cards, cash and balances' },
-  { route: 'goals', label: 'Savings goals', desc: 'Track what you’re saving toward' },
+  { route: 'goals', label: 'Plans', desc: 'Nest eggs, trips and what-ifs' },
   { route: 'review', label: 'Year in review', desc: 'How the year added up' },
   { route: 'settings', label: 'Settings and backup', desc: 'Currency, theme, export and import' },
 ];
@@ -7681,41 +8092,168 @@ function renderAccounts() {
     <p class="muted small footnote">Balance is the starting balance plus income and refunds, minus spending. Transfers between accounts aren’t tracked, so log a card payment as an expense from checking only if you don’t also log the card purchases.</p>`;
 }
 
-// ---------- Goals ----------
+// ---------- Plans ----------
+
+// A plan is one shape doing three jobs: a nest egg you fill, a trip you fill
+// and then spend down, and — through the what-if panel — a way to ask what
+// any of it costs per month. Stored under the older `goals` name.
+
+// What-if levers. Not saved: they're a question you ask, not a setting, and
+// the honest default is what you have actually been putting aside.
+const planScenario = { monthly: null, lumpSum: 0 };
+
+function resetPlanScenario() {
+  planScenario.monthly = null;
+  planScenario.lumpSum = 0;
+}
+
+function scenarioMonthly(surplus) {
+  return planScenario.monthly == null ? Math.max(0, surplus.typical) : planScenario.monthly;
+}
+
+function whenLabel(key, locale) {
+  return key ? formatMonth(key, locale, { month: 'short', year: 'numeric' }) : null;
+}
+
+// What has been charged to a trip. A total you can't check isn't much use,
+// so the newest few are named outright.
+function chargedList(plan) {
+  const charged = sortTransactions(planTransactions(state.transactions, plan.id));
+  if (!charged.length) return '';
+  const shown = charged.slice(0, 4);
+  return html`<ul class="plain-list plan-charges">
+      ${shown.map((t) => {
+        const cat = categoryById(t.categoryId);
+        return html`<li>
+          <span class="plan-charge-what">${cat ? badge(cat, 'sm') : ''}${t.note || (cat ? cat.name : 'Uncategorized')}</span>
+          <span class="amt">${money(t.refund ? -t.amount : t.amount)}</span>
+        </li>`;
+      })}
+      ${charged.length > shown.length ? html`<li class="muted small">and ${plural(charged.length - shown.length, 'more charge')}</li>` : ''}
+    </ul>`;
+}
+
+function planCard(row, locale) {
+  const { plan: g, progress: p } = row;
+  const trip = p.kind === 'trip';
+  const when = whenLabel(row.fundedKey, locale);
+
+  let note;
+  if (p.done && trip) note = `Fully funded. ${money(p.spent)} spent so far, ${money(Math.max(0, p.available))} still in the pot.`;
+  else if (p.done) note = 'Fully funded.';
+  else if (row.fundedKey && row.monthsAway === 0) note = `${money(p.toSave)} to go.`;
+  else if (row.fundedKey) note = `${money(p.toSave)} to go — funded by ${when} at this rate.`;
+  else note = `${money(p.toSave)} to go. Set something aside each month and a date appears here.`;
+
+  let verdict = '';
+  if (row.onTime === true) verdict = html`<p class="plan-verdict ok">Makes ${date(g.targetDate)}${row.monthsAway === 0 ? ' — already funded' : ` — ready ${when}`}</p>`;
+  else if (row.onTime === false) verdict = html`<p class="plan-verdict late">Misses ${date(g.targetDate)} — not ready until ${when}</p>`;
+  else if (!row.fundedKey && g.targetDate) verdict = html`<p class="plan-verdict late">Nothing going in, so ${date(g.targetDate)} isn’t reachable</p>`;
+
+  return html`<li class="panel plan" style="--c:${g.color}">
+    <div class="plan-top">
+      <h2>${g.name}</h2>
+      <span class="plan-kind">${trip ? PLAN_KINDS.trip : PLAN_KINDS.fund}</span>
+    </div>
+    <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(g.target)}</span> <span class="goal-pct">${percent(p.ratio)}</span></p>
+    ${progressBar(p.ratio, p.done ? 'done' : 'goal', `${g.name}: ${money(p.saved)} of ${money(g.target)}`)}
+    ${trip && p.spent !== 0
+      ? html`<p class="plan-spend"><span>Spent on this trip</span> <span class="amt">${money(p.spent)}</span></p>
+          ${progressBar(p.spentRatio, p.overspent ? 'over' : 'spend', `${g.name}: ${money(p.spent)} spent`)}
+          ${p.overspent ? html`<p class="plan-verdict late">That’s ${money(p.spent - p.saved)} more than the pot holds.</p>` : ''}
+          ${chargedList(g)}`
+      : ''}
+    ${trip && g.startDate ? html`<p class="muted small">${date(g.startDate)}${g.endDate ? ` to ${date(g.endDate)}` : ''}</p>` : ''}
+    <p class="muted small">${note}</p>
+    ${verdict}
+    <div class="btn-row">
+      <button type="button" class="btn small primary" data-action="adjust-goal" data-id="${g.id}">${trip ? 'Add or take out money' : 'Add or take out money'}</button>
+      <button type="button" class="btn small ghost" data-action="edit-goal" data-id="${g.id}">Edit</button>
+    </div>
+  </li>`;
+}
+
+// The part that changes as you move the levers, mounted on its own so typing
+// in the what-if fields doesn't rebuild the whole page under your cursor.
+function planResults() {
+  const { locale } = state.settings;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const monthly = scenarioMonthly(surplus);
+  const projection = projectPlans(state.goals, state.transactions, {
+    monthly,
+    lumpSum: planScenario.lumpSum,
+    todayIso: state.today,
+  });
+  const needed = requiredMonthly(state.goals, state.transactions, state.today);
+
+  let headline;
+  if (!monthly && !planScenario.lumpSum) headline = html`<p class="plan-headline">Nothing set aside each month, so nothing has a finish date yet.</p>`;
+  else if (projection.unfunded.length) headline = html`<p class="plan-headline late">At ${money(monthly)} a month, ${projection.unfunded.length === 1 ? 'one plan never fills up' : `${projection.unfunded.length} plans never fill up`}.</p>`;
+  else if (projection.late.length) headline = html`<p class="plan-headline late">${projection.late.length === 1 ? 'One plan misses its date' : `${projection.late.length} plans miss their dates`} at ${money(monthly)} a month. Everything is funded by ${whenLabel(projection.allFundedKey, locale)}.</p>`;
+  else headline = html`<p class="plan-headline ok">Everything funded by ${whenLabel(projection.allFundedKey, locale)} at ${money(monthly)} a month.</p>`;
+
+  const gap = needed > 0 && monthly < needed
+    ? html`<p class="plan-note">Hitting every date needs ${money(needed)} a month — ${money(needed - monthly)} more than this.</p>`
+    : needed > 0
+      ? html`<p class="plan-note">Hitting every date needs ${money(needed)} a month, which this covers.</p>`
+      : '';
+
+  return html`${headline}${gap}
+    <ul class="plain-list goal-list">${projection.rows.map((row) => planCard(row, locale))}</ul>`;
+}
 
 function renderGoals() {
-  const head = pageHead('Savings goals', html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add</button>`);
+  const head = pageHead('Plans', html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add</button>`);
   if (!state.goals.length) {
     return html`${head}${emptyState({
       title: 'Save toward something',
-      body: 'Set a target, and optionally a date. Tally shows how much to set aside each month to get there.',
-      actions: html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add a goal</button>`,
+      body: 'A nest egg you’re filling, or a trip you’ll spend down. Set a target and a date, and Tally works out what it costs a month and whether you’ll make it.',
+      actions: html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add a plan</button>`,
     })}`;
   }
+
+  const { locale } = state.settings;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const monthly = scenarioMonthly(surplus);
+  const history = surplus.monthsUsed
+    ? html`<p class="muted small">Over the last ${plural(surplus.monthsUsed, 'month')} with activity you’ve had about ${money(Math.max(0, surplus.typical))} a month left over${surplus.typical > 0 ? '' : ' — nothing spare'}${surplus.monthsUsed > 1 && surplus.worst < surplus.typical ? `, and as little as ${money(surplus.worst)} in the leanest month` : ''}. ${planScenario.monthly != null && planScenario.monthly !== Math.max(0, surplus.typical) ? html`<button type="button" class="link-btn" data-action="plan-use-surplus">Use that figure</button>` : ''}</p>`
+    : html`<p class="muted small">Once there are a few months of history here, Tally can tell you what you usually have spare.</p>`;
+
   return html`${head}
-    <ul class="plain-list goal-list">
-      ${state.goals.map((g) => {
-        const p = goalProgress(g, state.today);
-        let note;
-        if (p.done) note = 'Fully funded.';
-        else if (p.overdue) note = `The target date (${date(g.targetDate)}) has passed. ${money(p.remaining)} to go.`;
-        else if (p.perMonth != null) note = `${money(p.remaining)} to go. About ${money(p.perMonth)} a month reaches it by ${date(g.targetDate)}.`;
-        else note = `${money(p.remaining)} to go.`;
-        return html`<li class="panel goal" style="--c:${g.color}">
-          <div class="goal-top">
-            <h2>${g.name}</h2>
-            <span class="goal-pct">${percent(p.ratio)}</span>
-          </div>
-          <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(g.target)}</span></p>
-          ${progressBar(p.ratio, p.done ? 'done' : 'goal', `${g.name}: ${money(p.saved)} of ${money(g.target)}`)}
-          <p class="muted small">${note}</p>
-          <div class="btn-row">
-            <button type="button" class="btn small primary" data-action="adjust-goal" data-id="${g.id}">Add or take out money</button>
-            <button type="button" class="btn small ghost" data-action="edit-goal" data-id="${g.id}">Edit</button>
-          </div>
-        </li>`;
-      })}
-    </ul>`;
+    <section class="panel plan-whatif">
+      <h2>What if</h2>
+      <form class="plan-levers" data-plan-levers novalidate autocomplete="off">
+        <label class="field">
+          <span class="label">Set aside each month</span>
+          <input type="text" inputmode="decimal" name="monthly" value="${centsToInput(monthly, { locale })}" aria-describedby="plan-headline" />
+        </label>
+        <label class="field">
+          <span class="label">Plus a one-off, now <span class="opt">Optional</span></span>
+          <input type="text" inputmode="decimal" name="lumpSum" value="${planScenario.lumpSum ? centsToInput(planScenario.lumpSum, { locale }) : ''}" placeholder="0" />
+        </label>
+      </form>
+      ${history}
+    </section>
+    <div id="plan-results">${planResults()}</div>`;
+}
+
+function afterPlansMount(root) {
+  const form = root.querySelector('[data-plan-levers]');
+  if (!form) return;
+  const { locale } = state.settings;
+  let timer;
+  form.addEventListener('input', (e) => {
+    const { name, value } = e.target;
+    if (name !== 'monthly' && name !== 'lumpSum') return;
+    // A half-typed number shouldn't read as zero and blank every date, so an
+    // unparseable value leaves the last good one in place.
+    const parsed = parseAmount(value, { locale });
+    const cents = value.trim() === '' ? 0 : parsed.ok && !parsed.negative ? parsed.cents : null;
+    if (cents == null) return;
+    planScenario[name] = cents;
+    clearTimeout(timer);
+    timer = setTimeout(() => mount($('#plan-results', root), planResults()), 140);
+  });
 }
 
 // ---------- Year in review ----------
@@ -7801,7 +8339,7 @@ function renderReview() {
     </div>`;
 }
 
-return { MORE_LINKS, renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, reviewState, renderReview };
+return { MORE_LINKS, renderMore, renderRecurring, renderCategories, renderAccounts, planScenario, resetPlanScenario, renderGoals, afterPlansMount, reviewState, renderReview };
 })();
 
 // js/core/csv.js
@@ -8125,6 +8663,10 @@ function prepareImport(rows, existing, options) {
       date,
       note,
       recurringId: null,
+      // CSV is an interchange format and carries no plan column, so an
+      // imported row belongs to no plan. The field is still set so every
+      // transaction in the app has the same shape.
+      planId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -8597,6 +9139,7 @@ const { resetCharts, hydrateCharts } = __m_js_ui_charts_js;
 const { watchPosture } = __m_js_ui_posture_js;
 const { txsInMonth, totals, spendingByCategory, sortTransactions } = __m_js_core_stats_js;
 const { monthRange, daysBetween } = __m_js_core_dates_js;
+const { planOrder, planProgress } = __m_js_core_plans_js;
 const { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } = __m_js_store_js;
 const { ui, viewMonth } = __m_js_views_components_js;
 const { openTransactionForm } = __m_js_views_txForm_js;
@@ -8604,7 +9147,7 @@ const { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGoa
 const { renderHome, shiftMonth } = __m_js_views_home_js;
 const { renderActivity, afterActivityMount, resetFilters, showMore } = __m_js_views_activity_js;
 const { renderBudgets } = __m_js_views_budgets_js;
-const { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, renderReview, reviewState, MORE_LINKS } = __m_js_views_pages_js;
+const { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS } = __m_js_views_pages_js;
 const { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } = __m_js_views_settings_js;
 const { money, netMoney, month: monthLabel, badge } = __m_js_ui_format_js;
 const I = (d) => html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -8635,7 +9178,7 @@ const ROUTES = {
   recurring: { title: 'Repeating', render: renderRecurring },
   categories: { title: 'Categories', render: renderCategories },
   accounts: { title: 'Accounts', render: renderAccounts },
-  goals: { title: 'Savings goals', render: renderGoals },
+  goals: { title: 'Plans', render: renderGoals, after: afterPlansMount },
   review: { title: 'Year in review', render: renderReview },
   settings: { title: 'Settings', render: renderSettings, after: afterSettingsMount },
   more: { title: 'More', render: renderMore },
@@ -8644,7 +9187,7 @@ const SECONDARY = new Set(MORE_LINKS.map((l) => l.route).concat('more'));
 const SIDEBAR = [
   ['home', 'Home'], ['activity', 'Activity'], ['budgets', 'Budgets'],
   null,
-  ['recurring', 'Repeating'], ['goals', 'Savings goals'], ['accounts', 'Accounts'], ['review', 'Year in review'],
+  ['recurring', 'Repeating'], ['goals', 'Plans'], ['accounts', 'Accounts'], ['review', 'Year in review'],
   null,
   ['categories', 'Categories'], ['settings', 'Settings'],
 ];
@@ -8710,6 +9253,10 @@ function renderCompanion() {
   const left = Math.max(0, daysBetween(state.today, end) + 1);
   const perDay = left > 0 && t.net > 0 ? Math.round(t.net / left) : null;
 
+  // The plan with the nearest date, and what it costs a month to make it.
+  const nextPlan = planOrder(state.goals).find((g) => planProgress(g, state.transactions, state.today).toSave > 0) ?? null;
+  const nextProgress = nextPlan ? planProgress(nextPlan, state.transactions, state.today) : null;
+
   // The categories you've used most recently, for logging another one.
   const again = [];
   const seen = new Set();
@@ -8747,6 +9294,16 @@ function renderCompanion() {
                       </li>`;
                     })}
                   </ul>
+                </div>`
+              : ''}
+            ${nextPlan
+              ? html`<div class="companion-block">
+                  <h2>Next plan</h2>
+                  <a class="companion-plan" href="#/goals">
+                    <span class="companion-plan-name">${nextPlan.name}</span>
+                    <span class="amt">${money(nextProgress.toSave)} to go</span>
+                    ${nextProgress.perMonth ? html`<small>${money(nextProgress.perMonth)} a month to make ${monthLabel(nextPlan.targetDate.slice(0, 7))}</small>` : ''}
+                  </a>
                 </div>`
               : ''}
             ${again.length
@@ -8912,6 +9469,10 @@ const actions = {
   'edit-account': (el) => openAccountForm(el.dataset.id),
   'new-rule': () => openRuleForm(),
   'edit-rule': (el) => openRuleForm(el.dataset.id),
+  'plan-use-surplus': () => {
+    resetPlanScenario();
+    render({ keepScroll: true });
+  },
   'new-goal': () => openGoalForm(),
   'edit-goal': (el) => openGoalForm(el.dataset.id),
   'adjust-goal': (el) => openGoalAdjust(el.dataset.id),

@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v2.1.0';
+const VERSION = 'tally-v2.2.0';
 
 const FILES = [
   './',
@@ -24,6 +24,7 @@ const FILES = [
   './js/core/dates.js',
   './js/core/defaults.js',
   './js/core/money.js',
+  './js/core/plans.js',
   './js/core/recurring.js',
   './js/core/stats.js',
   './js/core/validate.js',

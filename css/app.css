@@ -933,6 +933,12 @@ main {
   background: var(--ok);
 }
 
+/* Money already spent out of a trip's pot: the same hue as the plan, drawn
+   lighter so it reads as coming out of the bar above it, not adding to it. */
+.bar-fill.s-spend {
+  background: color-mix(in srgb, var(--c, var(--goal)) 55%, var(--surface));
+}
+
 .bar {
   height: 8px;
   border-radius: 4px;
@@ -2444,6 +2450,139 @@ dialog .toasts {
   letter-spacing: -0.02em;
 }
 
+/* Plans */
+
+.plan {
+  border-top: 3px solid var(--c);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.plan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.plan-top h2 {
+  font-size: 1.125rem;
+  min-width: 0;
+}
+
+/* Nest egg or trip, said once and quietly — the bars below carry the story. */
+.plan-kind {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  font-weight: 620;
+}
+
+.plan .goal-amt {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plan .goal-amt .goal-pct {
+  margin-left: auto;
+}
+
+.plan-spend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 6px;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.plan-charges {
+  margin-top: 10px;
+  font-size: 0.875rem;
+}
+
+.plan-charges > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-charges > li:last-child {
+  border-bottom: 0;
+}
+
+.plan-charge-what {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan .bar + .muted,
+.plan .bar + .plan-verdict {
+  margin-top: 10px;
+}
+
+.plan .btn-row {
+  margin-top: 12px;
+}
+
+/* The one line that answers "will I make it?". Colour is allowed here
+   because it is a statement about money, not decoration. */
+.plan-verdict {
+  font-size: 0.875rem;
+  font-weight: 560;
+}
+
+.plan-verdict.ok {
+  color: var(--ok);
+}
+
+.plan-verdict.late {
+  color: var(--over);
+}
+
+.plan-whatif .plan-levers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.plan-headline {
+  font-size: 1.0625rem;
+  font-weight: 620;
+  line-height: 1.35;
+  margin: 18px 0 4px;
+  text-wrap: balance;
+}
+
+.plan-headline.ok {
+  color: var(--ok);
+}
+
+.plan-headline.late {
+  color: var(--over);
+}
+
+.plan-note {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  margin-bottom: 14px;
+}
+
 .goal .bar {
   height: 10px;
   margin-bottom: 8px;
@@ -2751,6 +2890,33 @@ dialog .toasts {
   opacity: 0.55;
   transform-origin: left center;
   animation: fill-x 620ms var(--ease) backwards;
+}
+
+.companion-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.16s var(--spring), background-color 0.14s ease;
+}
+
+.companion-plan:hover {
+  background: var(--surface-3);
+  transform: translateY(-2px);
+}
+
+.companion-plan-name {
+  font-weight: 620;
+  font-size: 0.9375rem;
+}
+
+.companion-plan small {
+  color: var(--ink-3);
+  font-size: 0.75rem;
 }
 
 .companion-again {

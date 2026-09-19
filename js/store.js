@@ -368,7 +368,12 @@ export async function handleReminder(ruleId, date, action) {
 
 export async function saveGoal(value, id = null) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
-  const record = existing ? { ...existing, ...value } : { id: makeId(), saved: 0, ...value, createdAt: nowIso() };
+  // Defaults first so a record always has the full plan shape, whatever the
+  // caller passed — a backup and restore would fill them in anyway, and the
+  // two need to match.
+  const record = existing
+    ? { ...existing, ...value }
+    : { id: makeId(), kind: 'fund', saved: 0, targetDate: null, startDate: null, endDate: null, ...value, createdAt: nowIso() };
   await commit([put('goals', record)]);
   state.goals = existing ? state.goals.map((g) => (g.id === id ? record : g)) : [...state.goals, record];
   emit();
