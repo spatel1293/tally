@@ -91,7 +91,8 @@ const TABLETOP = { width: 701, height: 841, feature: { orientation: 'horizontal'
   expect(Boolean(compBox) && compBox.x >= 441 - 1, `facing page should sit on the right page, starts at ${compBox ? Math.round(compBox.x) : 'hidden'}`);
   const compText = (await page.textContent('.companion')).replace(/\s+/g, ' ').trim();
   step(`facing page: ${compText}`);
-  expect(/transactions this month/.test(compText), 'facing page shows the month summary');
+  expect(/In\$|Out\$|In[0-9]/.test(compText.replace(/\s/g, '')) && /Where it went/.test(compText), 'facing page shows the month summary and where the money went');
+  expect(/Log another/.test(compText), 'facing page offers a one-tap repeat');
   await shot('fold-book-home');
 
   // The sheet opens on the right page, clear of the crease.
@@ -130,7 +131,13 @@ const TABLETOP = { width: 701, height: 841, feature: { orientation: 'horizontal'
   await unfold();
   step(`unfolded posture: ${await posture()}`);
   expect((await posture()) === 'flat', 'opening flat returns to the normal layout');
-  expect((await page.locator('.companion').count()) === 1 && !(await box('.companion')), 'facing page is hidden when flat');
+  // Opened flat the Fold is 841px wide, which is enough for the second page
+  // to stay on as a column rather than disappearing when you unfold.
+  const flatComp = await box('.companion');
+  step(`flat second page: ${flatComp ? `x=${Math.round(flatComp.x)} w=${Math.round(flatComp.width)}` : 'hidden'}`);
+  expect(Boolean(flatComp) && flatComp.width >= 240, 'the second page stays on as a column when the Fold opens flat');
+  const flatMain = await box('#main');
+  expect(flatMain.x + flatMain.width <= flatComp.x + 1, 'content and the second page do not overlap when flat');
 
   for (const [name, geom] of [['book', BOOK], ['tabletop', TABLETOP]]) {
     await fold(geom);

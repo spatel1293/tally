@@ -2,7 +2,8 @@ import { html, mount, $ } from './ui/html.js';
 import { toast } from './ui/overlay.js';
 import { resetCharts, hydrateCharts } from './ui/charts.js';
 import { watchPosture } from './ui/posture.js';
-import { txsInMonth, totals } from './core/stats.js';
+import { txsInMonth, totals, spendingByCategory, sortTransactions } from './core/stats.js';
+import { monthRange, daysBetween } from './core/dates.js';
 import { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } from './store.js';
 import { ui, viewMonth } from './views/components.js';
 import { openTransactionForm } from './views/txForm.js';
@@ -12,7 +13,7 @@ import { renderActivity, afterActivityMount, resetFilters, showMore } from './vi
 import { renderBudgets } from './views/budgets.js';
 import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, renderReview, reviewState, MORE_LINKS } from './views/pages.js';
 import { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } from './views/settings.js';
-import { money, netMoney, month as monthLabel } from './ui/format.js';
+import { money, netMoney, month as monthLabel, badge } from './ui/format.js';
 
 const I = (d) => html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const NAV_ICONS = {
@@ -84,7 +85,7 @@ function renderShell() {
     </aside>
     <div class="banner-slot" data-banner></div>
     <main id="main" tabindex="-1"></main>
-    <aside class="companion" data-companion aria-label="This month at a glance"></aside>
+    <aside class="companion" data-companion aria-label="Month at a glance"></aside>
     <nav class="tabbar" aria-label="Main">
       <a href="#/" data-route="home">${NAV_ICONS.home}<span>Home</span></a>
       <a href="#/activity" data-route="activity">${NAV_ICONS.activity}<span>Activity</span></a>
@@ -96,25 +97,77 @@ function renderShell() {
   );
 }
 
-// The facing page in book posture: the right half of the spread shows where
-// the month stands, so half-folding gains a second page instead of just
-// making the first one narrower. Hidden by CSS in every other posture, so
-// there's no point building it then.
+// The second page. On the Fold half-folded into book posture it *is* the
+// right-hand leaf; on a wide laptop window it's a third column. Either way
+// it's the same thing: where the month stands, and a one-tap way to log
+// something you buy often. CSS decides when there's room for it.
 function renderCompanion() {
   const el = $('[data-companion]');
-  if (!el || document.documentElement.dataset.posture !== 'book') return;
+  if (!el) return;
   const key = viewMonth();
-  const t = totals(txsInMonth(state.transactions, key));
+  const monthTx = txsInMonth(state.transactions, key);
+  const t = totals(monthTx);
+
+  const top = spendingByCategory(monthTx, state.categories).slice(0, 4);
+  const biggest = top[0]?.amount || 1;
+  const catOf = (id) => state.categories.find((c) => c.id === id) ?? null;
+
+  // Days left in the month being viewed, and what's left to spend per day if
+  // this month's income is the budget. Past months just show the total.
+  const { end } = monthRange(key);
+  const left = Math.max(0, daysBetween(state.today, end) + 1);
+  const perDay = left > 0 && t.net > 0 ? Math.round(t.net / left) : null;
+
+  // The categories you've used most recently, for logging another one.
+  const again = [];
+  const seen = new Set();
+  for (const tx of sortTransactions(state.transactions)) {
+    if (tx.type !== 'expense' || seen.has(tx.categoryId)) continue;
+    const cat = catOf(tx.categoryId);
+    if (!cat) continue;
+    seen.add(tx.categoryId);
+    again.push(cat);
+    if (again.length === 3) break;
+  }
+
   mount(
     el,
     html`<p class="companion-label">${monthLabel(key)}</p>
       ${state.transactions.length
-        ? html`<dl class="companion-figures">
-            <div><dt>Coming in</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
-            <div><dt>Going out</dt><dd class="amt">${money(t.expenses)}</dd></div>
-            <div><dt>Net</dt><dd>${netMoney(t.net)}</dd></div>
-          </dl>
-          <p class="companion-count">${t.count === 1 ? '1 transaction' : `${t.count} transactions`} this month</p>`
+        ? html`<p class="companion-net ${t.net < 0 ? 's-over' : ''}">${netMoney(t.net)}</p>
+            <dl class="companion-figures">
+              <div><dt>In</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
+              <div><dt>Out</dt><dd class="amt">${money(t.expenses)}</dd></div>
+            </dl>
+            ${perDay != null
+              ? html`<p class="companion-pace">${money(perDay)} a day for the ${left === 1 ? 'last day' : `${left} days`} left</p>`
+              : html`<p class="companion-pace">${t.count === 1 ? '1 transaction' : `${t.count} transactions`} this month</p>`}
+            ${top.length
+              ? html`<div class="companion-block">
+                  <h2>Where it went</h2>
+                  <ul class="plain-list companion-top">
+                    ${top.map((row) => {
+                      const cat = catOf(row.categoryId);
+                      return html`<li>
+                        <span class="companion-top-name">${cat ? badge(cat, 'sm') : ''}${cat ? cat.name : 'Uncategorized'}</span>
+                        <span class="amt">${money(row.amount)}</span>
+                        <span class="companion-top-bar" style="--w:${Math.round((row.amount / biggest) * 100)}%"></span>
+                      </li>`;
+                    })}
+                  </ul>
+                </div>`
+              : ''}
+            ${again.length
+              ? html`<div class="companion-block">
+                  <h2>Log another</h2>
+                  <div class="companion-again">
+                    ${again.map(
+                      (cat) =>
+                        html`<button type="button" class="btn small" data-action="log-again" data-cat="${cat.id}">${badge(cat, 'sm')}${cat.name}</button>`
+                    )}
+                  </div>
+                </div>`
+              : ''}`
         : html`<p class="companion-empty">Add your first transaction and this page keeps the running total.</p>`}`
   );
 }
@@ -149,11 +202,33 @@ function updateChrome(route) {
   }
 }
 
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const ROUTE_ORDER = ['home', 'activity', 'budgets', 'recurring', 'goals', 'accounts', 'review', 'categories', 'settings', 'more'];
+
 let lastRoute = null;
 let enterTimer;
+
 function render({ keepScroll = false } = {}) {
   if (!state.ready) return;
   const route = currentRoute();
+  const changing = route !== lastRoute;
+  const paint = () => paintRoute(route, { keepScroll, changing, staggered: true });
+
+  // Where the browser can cross-fade between screens, let it: the whole
+  // content area slides across in one piece, which reads better than every
+  // block animating separately. Everywhere else, fall back to the stagger.
+  if (changing && lastRoute && !reduceMotion.matches && document.startViewTransition) {
+    const from = ROUTE_ORDER.indexOf(lastRoute);
+    const to = ROUTE_ORDER.indexOf(route);
+    document.documentElement.dataset.nav = to < from ? 'back' : 'forward';
+    const t = document.startViewTransition(() => paintRoute(route, { keepScroll, changing, staggered: false }));
+    t.finished.catch(() => {}).finally(() => delete document.documentElement.dataset.nav);
+    return;
+  }
+  paint();
+}
+
+function paintRoute(route, { keepScroll, changing, staggered }) {
   const main = $('#main');
   const active = document.activeElement;
   const focusId = main.contains(active) && active.id ? active.id : null;
@@ -167,15 +242,17 @@ function render({ keepScroll = false } = {}) {
   hydrateCharts(main);
   updateChrome(route);
 
-  if (route !== lastRoute) {
+  if (changing) {
     lastRoute = route;
     if (!keepScroll) window.scrollTo(0, 0);
     main.focus({ preventScroll: true });
     // Play the entrance only when the screen actually changes, so saving a
     // transaction doesn't replay the whole page.
-    main.dataset.enter = '1';
-    clearTimeout(enterTimer);
-    enterTimer = setTimeout(() => delete main.dataset.enter, 700);
+    if (staggered) {
+      main.dataset.enter = '1';
+      clearTimeout(enterTimer);
+      enterTimer = setTimeout(() => delete main.dataset.enter, 900);
+    }
   } else {
     window.scrollTo(0, scroll);
     if (focusId) {
@@ -199,7 +276,7 @@ function applyTheme() {
   const pref = state.settings.theme;
   const dark = pref === 'dark' || (pref === 'system' && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0B0B0A' : '#E8E8E3');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#100F13' : '#F1EEE8');
   try {
     localStorage.setItem('tally:theme', pref);
   } catch {
@@ -214,6 +291,7 @@ const fail = (err) => toast(describeError(err), { tone: 'error' });
 
 const actions = {
   'new-tx': (el) => openTransactionForm({ preset: el.dataset.type ? { type: el.dataset.type } : {} }),
+  'log-again': (el) => openTransactionForm({ preset: { type: 'expense', categoryId: el.dataset.cat } }),
   'edit-tx': (el) => openTransactionForm({ id: el.dataset.id }),
   'month-shift': (el) => {
     shiftMonth(Number(el.dataset.step));

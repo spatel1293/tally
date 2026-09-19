@@ -33,7 +33,8 @@ There is no framework and no build step. Plain ES modules load directly in the b
 - `js/app.js`: hash router, shell (sidebar and tab bar), `data-action` click delegation, keyboard shortcuts, theme, service worker registration.
 - `css/app.css`: all styles.
   - Tokens live on `:root` and are overridden in `:root[data-theme='dark']`.
-  - Breakpoints: sheets become centered dialogs at ≥640px; the sidebar replaces the tab bar at ≥900px; the dashboard goes two-column at ≥1040px.
+  - Breakpoints: sheets become centered dialogs at ≥640px; the bottom tab bar becomes a nav rail at ≥600px; **the second page appears at ≥820px** (the Pixel Fold opened flat); the rail widens into a full sidebar at ≥1120px; the dashboard goes two-column at 760–819px and again at ≥1180px — in between, the second page has the width instead.
+  - Radii come from `--r-sm/--r/--r-lg` and *change with the breakpoint*, so don't hardcode a corner value.
 - `sw.js`: precaches every shipped file.
 - `scripts/`: `serve.js` (dev server), `build-single-file.js` (a small bundler), `browser-test.js`.
 
@@ -56,26 +57,37 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
 ## Design
 
-**Ink and paper**, adopted September 2026 after the owner rejected both the original flat "quiet ledger" and a soft indigo/violet version as boring. Don't drift back toward a tinted accent or soft blurred elevation.
+**Shaped like the device it's on**, adopted September 2026 after the owner rejected the original flat "quiet ledger", a soft indigo/violet version ("meh purplish"), and a squared-off neo-brutalist version. Don't go back to any of the three.
 
-- **The one rule that drives everything: the interface is monochrome, and colour only ever means money.** Ink on paper in light, bone on ink in dark. Green is money coming in, amber is nearing a limit, red is over. Because nothing else on screen is coloured, those three read instantly. Never introduce a decorative accent colour — actions are ink (`--accent` is ink, not a hue).
-- **Depth is stamped, not blurred.** `--shadow-1/-2/--shadow` are hard offset blocks (`3px 3px 0` and up) in `--stamp`, never soft shadows. Pressing something moves it into its own stamp (`translate(3px, 3px)` + shadow to zero).
-- **Edges are hard.** `var(--bw) solid var(--edge)` — 2px ink. Cards and inputs are square (`--r*` are all `0`); buttons and chips are pills (`--pill`). That contrast is the point; don't round the cards.
+- **The one idea: the app's corners match the corners of the screen it's running on.** A phone display is rounded hard, a laptop window barely at all, so `--r-sm/--r/--r-lg` step *down* as the viewport widens (the Radius scale block near the top of `css/app.css`). Always use the tokens; a hardcoded `border-radius` breaks the idea on one of the devices.
+- **Colour still only ever means money.** Green is money coming in, amber is nearing a limit, red is over. The interface itself uses one hue — a deep signal blue (`--accent`) — and nothing else is tinted, so those three read instantly. Never add a second decorative colour.
+- **Depth is soft and warm**, not stamped and not frosted: `--shadow-1/-2/--shadow` are layered warm shadows. Pressing something compresses it (`scale(0.955)`) and lets it spring back. Edges are a 1px hairline (`--bw`, `--edge`), not a hard rule.
 - **The motif is the tally stroke.** Section headings carry one (`.panel > h2::before`), the tab bar marks the current page with one, and the brand mark draws its five strokes in sequence.
-- **Links need underlines**, not colour — `.link` carries a 2px rule. A link that relies on hue is invisible here.
+- **Links need underlines**, not colour — `.link` carries a rule of its own.
 - **Category colours** (`PALETTE` in `core/defaults.js`) are printer's inks for chart identity only, deliberately containing no strong red or green so a category swatch is never mistaken for a signal.
-- **Structure:** sections are cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated (`--line` is the only soft grey left). Tabular figures (`.amt`) wherever numbers appear.
+- **Structure:** sections are cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated. Tabular figures (`.amt`) wherever numbers appear.
 - **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate card per list row, arrows in button text, and middle-dot separators in text.
 - **A card inside a card** is the usual mistake: `.figures.compact` exists because that one already sits inside a `.panel`.
+
+### The second page
+
+`<aside class="companion">` is one feature with two homes, and that's the point — it is not foldable-only chrome:
+
+- **≥820px, any device** (the Fold opened flat, a laptop window): a sticky third grid column.
+- **Book posture**: the same pane, pinned to the right-hand leaf with `env(viewport-segment-*)`.
+- **Anywhere narrower**: `display: none`.
+
+It carries the month's net, in and out, what's left to spend per day, where the money actually went, and one-tap buttons to log another of whatever you buy most (`data-action="log-again"`). `renderCompanion()` in `app.js` renders it unconditionally and lets CSS decide when it's on screen — don't re-add a posture check there, or it goes blank on the laptop.
 
 ### Motion
 
 Animation is load-bearing here, not decoration — see the `Motion` section of `css/app.css`.
 
-- Everything animated is a **transform or opacity** (plus `stroke-width` on the donut), so it stays off the main thread.
-- **Entrances play on route change only.** `app.js` sets `main[data-enter]` when the route actually changes and clears it after 700ms; without that, saving a transaction would replay the whole page.
+- **Route changes use the View Transitions API.** Only `main` is given a `view-transition-name`, so the rail, tab bar and second page stay live while the screen slides across. `app.js` sets `data-nav="forward" | "back"` on `<html>` for the duration.
+- **The stagger is the fallback.** `main[data-enter]` is set only when there's no view transition to play, and only on a route change — otherwise saving a transaction replays the whole page.
+- Figures wipe upward (`reveal-up`) by **masking, never by counting**, so the number on screen is always the real one and tests can read it at any moment.
 - Bars, chart columns and donut segments **re-animate whenever their figures change** — that's deliberate feedback that a save landed.
-- Durations sit at 220–560ms with `--spring` (slight overshoot) or `--ease`. The reduced-motion block at the end of the file switches all of it off, so never rely on an animation to make something readable.
+- Everything animated is a transform, an opacity, a clip-path or the donut's stroke-width. Durations sit at 160–620ms with `--spring`, `--bounce` or `--ease`. The reduced-motion block at the end of the file switches all of it off, so never rely on an animation to make something readable.
 - **Theme:** set on `<html data-theme>` by `app.js`, and by an inline script in `index.html` before first paint.
 - **Review your work visually.** Take screenshots of changed screens at every target size, in light and dark, before calling anything done.
 
@@ -93,6 +105,10 @@ Animation is load-bearing here, not decoration — see the `Motion` section of `
 - **Viewport segment indices are (x, y).** Side by side (book) the second segment is `env(… 1 0)`; stacked (tabletop) it's `env(… 0 1)`. Using the wrong pair silently falls back, which looks like a layout bug.
 - **Media queries and `vw` measure the whole viewport, not one page.** In book posture the content sits in a phone-width segment while the viewport spans both halves, so `vw`-based type and `min-width` breakpoints are sized for the spread. `css/app.css` pins `.hero-line`, `.figures dd` and `.dash-grid` back to their narrow values there.
 - **Measuring geometry races the entrance animation.** `boundingBox()` on something that's still springing returns the mid-flight box, not the resting one — which looks exactly like a layout bug (a sheet reading 438px instead of 441px). Await `el.getAnimations()` finishing first; `tests/browser/fold-postures.cjs` has the helper.
+- **`vw` measures the window, the content column is narrower.** With the second page taking a column, the Fold opened flat is an 841px window with a ~470px content area. `main` is therefore a `container-type: inline-size` container named `page`, and headline figures size themselves in `cqi`, not `vw`. Sizing a figure from `vw` breaks numbers across two lines (`+$5,972.4` / `2`), which is how this was found — twice.
+- **Reversing a view transition with `animation-direction: reverse` is wrong.** It plays the outgoing screen from its `to` state, so the screen you are leaving fades *in* as it goes. Write separate keyframes for the back direction (`page-out-back`, `page-in-back`).
+- **A pane that slides in from the right edge overflows the page while it does it.** The overflow checks in `fold-continuity.cjs` measure mid-animation and catch it. The second page wipes open with `clip-path` instead.
+- **Android's "Remove animations" accessibility setting reports `prefers-reduced-motion: reduce`**, and the block at the end of `css/app.css` then switches off every animation in the app. If motion appears to be missing on the phone but works in the browser, check that setting before changing any code.
 - **Hovering a toast pauses it.** `pointerenter` clears the dismiss timer on purpose. A test that leaves the pointer where it clicked can sit over the toast and wait forever; move the mouse away first (`page.mouse.move(5, 5)`).
 
 ## Working with the owner
