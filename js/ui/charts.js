@@ -125,6 +125,7 @@ export function donut(segments, { size = 160, stroke = 24, centerTop = '', cente
 // reference size; the container sizes the svg responsively with `width:100%`,
 // so the stroke scales with it rather than staying a fixed pixel width.
 export function progressRing({ size = 132, stroke = 15, ratio, state, dayFraction, showDay, centerTop, centerBottom, ariaLabel }) {
+  const id = `ring-${++seq}`;
   const cx = size / 2;
   const cy = size / 2;
   const r1 = (size - stroke) / 2;
@@ -136,15 +137,24 @@ export function progressRing({ size = 132, stroke = 15, ratio, state, dayFractio
   const c2 = 2 * Math.PI * r2;
   const fill2 = Math.min(1, Math.max(0, dayFraction ?? 0));
   const dash2 = fill2 * c2;
+  // A short arc of light that orbits the dial. The stops read CSS custom
+  // properties, which inherit into the svg, so the state's colour pair is
+  // chosen in the stylesheet with everything else.
+  const sheen = c1 * 0.1;
+
+  let defs = `<linearGradient id="${id}-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--ring-a)"/><stop offset="1" stop-color="var(--ring-b)"/></linearGradient>`;
+  defs += `<linearGradient id="${id}-b" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="var(--ring2-a)"/><stop offset="1" stop-color="var(--ring2-b)"/></linearGradient>`;
 
   let circles = `<circle class="ring-track" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}"/>`;
-  circles += `<circle class="ring-fill s-${state}" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${dash1.toFixed(2)} ${(c1 - dash1).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+  circles += `<circle class="ring-fill" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="url(#${id}-a)" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${dash1.toFixed(2)} ${(c1 - dash1).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
   if (showDay && r2 > 4) {
     circles += `<circle class="ring-track" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke-width="${stroke2}"/>`;
-    circles += `<circle class="ring-fill-inner" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke-width="${stroke2}" stroke-linecap="round" stroke-dasharray="${dash2.toFixed(2)} ${(c2 - dash2).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    circles += `<circle class="ring-fill-inner" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="url(#${id}-b)" stroke-width="${stroke2}" stroke-linecap="round" stroke-dasharray="${dash2.toFixed(2)} ${(c2 - dash2).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
   }
-  return html`<div class="hero-ring" role="img" aria-label="${ariaLabel}">
-    ${raw(`<svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" aria-hidden="true" focusable="false">${circles}</svg>`)}
+  circles += `<circle class="ring-sheen" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${sheen.toFixed(2)} ${(c1 - sheen).toFixed(2)}"/>`;
+
+  return html`<div class="hero-ring" data-state="${state}" role="img" aria-label="${ariaLabel}">
+    ${raw(`<svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" aria-hidden="true" focusable="false"><defs>${defs}</defs>${circles}</svg>`)}
     <div class="hero-ring-center" aria-hidden="true"><strong>${centerTop}</strong><span>${centerBottom}</span></div>
   </div>`;
 }

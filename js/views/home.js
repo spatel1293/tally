@@ -34,7 +34,7 @@ export function remindersBlock() {
   const items = state.reminders
     .map((r) => ({ ...r, cat: categoryById(r.rule.categoryId) }))
     .sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : 1));
-  return html`<section class="panel reminders" aria-labelledby="due-title">
+  return html`<section class="panel tinted reminders" style="--hue:var(--accent)" aria-labelledby="due-title">
     ${homeSectionHead('var(--accent)', SEC_ICONS.bell, 'Due to log', { id: 'due-title' })}
     <ul class="plain-list">
       ${items.map(({ rule, dates, cat }) => html`<li class="reminder">
@@ -61,9 +61,9 @@ export function backupNudge() {
   const due = daysSince == null ? state.transactions.length >= 10 : daysSince >= backupReminderDays;
   if (!due) return '';
   return html`<aside class="nudge" role="note">
-    <p><strong>${lastExportAt ? `Last backup was ${timeAgo(lastExportAt)}.` : 'You haven’t made a backup yet.'}</strong>
-    Your data is stored only in this browser. Clearing site data would erase it.</p>
-    <button type="button" class="btn small" data-action="export-json">Download backup</button>
+    <p><strong>${lastExportAt ? `Last backup ${timeAgo(lastExportAt)}.` : 'No backup yet.'}</strong>
+    This device holds the only copy.</p>
+    <button type="button" class="btn small" data-action="export-json">Back up</button>
   </aside>`;
 }
 
@@ -101,10 +101,14 @@ function hero(key, monthTx, overview) {
           ariaLabel: `${percent(dayFraction)} of ${name} gone`,
         })
       : '';
-    return html`<section class="hero${ring ? ' small' : ''}">
-      ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
-      <p class="hero-line">${headline}</p>
-      <p class="hero-sub"><a href="#/budgets">Set monthly budgets</a> to see how much is left to spend.</p>
+    return html`<section class="hero${ring ? ' small' : ''}" data-state="accent">
+      <div class="hero-main">
+        ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
+        <div class="hero-say">
+          <p class="hero-line">${headline}</p>
+          <p class="hero-sub"><a href="#/budgets">Set monthly budgets</a> to see how much is left to spend.</p>
+        </div>
+      </div>
       ${figures(t)}
     </section>`;
   }
@@ -130,20 +134,24 @@ function hero(key, monthTx, overview) {
 
   const ratio = limit > 0 ? spent / limit : spent > 0 ? 2 : 0;
   const showRing = isCurrent || isPast;
-  return html`<section class="hero${showRing ? ' small' : ''}">
-    ${showRing
-      ? html`<div class="hero-ring-row">${progressRing({
-          ratio,
-          state: status.state,
-          dayFraction: dayOfMonth / days,
-          showDay: isCurrent,
-          centerTop: percent(Math.min(ratio, 9.99)),
-          centerBottom: ratio > 1 ? 'over' : 'used',
-          ariaLabel: `${percent(Math.min(ratio, 9.99))} of the budget used${isCurrent ? `, ${percent(dayOfMonth / days)} of the month gone` : ''}`,
-        })}</div>`
-      : ''}
-    <p class="hero-line s-${status.state}">${headline}</p>
-    <p class="hero-sub">${lines.join(' ')}</p>
+  return html`<section class="hero${showRing ? ' small' : ''}" data-state="${status.state}">
+    <div class="hero-main">
+      ${showRing
+        ? html`<div class="hero-ring-row">${progressRing({
+            ratio,
+            state: status.state,
+            dayFraction: dayOfMonth / days,
+            showDay: isCurrent,
+            centerTop: percent(Math.min(ratio, 9.99)),
+            centerBottom: ratio > 1 ? 'over' : 'used',
+            ariaLabel: `${percent(Math.min(ratio, 9.99))} of the budget used${isCurrent ? `, ${percent(dayOfMonth / days)} of the month gone` : ''}`,
+          })}</div>`
+        : ''}
+      <div class="hero-say">
+        <p class="hero-line s-${status.state}">${headline}</p>
+        <p class="hero-sub">${lines.join(' ')}</p>
+      </div>
+    </div>
     ${figures(t)}
   </section>`;
 }
@@ -153,9 +161,9 @@ function hero(key, monthTx, overview) {
 // card instead of three stacked ones.
 function figures(t) {
   return html`<dl class="figures compact hero-figures">
-    <div><dt>Income</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
-    <div><dt>Spending</dt><dd class="amt">${money(t.expenses)}</dd></div>
-    <div><dt>Net</dt><dd class="amt ${t.net < 0 ? 'amt-neg' : ''}">${money(t.net, { sign: true })}</dd></div>
+    <div style="--chip:var(--pos)"><dt>Income</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
+    <div style="--chip:var(--accent)"><dt>Spending</dt><dd class="amt">${money(t.expenses)}</dd></div>
+    <div style="--chip:${t.net < 0 ? 'var(--over)' : 'var(--pos)'}"><dt>Net</dt><dd class="amt ${t.net < 0 ? 'amt-neg' : 'amt-in'}">${money(t.net, { sign: true })}</dd></div>
   </dl>`;
 }
 
@@ -168,7 +176,7 @@ function budgetSnapshot(overview) {
   if (!rows.length) return '';
   rows.sort(compareBudgetRows);
   const shown = rows.slice(0, 5);
-  return html`<section class="panel" aria-labelledby="bud-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-budgets)" aria-labelledby="bud-title">
     ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.budgets, html`<span id="bud-title">Budgets</span>`, { link: html`<a class="link" href="#/budgets">${rows.length > shown.length ? `All ${rows.length}` : 'Details'}</a>` })}
     <ul class="plain-list budget-mini">
       ${shown.map((r) => html`<li>
@@ -186,7 +194,7 @@ function categoryBreakdown(monthTx) {
   const rows = spendingByCategory(monthTx, state.categories).filter((r) => r.amount > 0);
   const total = rows.reduce((s, r) => s + r.amount, 0);
   if (!total) {
-    return html`<section class="panel" aria-labelledby="cat-title">
+    return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
       ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
       <p class="muted">No spending this month yet. Categories will appear here as you log expenses.</p>
     </section>`;
@@ -198,7 +206,7 @@ function categoryBreakdown(monthTx) {
     return { value: r.amount, color: c.color, label: `${c.name}: ${money(r.amount)}`, cat: c, amount: r.amount };
   });
   if (rest > 0) segments.push({ value: rest, color: 'var(--ink-4)', label: `Everything else: ${money(rest)}`, cat: { name: 'Everything else', icon: '…', color: 'var(--ink-4)' }, amount: rest });
-  return html`<section class="panel" aria-labelledby="cat-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
     ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
     <div class="breakdown">
       ${donut(segments, {
@@ -221,7 +229,7 @@ function categoryBreakdown(monthTx) {
 function trend(key) {
   const series = monthlySeries(state.transactions, key, 6);
   const locale = state.settings.locale;
-  return html`<section class="panel" aria-labelledby="trend-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="trend-title">
     ${homeSectionHead('var(--hue-trend)', SEC_ICONS.trend, html`<span id="trend-title">Last 6 months</span>`)}
     ${barChart(
       series.map((s) => ({
@@ -248,7 +256,7 @@ function trend(key) {
 
 function recent(key, monthTx) {
   const list = sortedTransactions().filter((t) => isInMonth(t.date, key)).slice(0, 6);
-  return html`<section class="panel" aria-labelledby="recent-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-activity)" aria-labelledby="recent-title">
     ${homeSectionHead('var(--hue-activity)', SEC_ICONS.list, html`<span id="recent-title">Latest in ${month(key, { month: 'long' })}</span>`, { link: html`<a class="link" href="#/activity">All activity</a>`, dark: true })}
     ${list.length
       ? html`<ul class="tx-list">${list.map(txRow)}</ul>`

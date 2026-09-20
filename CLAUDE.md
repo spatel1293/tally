@@ -72,11 +72,20 @@ language, not "clean and modern" in general.
   `@supports` block falls back to an opaque fill where a backdrop can't be
   blurred, so nothing is ever unreadable. The tab bar is a **capsule**, not a
   bar — never restore a full-bleed bottom bar with a top border.
-- **One capsule, three homes.** `<nav class="tabbar">` is a child of
-  `.topbar`, and `position: fixed` is what lets it sit at the bottom of the
-  cover screen and of either folded leaf regardless of where it sits in the
-  markup. From 600px it goes `position: static` and is laid out *inside* the
-  toolbar, where the equal flex slots either side hold it on the centre line.
+- **The capsule goes where the hand is, and width doesn't decide that.**
+  `<nav class="tabbar">` is a child of `.topbar`, and `position: fixed` is
+  what lets it sit at the bottom of the cover screen and of either folded
+  leaf regardless of where it sits in the markup. **On a touch screen it
+  stays at the bottom at every width below the sidebar** (`@media (pointer:
+  coarse) and (max-width: 1119px)`), with its labels and the add button —
+  the Fold opened flat is 841px, and putting the controls at the top of a
+  7.6" screen puts them exactly where a thumb can't reach. The owner called
+  this out directly. Only a pointing device gets the toolbar layout, where
+  the capsule goes `position: static` and is laid out *inside* the toolbar,
+  the equal flex slots either side holding it on the centre line.
+- **One action, one place on screen.** The add button is in the toolbar *or*
+  in the capsule, never both; the second page never repeats a figure the
+  hero or the donut is already showing. A browser test asserts the absence.
   It drops its labels there: a labelled capsule and the compact title were
   fighting over the same ~550px on the Fold opened flat, and the title is the
   one carrying something the capsule can't say — which month you are looking
@@ -170,6 +179,14 @@ Animation is load-bearing here, not decoration — see the `Motion` section of `
 - Figures wipe upward (`reveal-up`) by **masking, never by counting**, so the number on screen is always the real one and tests can read it at any moment.
 - Bars, chart columns and donut segments **re-animate whenever their figures change** — that's deliberate feedback that a save landed.
 - Everything animated is a transform, an opacity, a clip-path or the donut's stroke-width. Durations sit at 160–620ms with `--spring`, `--bounce` or `--ease`. The reduced-motion block at the end of the file switches all of it off, so never rely on an animation to make something readable.
+- **Some of it never stops.** Entrance animation alone reads as a still
+  picture the moment it finishes, so a few things move with nothing being
+  touched: a specular arc orbits the hero ring, two blurred washes of the
+  month's own state colour drift behind the hero, a highlight crosses each
+  budget bar, the section chips breathe their glow out of step with each
+  other, and today's bar in the week spark pulses. Keep ambient motion slow
+  (3–26s), on transform/opacity/filter only, and never on anything being
+  read. The reduced-motion block stops all of it.
 - **Theme:** set on `<html data-theme>` by `app.js`, and by an inline script in `index.html` before first paint.
 - **Review your work visually.** Take screenshots of changed screens at every target size, in light and dark, before calling anything done.
 
@@ -191,6 +208,19 @@ Animation is load-bearing here, not decoration — see the `Motion` section of `
 - **Reversing a view transition with `animation-direction: reverse` is wrong.** It plays the outgoing screen from its `to` state, so the screen you are leaving fades *in* as it goes. Write separate keyframes for the back direction (`page-out-back`, `page-in-back`).
 - **A pane that slides in from the right edge overflows the page while it does it.** The overflow checks in `fold-continuity.cjs` measure mid-animation and catch it. The second page wipes open with `clip-path` instead.
 - **Android's "Remove animations" accessibility setting reports `prefers-reduced-motion: reduce`**, and the block at the end of `css/app.css` then switches off every animation in the app. If motion appears to be missing on the phone but works in the browser, check that setting before changing any code.
+- **Safe-area insets only bite on the device.** A laptop reports zero for
+  `env(safe-area-inset-*)`, so anything that forgets them looks perfect in
+  every emulator and collides with the status bar on the Fold. The wide
+  layout once kept `padding-top: var(--safe-t)` from the base `.topbar` rule
+  while overriding `height` back to `--topbar-h`, which pushed the capsule
+  out of the bar and onto the first line of the page. `tests/browser/fold-postures.cjs`
+  now redefines `--safe-t`/`--safe-b` with a `<style>` tag after load — the
+  only way to reproduce an inset in Chromium — and checks the canvas, the
+  second page and the capsule all clear it.
+- **Claim both view-transition promises.** `startViewTransition()` returns
+  `ready` as well as `finished`; a second transition starting before the
+  first settles rejects `ready`, and if nothing has caught it the browser
+  reports an unhandled rejection that the browser tests count as a failure.
 - **Hovering a toast pauses it.** `pointerenter` clears the dismiss timer on purpose. A test that leaves the pointer where it clicked can sit over the toast and wait forever; move the mouse away first (`page.mouse.move(5, 5)`).
 
 ## Working with the owner

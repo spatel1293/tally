@@ -2,8 +2,9 @@ import { html, mount, $ } from './ui/html.js';
 import { toast } from './ui/overlay.js';
 import { resetCharts, hydrateCharts } from './ui/charts.js';
 import { watchPosture } from './ui/posture.js';
-import { txsInMonth, totals, spendingByCategory, sortTransactions } from './core/stats.js';
-import { monthRange, daysBetween } from './core/dates.js';
+import { sortTransactions } from './core/stats.js';
+import { monthKey, addDays } from './core/dates.js';
+import { isFinished, nextDue } from './core/recurring.js';
 import { planOrder, planProgress } from './core/plans.js';
 import { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } from './store.js';
 import { ui, viewMonth } from './views/components.js';
@@ -14,7 +15,7 @@ import { renderActivity, afterActivityMount, resetFilters, showMore } from './vi
 import { renderBudgets } from './views/budgets.js';
 import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS } from './views/pages.js';
 import { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } from './views/settings.js';
-import { money, netMoney, month as monthLabel, badge } from './ui/format.js';
+import { money, month as monthLabel, badge, relativeDay, date as dayLabel } from './ui/format.js';
 
 const I = (d) => html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const NAV_ICONS = {
@@ -97,35 +98,57 @@ function renderShell() {
       <span class="topbar-side"><button type="button" class="icon-btn topbar-add" data-action="new-tx" aria-label="New transaction" title="New transaction (N)">${NAV_ICONS.plus}</button></span>
     </header>
     <main id="main" tabindex="-1"></main>
-    <aside class="companion" data-companion aria-label="Month at a glance"></aside>
+    <aside class="companion" data-companion aria-label="Quick actions and what's next"></aside>
     <div id="toasts" class="toasts" aria-live="polite"></div>`
   );
 }
 
 // The second page. On the Fold half-folded into book posture it *is* the
-// right-hand leaf; on a wide laptop window it's a third column. Either way
-// it's the same thing: where the month stands, and a one-tap way to log
-// something you buy often. CSS decides when there's room for it.
+// right-hand leaf; on a wide laptop window it's a third column. CSS decides
+// when there's room for it.
+//
+// It used to open with the month's net, in and out, and the top spending
+// categories — every one of which the hero and the "Where it went" donut are
+// already showing two inches to the left. The same figure twice on one screen
+// is noise, so this page now carries only what the main column doesn't: the
+// things you can *do* (log another of what you buy most, within reach of the
+// hand holding that side of the phone) and what is *coming* (the next
+// scheduled items, the nearest plan).
 function renderCompanion() {
   const el = $('[data-companion]');
   if (!el) return;
   const key = viewMonth();
-  const monthTx = txsInMonth(state.transactions, key);
-  const t = totals(monthTx);
-
-  const top = spendingByCategory(monthTx, state.categories).slice(0, 4);
-  const biggest = top[0]?.amount || 1;
   const catOf = (id) => state.categories.find((c) => c.id === id) ?? null;
-
-  // Days left in the month being viewed, and what's left to spend per day if
-  // this month's income is the budget. Past months just show the total.
-  const { end } = monthRange(key);
-  const left = Math.max(0, daysBetween(state.today, end) + 1);
-  const perDay = left > 0 && t.net > 0 ? Math.round(t.net / left) : null;
 
   // The plan with the nearest date, and what it costs a month to make it.
   const nextPlan = planOrder(state.goals).find((g) => planProgress(g, state.transactions, state.today).toSave > 0) ?? null;
   const nextProgress = nextPlan ? planProgress(nextPlan, state.transactions, state.today) : null;
+
+  // What the calendar is about to bring: the next date each repeating item
+  // falls due, soonest first. Nothing else on Home looks ahead.
+  const upcoming = state.recurring
+    .filter((r) => !isFinished(r, state.today))
+    .map((r) => ({ rule: r, date: nextDue(r) }))
+    .filter((x) => x.date)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .slice(0, 3);
+
+  // Everything else on Home is scoped to the month. Today is the one window
+  // it never shows, and it's the one you want while you're still adding to
+  // it — so this page keeps the running total for the day.
+  const todayTx = key === monthKey(state.today) ? state.transactions.filter((tx) => tx.date === state.today) : [];
+  const todaySpent = todayTx.reduce((sum, tx) => sum + (tx.type === 'expense' && !tx.refund ? tx.amount : 0), 0);
+
+  // The last seven days, one bar each. Home's trend is six months wide and
+  // its donut is by category, so the shape of the week is nowhere else.
+  const week = [];
+  for (let i = 6; i >= 0; i--) {
+    const iso = addDays(state.today, -i);
+    const spent = state.transactions.reduce((sum, tx) => sum + (tx.date === iso && tx.type === 'expense' && !tx.refund ? tx.amount : 0), 0);
+    week.push({ iso, spent, today: i === 0 });
+  }
+  const weekPeak = Math.max(...week.map((d) => d.spent), 1);
+  const weekTotal = week.reduce((s, d) => s + d.spent, 0);
 
   // The categories you've used most recently, for logging another one.
   const again = [];
@@ -136,31 +159,54 @@ function renderCompanion() {
     if (!cat) continue;
     seen.add(tx.categoryId);
     again.push(cat);
-    if (again.length === 3) break;
+    if (again.length === 4) break;
   }
 
   mount(
     el,
     html`<p class="companion-label">${monthLabel(key)}</p>
       ${state.transactions.length
-        ? html`<p class="companion-net ${t.net < 0 ? 's-over' : ''}">${netMoney(t.net)}</p>
-            <dl class="companion-figures">
-              <div><dt>In</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
-              <div><dt>Out</dt><dd class="amt">${money(t.expenses)}</dd></div>
-            </dl>
-            ${perDay != null
-              ? html`<p class="companion-pace">${money(perDay)} a day for the ${left === 1 ? 'last day' : `${left} days`} left</p>`
-              : html`<p class="companion-pace">${t.count === 1 ? '1 transaction' : `${t.count} transactions`} this month</p>`}
-            ${top.length
+        ? html`<div class="companion-block">
+              <h2>Log it now</h2>
+              <button type="button" class="btn primary companion-new" data-action="new-tx">${NAV_ICONS.plus}New transaction</button>
+              ${again.length
+                ? html`<div class="companion-again">
+                    ${again.map(
+                      (cat) =>
+                        html`<button type="button" class="btn companion-again-btn" data-action="log-again" data-cat="${cat.id}">${badge(cat, 'sm')}<span>${cat.name}</span></button>`
+                    )}
+                  </div>`
+                : ''}
+            </div>
+            ${key === monthKey(state.today)
               ? html`<div class="companion-block">
-                  <h2>Where it went</h2>
-                  <ul class="plain-list companion-top">
-                    ${top.map((row) => {
-                      const cat = catOf(row.categoryId);
+                  <h2>Today</h2>
+                  <p class="companion-today">${todaySpent > 0 ? money(todaySpent) : 'Nothing yet'}</p>
+                  <p class="companion-today-sub">${todayTx.length ? `${todayTx.length === 1 ? '1 entry' : `${todayTx.length} entries`} logged today` : 'Nothing logged today'}</p>
+                  <div class="companion-week" role="img" aria-label="Spending each day for the last seven days: ${week.map((d) => `${dayLabel(d.iso, { weekday: 'short' })} ${money(d.spent)}`).join(', ')}">
+                    ${week.map(
+                      (d) => html`<span class="cw-day${d.today ? ' cw-today' : ''}" title="${dayLabel(d.iso, { weekday: 'short', month: 'short', day: 'numeric' })}: ${money(d.spent)}">
+                        <i class="cw-bar" style="--h:${d.spent > 0 ? Math.max(12, Math.round((d.spent / weekPeak) * 100)) : 0}%"></i>
+                        <small>${dayLabel(d.iso, { weekday: 'narrow' })}</small>
+                      </span>`
+                    )}
+                  </div>
+                  <p class="companion-today-sub">${money(weekTotal)} over the last 7 days</p>
+                </div>`
+              : ''}
+            ${upcoming.length
+              ? html`<div class="companion-block">
+                  <h2>Coming up</h2>
+                  <ul class="plain-list companion-next">
+                    ${upcoming.map(({ rule, date }) => {
+                      const cat = catOf(rule.categoryId);
                       return html`<li>
-                        <span class="companion-top-name">${cat ? badge(cat, 'sm') : ''}${cat ? cat.name : 'Uncategorized'}</span>
-                        <span class="amt">${money(row.amount)}</span>
-                        <span class="companion-top-bar" style="--w:${Math.round((row.amount / biggest) * 100)}%"></span>
+                        ${cat ? badge(cat, 'sm') : ''}
+                        <span class="companion-next-main">
+                          <span class="companion-next-name">${rule.note || (cat ? cat.name : 'Repeating')}</span>
+                          <small>${relativeDay(date)}</small>
+                        </span>
+                        <span class="amt ${rule.type === 'income' ? 'amt-in' : ''}">${money(rule.type === 'income' ? rule.amount : -rule.amount, { sign: rule.type === 'income' })}</span>
                       </li>`;
                     })}
                   </ul>
@@ -175,19 +221,8 @@ function renderCompanion() {
                     ${nextProgress.perMonth ? html`<small>${money(nextProgress.perMonth)} a month to make ${monthLabel(nextPlan.targetDate.slice(0, 7))}</small>` : ''}
                   </a>
                 </div>`
-              : ''}
-            ${again.length
-              ? html`<div class="companion-block">
-                  <h2>Log another</h2>
-                  <div class="companion-again">
-                    ${again.map(
-                      (cat) =>
-                        html`<button type="button" class="btn small" data-action="log-again" data-cat="${cat.id}">${badge(cat, 'sm')}${cat.name}</button>`
-                    )}
-                  </div>
-                </div>`
               : ''}`
-        : html`<p class="companion-empty">Add your first transaction and this page keeps the running total.</p>`}`
+        : html`<p class="companion-empty">Add your first transaction and this page keeps what's next within reach.</p>`}`
   );
 }
 
@@ -277,6 +312,10 @@ function render({ keepScroll = false } = {}) {
     const to = ROUTE_ORDER.indexOf(route);
     document.documentElement.dataset.nav = to < from ? 'back' : 'forward';
     const t = document.startViewTransition(() => paintRoute(route, { keepScroll, changing, staggered: false }));
+    // Both promises have to be claimed. Starting a second transition before
+    // the first has settled — two quick taps, or a resize mid-navigation —
+    // rejects `ready`, and an unclaimed rejection surfaces as a page error.
+    t.ready.catch(() => {});
     t.finished.catch(() => {}).finally(() => delete document.documentElement.dataset.nav);
     return;
   }

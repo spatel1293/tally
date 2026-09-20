@@ -53,6 +53,13 @@
   --surface: #ffffff;
   --surface-2: #f2f2f7;
   --surface-3: #e9e9ee;
+  /* What a card is filled with right now. It inverts on wide screens, where
+     the content sits on its own opaque canvas — one variable rather than a
+     pile of later overrides, so a tinted card can mix its hue into whichever
+     fill is current without fighting source order. */
+  --card: var(--surface);
+  --card-tint: 10%;
+  --aura-strength: 0.32;
   --line: rgb(60 60 67 / 0.16);
   --line-strong: rgb(60 60 67 / 0.29);
   --edge: rgb(0 0 0 / 0.045);
@@ -151,6 +158,10 @@
   --surface: #1c1c1e;
   --surface-2: #2c2c2e;
   --surface-3: #3a3a3c;
+  --card: var(--surface);
+  /* Colour has to work harder against black to register at all. */
+  --card-tint: 16%;
+  --aura-strength: 0.95;
   --line: rgb(84 84 88 / 0.5);
   --line-strong: rgb(84 84 88 / 0.78);
   --edge: rgb(255 255 255 / 0.08);
@@ -685,15 +696,21 @@ main {
     grid-column: 1;
   }
 
+  :root {
+    --card: var(--surface-2);
+  }
+
   main {
     grid-column: 1;
     width: auto;
     max-width: none;
     /* The canvas. Opaque, so the glass floating over it has something worth
-       blurring, and rounded to the same scale as everything else. */
-    margin: 12px;
+       blurring, and rounded to the same scale as everything else. The top
+       margin clears the status bar: on a phone this width — the Fold opened
+       flat — there is one, and a canvas that starts at 12px runs under it. */
+    margin: calc(var(--safe-t) + 12px) 12px 12px;
     padding: calc(var(--topbar-h) + 14px) var(--pad) 56px;
-    min-height: calc(100dvh - 24px);
+    min-height: calc(100dvh - var(--safe-t) - 24px);
     border-radius: var(--r-screen);
     background: var(--surface);
     box-shadow: var(--shadow-1);
@@ -702,13 +719,18 @@ main {
   /* The toolbar belongs to the canvas: it starts and ends with it and rounds
      off with its top corners. Title on the left, add on the right, and the
      capsule floating over the middle — the two share a centre line. */
+  /* The toolbar belongs to the canvas, so it starts where the canvas does —
+     below the status bar. Its own safe-area padding has to go with it, or
+     the bar keeps a 56px box while its contents sit an inset lower, and the
+     capsule lands on the first line of the page. */
   .topbar {
     left: 0;
-    top: 12px;
+    top: calc(var(--safe-t) + 12px);
     right: calc(var(--aside-w) + 12px);
     margin-left: 12px;
     height: var(--topbar-h);
     padding: 0 12px;
+    padding-top: 0;
     justify-content: space-between;
     border-radius: var(--r-screen) var(--r-screen) 0 0;
     overflow: hidden;
@@ -812,7 +834,7 @@ main {
   }
 
   main {
-    margin: 12px 12px 12px 0;
+    margin: calc(var(--safe-t) + 12px) 12px 12px 0;
     padding-top: calc(var(--topbar-h) + 4px);
   }
 
@@ -820,10 +842,11 @@ main {
      the sidebar ends and rounds off with the canvas's own top corners. */
   .topbar {
     left: var(--rail-w);
-    top: 12px;
+    top: calc(var(--safe-t) + 12px);
     right: calc(var(--aside-w) + 12px);
     height: var(--topbar-h);
     padding: 0 20px;
+    padding-top: 0;
     justify-content: center;
     border-radius: var(--r-screen) var(--r-screen) 0 0;
     overflow: hidden;
@@ -1008,6 +1031,61 @@ main {
   }
 }
 
+/* ---------- Where the capsule lives on a touch screen ---------- */
+
+/* Width alone was the wrong thing to decide this on. The Fold opened flat is
+   841px, so it took the wide layout and moved every control to the top of a
+   7.6" screen — the one place a thumb holding the phone cannot reach. Width
+   says how much room there is; the pointer says how the screen is held. So
+   on any touch screen short of the sidebar, the capsule goes back to the
+   bottom where the hand already is, and takes the add button with it.
+   Pointing devices keep the toolbar layout: a cursor reaches the top for
+   free, and a laptop wants the vertical space for content. */
+@media (pointer: coarse) and (max-width: 1119px) {
+  .tabbar {
+    position: fixed;
+    /* Centred on the content column, not the window: with the second page
+       taking 280px on the right, a capsule centred on the window straddles
+       the divide between them. */
+    left: calc(50% - var(--aside-w) / 2);
+    bottom: calc(var(--safe-b) + 10px);
+    transform: translateX(-50%);
+    width: min(440px, calc(100% - var(--aside-w) - 24px));
+    height: var(--tabbar-h);
+    grid-template-columns: repeat(5, 1fr);
+    flex: none;
+  }
+
+  /* Room for labels again down here, and they earn their place: the capsule
+     is the only navigation on screen. */
+  .tabbar a span {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    overflow: visible;
+  }
+
+  .fab {
+    display: grid;
+  }
+
+  /* Adding belongs to the capsule at this size, so the toolbar's button
+     would be the same action offered twice on one screen. */
+  .topbar-side {
+    display: none;
+  }
+
+  main {
+    padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 48px);
+  }
+
+  /* A sheet covers the page, so the capsule drops away under it again. */
+  :root[data-sheet] .tabbar {
+    transform: translateX(-50%) translateY(28px);
+  }
+}
+
 /* ---------- Page structure ---------- */
 
 .page-head {
@@ -1082,8 +1160,30 @@ main {
   padding: 18px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r);
-  background: var(--surface);
+  background: var(--card);
   box-shadow: var(--shadow-1);
+}
+
+/* Home's sections are tinted with the hue their icon chip carries, so a
+   screenful of cards reads as five different places rather than five grey
+   slabs. The tint is a wash across the top corner only — enough to colour
+   the card, never enough to touch the contrast of the text on it. */
+.panel.tinted {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--hue) var(--card-tint), transparent), transparent 62%),
+    var(--card);
+}
+
+.panel.tinted::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  border-radius: var(--r) var(--r) 0 0;
+  background: linear-gradient(90deg, var(--hue), color-mix(in srgb, var(--hue) 20%, transparent));
+  opacity: 0.85;
 }
 
 /* Anything nested inside a card takes the card's radius minus the gap it
@@ -1123,14 +1223,20 @@ main {
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 27px;
+  height: 27px;
   border-radius: var(--r-sm);
-  background: var(--hue);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--hue) 78%, white), var(--hue));
   color: #fff;
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--hue) 50%, transparent);
-  animation: pop-in 380ms var(--spring) backwards;
+  animation:
+    pop-in 380ms var(--spring) backwards,
+    chip-breathe 5.5s ease-in-out 380ms infinite;
 }
+
+/* Staggered, so the five chips on Home breathe out of step with each other
+   rather than blinking in unison. */
+.dash-col:nth-child(2) .sec-icon { animation-delay: 380ms, 1.4s; }
+.reminders .sec-icon { animation-delay: 380ms, 2.6s; }
 
 .sec-icon.on-light {
   color: #1c1c1e;
@@ -1178,12 +1284,74 @@ main {
 
 /* ---------- Hero and figures ---------- */
 
+/* The one card that has to carry the month. Two soft washes of the state's
+   own colour drift across it for as long as the screen is on, so Home is
+   never a still picture — the movement is the card breathing, not anything
+   asking to be read. */
 .hero {
-  padding: 24px 20px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 22px 20px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r-lg);
-  background: var(--surface);
+  background: var(--card);
   box-shadow: var(--shadow-1);
+}
+
+.hero::before,
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(46px) opacity(var(--aura-strength));
+  pointer-events: none;
+}
+
+.hero::before {
+  top: -34%;
+  right: -18%;
+  background: radial-gradient(circle, var(--aura-a, var(--accent)), transparent 68%);
+  animation: aurora-a 19s var(--ease-inout, ease-in-out) infinite alternate;
+}
+
+.hero::after {
+  bottom: -40%;
+  left: -20%;
+  background: radial-gradient(circle, var(--aura-b, var(--accent)), transparent 68%);
+  animation: aurora-b 26s var(--ease-inout, ease-in-out) infinite alternate;
+}
+
+/* The wash takes its colour from where the month actually stands. */
+.hero[data-state='ok'] { --aura-a: var(--bar-in); --aura-b: var(--accent); }
+.hero[data-state='warning'] { --aura-a: var(--warn); --aura-b: #ff9500; }
+.hero[data-state='over'] { --aura-a: var(--over); --aura-b: #ff2d55; }
+.hero[data-state='accent'] { --aura-a: var(--accent); --aura-b: var(--hue-budgets); }
+
+/* Ring and words share a line as soon as the content column can carry both;
+   stacked, the ring left a band of empty card either side of it. */
+.hero-main {
+  display: grid;
+  gap: 4px;
+}
+
+@container page (min-width: 430px) {
+  .hero-main {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 22px;
+  }
+
+  .hero-main .hero-ring-row {
+    margin-bottom: 0;
+  }
+
+  .hero.small .hero-line {
+    font-size: clamp(1.375rem, 4.4cqi, 2rem);
+  }
 }
 
 .hero-line {
@@ -1222,7 +1390,7 @@ main {
   padding: 16px 18px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r);
-  background: var(--surface);
+  background: var(--card);
   box-shadow: var(--shadow-1);
 }
 
@@ -1256,11 +1424,47 @@ main {
 
 /* The hero used to hand off to a separate figures card below it; now the
    numbers live inside the same card as the ring, one focal panel instead of
-   two stacked ones, set off only by a hairline. */
+   two stacked ones. Each is a tinted chip in its own money colour, so the
+   three of them read apart without a label being needed. */
 .hero-figures {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.hero-figures dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+/* On the cover screen the three figures are labelled with a dot of their
+   own colour rather than boxed: a box costs 24px of the column each, which
+   is the difference between "+$5,972.42" fitting on one line and breaking
+   across two. */
+.hero-figures dt::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chip, var(--ink-3));
+}
+
+.hero-figures dd {
+  font-size: clamp(0.9375rem, 3.9cqi, 1.1875rem);
+}
+
+/* Room for the boxes once the column is wide enough to keep the figures on
+   one line inside them. */
+@container page (min-width: 430px) {
+  .hero-figures > div {
+    padding: 9px 12px 10px;
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, var(--chip, var(--ink)) 12%, var(--card));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--ink)) 16%, transparent);
+  }
 }
 
 /* ---------- Progress ring ---------- */
@@ -1289,37 +1493,40 @@ main {
 }
 
 .ring-track {
-  stroke: var(--surface-3);
+  stroke: color-mix(in srgb, var(--ink) 9%, transparent);
 }
+
+/* Each ring is a two-stop gradient rather than one flat colour, and the
+   money state picks the pair. The day ring stays in interface colours,
+   because elapsed time is not money. */
+.hero-ring[data-state='ok'] { --ring-a: #30d158; --ring-b: #00c7a3; --ring-glow: var(--ok); }
+.hero-ring[data-state='warning'] { --ring-a: #ffb340; --ring-b: #ff8a00; --ring-glow: var(--warn); }
+.hero-ring[data-state='over'] { --ring-a: #ff6961; --ring-b: #ff2d55; --ring-glow: var(--over); }
+.hero-ring[data-state='accent'] { --ring-a: #40a2ff; --ring-b: #5e5ce6; --ring-glow: var(--accent); }
+.hero-ring { --ring2-a: #0a84ff; --ring2-b: #64d2ff; }
 
 .ring-fill,
 .ring-fill-inner {
   transition: stroke-dasharray 0.5s var(--ease);
 }
 
-.ring-fill.s-ok {
-  stroke: var(--ok);
-  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--ok) 45%, transparent));
-}
-
-.ring-fill.s-warning {
-  stroke: var(--warn);
-  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--warn) 45%, transparent));
-}
-
-.ring-fill.s-over {
-  stroke: var(--over);
-  filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--over) 55%, transparent));
-}
-
-.ring-fill.s-accent {
-  stroke: var(--accent);
-  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--accent) 40%, transparent));
+.ring-fill {
+  filter: drop-shadow(0 3px 11px color-mix(in srgb, var(--ring-glow, var(--accent)) 50%, transparent));
 }
 
 .ring-fill-inner {
-  stroke: var(--accent);
-  filter: drop-shadow(0 2px 7px color-mix(in srgb, var(--accent) 35%, transparent));
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--ring2-a) 40%, transparent));
+}
+
+/* A short specular arc travels the dial for as long as the page is open.
+   It is the one thing on Home that moves without being asked to, which is
+   what keeps the screen feeling live rather than printed. */
+.ring-sheen {
+  stroke: #fff;
+  opacity: 0.32;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: ring-orbit 6.5s linear infinite;
 }
 
 .hero-ring-center {
@@ -1380,18 +1587,34 @@ main {
 }
 
 .bar {
-  height: 8px;
-  border-radius: 4px;
-  background: var(--surface-3);
+  position: relative;
+  height: 9px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
   overflow: hidden;
 }
 
 .bar-fill {
+  position: relative;
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--ink-3);
+  overflow: hidden;
   transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* A highlight crosses each filled bar every few seconds. It is the quietest
+   of the ambient motions and the one that makes a list of budgets read as
+   live figures rather than printed ones. */
+.bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: bar-sheen 4.5s var(--ease) infinite;
 }
 
 /* ---------- Buttons ---------- */
@@ -2437,6 +2660,10 @@ dialog .toasts {
   line-height: 1.5;
 }
 
+/* The category's colour, carried properly rather than hinted at. A 17% wash
+   on white read as grey on a phone and as nothing at all against black, so
+   the fill is stronger, gradient-lit from the top corner, and ringed in the
+   full-strength hue — colour you can actually identify a category by. */
 .badge {
   flex: none;
   display: grid;
@@ -2445,7 +2672,9 @@ dialog .toasts {
   height: 38px;
   /* Proportional, so the small badge keeps the same corner as the large one. */
   border-radius: 28%;
-  background: color-mix(in srgb, var(--c, var(--ink-4)) 17%, var(--surface));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--c, var(--ink-4)) 42%, var(--card)), color-mix(in srgb, var(--c, var(--ink-4)) 22%, var(--card)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--ink-4)) 55%, transparent);
   font-size: 1.125rem;
   line-height: 1;
 }
@@ -2769,22 +2998,35 @@ dialog .toasts {
   }
 }
 
+/* A housekeeping note, not a section of the app — so it reads as a slim
+   strip rather than a card with the same weight as the month itself. */
 .nudge {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  margin: 4px 0 12px;
-  padding: 14px 16px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-  font-size: var(--t-subhead);
+  gap: 6px 14px;
+  margin: 2px 0 12px;
+  padding: 9px 10px 9px 14px;
+  border: 0;
+  border-radius: var(--pill);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: none;
+  font-size: var(--t-footnote);
+  color: var(--ink-2);
 }
 
 .nudge p {
-  flex: 1 1 260px;
+  flex: 1 1 200px;
+}
+
+.nudge strong {
+  color: var(--ink);
+}
+
+.nudge .btn {
+  min-height: 34px;
+  padding: 0 14px;
+  background: var(--card);
 }
 
 /* Donut and legend */
@@ -3368,43 +3610,132 @@ dialog .toasts {
   color: var(--ink-3);
 }
 
-.companion-net {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  margin-top: -10px;
+/* Logging is the reason to look at this page, so it leads with a full-width
+   commit button and the categories you reach for most. */
+.companion-new {
+  width: 100%;
+  margin-bottom: 10px;
 }
 
-.companion-figures {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.companion-again-btn {
+  justify-content: flex-start;
+  width: 100%;
   gap: 10px;
-  margin: 0;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  font-size: var(--t-subhead);
+  font-weight: 580;
 }
 
-.companion-figures > div {
-  padding: 10px 12px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
+.companion-again-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.companion-figures dt {
+.companion-today {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  animation: reveal-up 520ms var(--ease) backwards;
+}
+
+.companion-today-sub {
+  margin-top: 2px;
   font-size: var(--t-caption);
   color: var(--ink-3);
 }
 
-.companion-figures dd {
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 650;
+/* Seven days, one bar each. Small enough to be a sparkline, big enough to
+   see which day got away from you. */
+.companion-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+  height: 58px;
+  margin: 12px 0 8px;
 }
 
-.companion-pace {
-  font-size: 0.875rem;
+.cw-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+}
+
+/* A faint slot behind every day, so a quiet week still reads as seven days
+   rather than one lonely bar. */
+.cw-day::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 15px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.cw-bar {
+  position: relative;
+  width: 100%;
+  height: var(--h, 3%);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent));
+  transform-origin: bottom;
+  animation: grow-y 520ms var(--ease) backwards;
+}
+
+.cw-day small {
+  font-size: 0.625rem;
+  color: var(--ink-4);
+  line-height: 1;
+}
+
+/* Today keeps a slow glow of its own, so the pane has something moving in
+   it even when the ring is off screen. */
+.cw-today .cw-bar {
+  background: linear-gradient(180deg, var(--hue-activity), var(--warn));
+  animation: grow-y 520ms var(--ease) backwards, day-glow 3.4s ease-in-out 520ms infinite;
+}
+
+.cw-today small {
   color: var(--ink-2);
-  margin-top: -8px;
+  font-weight: 700;
+}
+
+.companion-next > li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 0.875rem;
+}
+
+.companion-next > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.companion-next-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.companion-next-name {
+  font-weight: 580;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companion-next-main small {
+  color: var(--ink-3);
+  font-size: var(--t-caption);
 }
 
 .companion-block h2 {
@@ -3413,41 +3744,6 @@ dialog .toasts {
   letter-spacing: 0.02em;
   color: var(--ink-3);
   margin-bottom: 8px;
-}
-
-.companion-top > li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 0 9px;
-  font-size: 0.875rem;
-}
-
-.companion-top-name {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A hairline bar under each row, scaled to the biggest category. It grows
-   from the left whenever the figures change. */
-.companion-top-bar {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: var(--w, 0%);
-  height: 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  opacity: 0.55;
-  transform-origin: left center;
-  animation: fill-x 620ms var(--ease) backwards;
 }
 
 .companion-plan {
@@ -3478,8 +3774,7 @@ dialog .toasts {
 }
 
 .companion-again {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
 }
 
@@ -3519,7 +3814,9 @@ dialog .toasts {
     align-self: start;
     height: 100dvh;
     overflow-y: auto;
-    padding: 24px var(--pad) 32px;
+    /* Clears the status bar: this column runs the full height of the window,
+       so without the inset its first line sits under the clock. */
+    padding: calc(var(--safe-t) + 24px) var(--pad) calc(var(--safe-b) + 32px);
     border-left: var(--bw) solid var(--line);
     background: var(--surface);
     animation: leaf-open 420ms var(--ease);
@@ -3891,10 +4188,80 @@ dialog .toasts {
 
 @keyframes ring-pulse {
   0%, 100% {
-    filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--over) 55%, transparent));
+    filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--ring-glow) 55%, transparent));
   }
   50% {
-    filter: drop-shadow(0 3px 20px color-mix(in srgb, var(--over) 85%, transparent));
+    filter: drop-shadow(0 3px 22px color-mix(in srgb, var(--ring-glow) 90%, transparent));
+  }
+}
+
+/* ---------- Ambient motion ---------- */
+
+/* Motion that runs on its own, with nothing touched. The app should look
+   alive when it is just sitting on the desk: light travelling round the
+   dial, colour drifting behind the month, a highlight crossing each budget
+   bar as it settles. All of it is transform, opacity or filter, and all of
+   it stops dead under reduced motion. */
+@keyframes ring-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aurora-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate3d(-12%, 9%, 0) scale(1.18);
+    opacity: 0.62;
+  }
+  100% {
+    transform: translate3d(6%, -6%, 0) scale(0.94);
+    opacity: 0.4;
+  }
+}
+
+@keyframes aurora-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.38;
+  }
+  50% {
+    transform: translate3d(14%, -10%, 0) scale(0.9);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(-8%, 8%, 0) scale(1.16);
+    opacity: 0.34;
+  }
+}
+
+@keyframes bar-sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%, 100% {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes day-glow {
+  0%, 100% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: brightness(1.22) drop-shadow(0 0 8px color-mix(in srgb, var(--hue-activity) 70%, transparent));
+  }
+}
+
+@keyframes chip-breathe {
+  0%, 100% {
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--hue) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 3px 14px color-mix(in srgb, var(--hue) 80%, transparent);
   }
 }
 
@@ -4115,7 +4482,7 @@ main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
   animation: ring-in 640ms var(--ease) 140ms backwards;
 }
 
-.ring-fill.s-over {
+.hero-ring[data-state='over'] .ring-fill {
   animation: ring-in 640ms var(--ease) backwards, ring-pulse 2.2s ease-in-out 700ms infinite;
 }
 
@@ -4139,7 +4506,7 @@ main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
    saved transaction doesn't restart the whole list. */
 main[data-enter] .tx-row,
 main[data-enter] .budget-row,
-main[data-enter] .companion-top > li {
+main[data-enter] .companion-next > li {
   animation: slide-in-left 320ms var(--ease) backwards;
 }
 
@@ -4364,7 +4731,6 @@ body {
   .hero,
   .figures,
   .nudge {
-    background: var(--surface-2);
     border-color: transparent;
     box-shadow: none;
   }
@@ -4382,11 +4748,14 @@ body {
    the canvas fill and vanish into the background. This has to sit after the
    canvas rules above, which is why it is last in the file. */
 @media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
+  :root {
+    --card: var(--surface);
+  }
+
   .panel,
   .hero,
   .figures,
   .nudge {
-    background: var(--surface);
     box-shadow: var(--shadow-1);
   }
 
@@ -4870,6 +5239,7 @@ function donut(segments, { size = 160, stroke = 24, centerTop = '', centerBottom
 // reference size; the container sizes the svg responsively with `width:100%`,
 // so the stroke scales with it rather than staying a fixed pixel width.
 function progressRing({ size = 132, stroke = 15, ratio, state, dayFraction, showDay, centerTop, centerBottom, ariaLabel }) {
+  const id = `ring-${++seq}`;
   const cx = size / 2;
   const cy = size / 2;
   const r1 = (size - stroke) / 2;
@@ -4881,15 +5251,24 @@ function progressRing({ size = 132, stroke = 15, ratio, state, dayFraction, show
   const c2 = 2 * Math.PI * r2;
   const fill2 = Math.min(1, Math.max(0, dayFraction ?? 0));
   const dash2 = fill2 * c2;
+  // A short arc of light that orbits the dial. The stops read CSS custom
+  // properties, which inherit into the svg, so the state's colour pair is
+  // chosen in the stylesheet with everything else.
+  const sheen = c1 * 0.1;
+
+  let defs = `<linearGradient id="${id}-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--ring-a)"/><stop offset="1" stop-color="var(--ring-b)"/></linearGradient>`;
+  defs += `<linearGradient id="${id}-b" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="var(--ring2-a)"/><stop offset="1" stop-color="var(--ring2-b)"/></linearGradient>`;
 
   let circles = `<circle class="ring-track" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}"/>`;
-  circles += `<circle class="ring-fill s-${state}" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${dash1.toFixed(2)} ${(c1 - dash1).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+  circles += `<circle class="ring-fill" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="url(#${id}-a)" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${dash1.toFixed(2)} ${(c1 - dash1).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
   if (showDay && r2 > 4) {
     circles += `<circle class="ring-track" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke-width="${stroke2}"/>`;
-    circles += `<circle class="ring-fill-inner" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke-width="${stroke2}" stroke-linecap="round" stroke-dasharray="${dash2.toFixed(2)} ${(c2 - dash2).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    circles += `<circle class="ring-fill-inner" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="url(#${id}-b)" stroke-width="${stroke2}" stroke-linecap="round" stroke-dasharray="${dash2.toFixed(2)} ${(c2 - dash2).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
   }
-  return html`<div class="hero-ring" role="img" aria-label="${ariaLabel}">
-    ${raw(`<svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" aria-hidden="true" focusable="false">${circles}</svg>`)}
+  circles += `<circle class="ring-sheen" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${sheen.toFixed(2)} ${(c1 - sheen).toFixed(2)}"/>`;
+
+  return html`<div class="hero-ring" data-state="${state}" role="img" aria-label="${ariaLabel}">
+    ${raw(`<svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" aria-hidden="true" focusable="false"><defs>${defs}</defs>${circles}</svg>`)}
     <div class="hero-ring-center" aria-hidden="true"><strong>${centerTop}</strong><span>${centerBottom}</span></div>
   </div>`;
 }
@@ -5492,6 +5871,349 @@ function goalProgress(goal, todayIso) {
 return { signedAmount, expenseAmount, incomeAmount, totals, txsInMonth, txsInRange, monthlySeries, categoryMap, rootCategoryId, categoryFamily, spendingByCategory, budgetStatus, compareBudgetRows, budgetOverview, accountBalances, sortTransactions, filterTransactions, groupByDay, yearsWithData, yearReview, categoryUsage, goalProgress };
 })();
 
+// js/core/money.js
+const __m_js_core_money_js = (() => {
+// Money is always stored as an integer number of hundredths ("cents"),
+// whatever the currency. Only display code converts to decimals, so sums
+// are exact and there is no floating-point drift.
+
+const MAX_CENTS = 100_000_000_000; // 1,000,000,000.00
+
+function isValidCents(n) {
+  return Number.isSafeInteger(n) && n > 0 && n <= MAX_CENTS;
+}
+
+function isValidSignedCents(n) {
+  return Number.isSafeInteger(n) && Math.abs(n) <= MAX_CENTS;
+}
+
+const sepCache = new Map();
+function getSeparators(locale = 'en-US') {
+  let seps = sepCache.get(locale);
+  if (!seps) {
+    seps = { group: ',', decimal: '.' };
+    try {
+      const parts = new Intl.NumberFormat(locale).formatToParts(1234567.5);
+      seps = {
+        group: parts.find((p) => p.type === 'group')?.value ?? ',',
+        decimal: parts.find((p) => p.type === 'decimal')?.value ?? '.',
+      };
+    } catch {
+      // keep defaults
+    }
+    sepCache.set(locale, seps);
+  }
+  return seps;
+}
+
+function fail(error) {
+  return { ok: false, error };
+}
+
+// Parses what a person types ("12", "12.5", "$1,234.56", "1.234,56", "(20)")
+// into cents. Returns { ok, cents, negative } or { ok: false, error }.
+function parseAmount(input, { locale = 'en-US' } = {}) {
+  let s = String(input ?? '').trim();
+  if (!s) return fail('Enter an amount.');
+
+  let negative = false;
+  if (/^\(.*\)$/.test(s)) {
+    negative = true;
+    s = s.slice(1, -1);
+  }
+  s = s
+    .replace(/[\s\u00a0\u202f]/g, '')
+    .replace(/\p{Sc}/gu, '')
+    .replace(/^[A-Z]{3}(?=[-+\u2212\d.,])/, '')
+    .replace(/([\d.,])[A-Z]{3}$/, '$1');
+
+  if (/^[-\u2212]/.test(s)) {
+    negative = !negative;
+    s = s.slice(1);
+  } else if (s.startsWith('+')) {
+    s = s.slice(1);
+  } else if (/[-\u2212]$/.test(s)) {
+    negative = !negative;
+    s = s.slice(0, -1);
+  }
+  // A currency symbol after the sign ("-$12") was already removed above.
+  s = s.replace(/['\u2019]/g, '');
+
+  if (!/^[\d.,]+$/.test(s) || !/\d/.test(s)) {
+    return fail('Use numbers only, like 12.50.');
+  }
+
+  const { group } = getSeparators(locale);
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  let decimalChar = null;
+  if (lastDot !== -1 && lastComma !== -1) {
+    decimalChar = lastDot > lastComma ? '.' : ',';
+  } else if (lastDot !== -1 || lastComma !== -1) {
+    const ch = lastDot !== -1 ? '.' : ',';
+    const count = s.split(ch).length - 1;
+    const digitsAfter = s.length - s.lastIndexOf(ch) - 1;
+    const looksGrouped = count > 1 || (digitsAfter === 3 && ch === group);
+    decimalChar = looksGrouped ? null : ch;
+  }
+
+  let intPart = s;
+  let fracPart = '';
+  if (decimalChar) {
+    const idx = s.lastIndexOf(decimalChar);
+    intPart = s.slice(0, idx);
+    fracPart = s.slice(idx + 1);
+    if (intPart.includes(decimalChar)) return fail('Check the number format, like 1,234.50.');
+    if (/[.,]/.test(fracPart)) return fail('Check the number format, like 1,234.50.');
+  }
+  if (/[.,]/.test(intPart)) {
+    if (!/^\d{1,3}([.,]\d{3})+$/.test(intPart)) return fail('Check the number format, like 1,234.50.');
+    const seps = new Set(intPart.replace(/\d/g, ''));
+    if (seps.size > 1) return fail('Check the number format, like 1,234.50.');
+  }
+  const digits = intPart.replace(/[.,]/g, '') || '0';
+  if (fracPart.length > 2) return fail('Use at most 2 decimal places.');
+  if (digits.replace(/^0+/, '').length > 10) return fail('That amount is too large.');
+
+  const cents = Number(digits) * 100 + Number((fracPart + '00').slice(0, 2));
+  if (cents > MAX_CENTS) return fail('That amount is too large.');
+  return { ok: true, cents, negative: negative && cents !== 0 };
+}
+
+const fmtCache = new Map();
+function currencyFormatter(currency, locale, compact, signDisplay) {
+  const key = `${currency}|${locale}|${compact}|${signDisplay}`;
+  let f = fmtCache.get(key);
+  if (f) return f;
+  const opts = { style: 'currency', currency, signDisplay };
+  if (compact) {
+    opts.notation = 'compact';
+    opts.minimumFractionDigits = 0;
+    opts.maximumFractionDigits = 1;
+  }
+  try {
+    f = new Intl.NumberFormat(locale, opts);
+  } catch {
+    try {
+      f = new Intl.NumberFormat('en-US', { ...opts, currency: 'USD' });
+    } catch {
+      f = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+    }
+  }
+  fmtCache.set(key, f);
+  return f;
+}
+
+function formatMoney(cents, { currency = 'USD', locale = 'en-US', sign = false, compact = false } = {}) {
+  const value = Number.isFinite(cents) ? cents : 0;
+  const f = currencyFormatter(currency, locale, compact, sign ? 'exceptZero' : 'auto');
+  // `+ 0` turns -0 into 0 so zero never shows as "-$0.00".
+  return f.format(value / 100 + 0);
+}
+
+function currencyDigits(currency) {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
+  } catch {
+    return 2;
+  }
+}
+
+function isSupportedCurrency(code) {
+  if (!/^[A-Z]{3}$/.test(code)) return false;
+  try {
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: code });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// For pre-filling an input: 1250 -> "12.50" (or "12,50"), no grouping.
+function centsToInput(cents, { locale = 'en-US' } = {}) {
+  const abs = Math.abs(cents);
+  const whole = Math.floor(abs / 100);
+  const frac = abs % 100;
+  const sign = cents < 0 ? '-' : '';
+  if (frac === 0) return `${sign}${whole}`;
+  return `${sign}${whole}${getSeparators(locale).decimal}${String(frac).padStart(2, '0')}`;
+}
+
+// Machine-readable decimal for CSV export: 123450 -> "1234.50".
+function centsToDecimalString(cents) {
+  const abs = Math.abs(cents);
+  return `${cents < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
+}
+
+// Scales an amount by a rational factor with round-half-away-from-zero.
+function scaleCents(cents, numerator, denominator) {
+  const raw = (cents * numerator) / denominator;
+  return Math.sign(raw) * Math.round(Math.abs(raw));
+}
+
+return { MAX_CENTS, isValidCents, isValidSignedCents, getSeparators, parseAmount, formatMoney, currencyDigits, isSupportedCurrency, centsToInput, centsToDecimalString, scaleCents };
+})();
+
+// js/core/recurring.js
+const __m_js_core_recurring_js = (() => {
+// Recurring rules.
+//
+// rule = { id, type, amount, categoryId, accountId, note, frequency,
+//          startDate, endDate, mode: 'auto' | 'remind', paused,
+//          generatedThrough }
+//
+// Occurrence n is always computed from startDate (never chained from the
+// previous occurrence), so a rule on the 31st lands on Feb 28/29 and then
+// returns to Mar 31. `generatedThrough` is the last occurrence that was
+// logged or skipped. Together with a (ruleId, date) duplicate check, this
+// makes generation safe to run any number of times.
+
+const { addDays, addMonthsClamped, daysBetween, monthsBetween } = __m_js_core_dates_js;
+const { scaleCents } = __m_js_core_money_js;
+const FREQUENCIES = {
+  weekly: { label: 'Every week', perYear: 52 },
+  biweekly: { label: 'Every 2 weeks', perYear: 26 },
+  monthly: { label: 'Every month', perYear: 12 },
+  quarterly: { label: 'Every 3 months', perYear: 4 },
+  yearly: { label: 'Every year', perYear: 1 },
+};
+
+const MAX_ITERATIONS = 10000;
+const MAX_GENERATED_PER_RUN = 2000;
+
+function nthOccurrence(rule, n) {
+  switch (rule.frequency) {
+    case 'weekly':
+      return addDays(rule.startDate, 7 * n);
+    case 'biweekly':
+      return addDays(rule.startDate, 14 * n);
+    case 'monthly':
+      return addMonthsClamped(rule.startDate, n);
+    case 'quarterly':
+      return addMonthsClamped(rule.startDate, 3 * n);
+    case 'yearly':
+      return addMonthsClamped(rule.startDate, 12 * n);
+    default:
+      throw new Error(`Unknown frequency: ${rule.frequency}`);
+  }
+}
+
+// A safe (never too high) index to start scanning from.
+function startIndex(rule, afterExclusive) {
+  if (!afterExclusive || afterExclusive <= rule.startDate) return 0;
+  switch (rule.frequency) {
+    case 'weekly':
+      return Math.max(0, Math.floor(daysBetween(rule.startDate, afterExclusive) / 7) - 1);
+    case 'biweekly':
+      return Math.max(0, Math.floor(daysBetween(rule.startDate, afterExclusive) / 14) - 1);
+    case 'monthly':
+      return Math.max(0, monthsBetween(rule.startDate, afterExclusive) - 1);
+    case 'quarterly':
+      return Math.max(0, Math.floor(monthsBetween(rule.startDate, afterExclusive) / 3) - 1);
+    case 'yearly':
+      return Math.max(0, Math.floor(monthsBetween(rule.startDate, afterExclusive) / 12) - 1);
+    default:
+      return 0;
+  }
+}
+
+// Occurrence dates d with afterExclusive < d <= throughInclusive (and d <= endDate).
+function occurrencesBetween(rule, afterExclusive, throughInclusive, max = MAX_ITERATIONS) {
+  const out = [];
+  if (!rule.startDate || !throughInclusive || throughInclusive < rule.startDate) return out;
+  const limit = rule.endDate && rule.endDate < throughInclusive ? rule.endDate : throughInclusive;
+  let n = startIndex(rule, afterExclusive);
+  for (let i = 0; i < MAX_ITERATIONS && out.length < max; i++, n++) {
+    const d = nthOccurrence(rule, n);
+    if (d > limit) break;
+    if (!afterExclusive || d > afterExclusive) out.push(d);
+  }
+  return out;
+}
+
+function nextOccurrence(rule, afterExclusive) {
+  let n = startIndex(rule, afterExclusive);
+  for (let i = 0; i < MAX_ITERATIONS; i++, n++) {
+    const d = nthOccurrence(rule, n);
+    if (rule.endDate && d > rule.endDate) return null;
+    if (!afterExclusive || d > afterExclusive) return d;
+  }
+  return null;
+}
+
+function lastHandled(rule) {
+  return rule.generatedThrough ?? addDays(rule.startDate, -1);
+}
+
+// The next date the rule will produce, counting unhandled past dates.
+function nextDue(rule) {
+  return nextOccurrence(rule, lastHandled(rule));
+}
+
+function transactionFromRule(rule, date, id, nowIso) {
+  return {
+    id,
+    type: rule.type,
+    amount: rule.amount,
+    refund: false,
+    categoryId: rule.categoryId,
+    accountId: rule.accountId ?? null,
+    date,
+    note: rule.note ?? '',
+    recurringId: rule.id,
+    // A repeating entry belongs to no plan; set explicitly so every
+    // transaction the app creates has the same shape as one that has been
+    // through a backup and back.
+    planId: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+// Creates transactions for automatic rules and lists due dates for
+// reminder rules. Pure: returns what should change, touches nothing.
+function processRecurring(rules, transactions, todayIso, makeId, nowIso) {
+  const existing = new Set();
+  for (const t of transactions) if (t.recurringId) existing.add(`${t.recurringId}|${t.date}`);
+  const newTransactions = [];
+  const updatedRules = [];
+  const reminders = [];
+  for (const rule of rules) {
+    if (rule.paused) continue;
+    const budgetLeft = MAX_GENERATED_PER_RUN - newTransactions.length;
+    if (rule.mode === 'auto') {
+      if (budgetLeft <= 0) break;
+      const due = occurrencesBetween(rule, lastHandled(rule), todayIso, budgetLeft);
+      if (!due.length) continue;
+      for (const date of due) {
+        const key = `${rule.id}|${date}`;
+        if (existing.has(key)) continue;
+        existing.add(key);
+        newTransactions.push(transactionFromRule(rule, date, makeId(), nowIso));
+      }
+      updatedRules.push({ ...rule, generatedThrough: due[due.length - 1] });
+    } else {
+      const due = occurrencesBetween(rule, lastHandled(rule), todayIso, 100);
+      if (due.length) reminders.push({ rule, dates: due });
+    }
+  }
+  return { newTransactions, updatedRules, reminders };
+}
+
+// Approximate monthly cost of a rule, for summaries.
+function monthlyEquivalent(rule) {
+  const f = FREQUENCIES[rule.frequency];
+  if (!f) return 0;
+  return scaleCents(rule.amount, f.perYear, 12);
+}
+
+function isFinished(rule, todayIso) {
+  return Boolean(rule.endDate && rule.endDate < todayIso && nextDue(rule) === null);
+}
+
+return { FREQUENCIES, MAX_GENERATED_PER_RUN, nthOccurrence, occurrencesBetween, nextOccurrence, lastHandled, nextDue, transactionFromRule, processRecurring, monthlyEquivalent, isFinished };
+})();
+
 // js/core/plans.js
 const __m_js_core_plans_js = (() => {
 // Plans: the nest eggs you are filling, and the trips you fill one for and
@@ -5926,349 +6648,6 @@ async function storageEstimate() {
 }
 
 return { STORES, openStorage, drafts, requestPersistence, storageEstimate, MemoryBackend };
-})();
-
-// js/core/money.js
-const __m_js_core_money_js = (() => {
-// Money is always stored as an integer number of hundredths ("cents"),
-// whatever the currency. Only display code converts to decimals, so sums
-// are exact and there is no floating-point drift.
-
-const MAX_CENTS = 100_000_000_000; // 1,000,000,000.00
-
-function isValidCents(n) {
-  return Number.isSafeInteger(n) && n > 0 && n <= MAX_CENTS;
-}
-
-function isValidSignedCents(n) {
-  return Number.isSafeInteger(n) && Math.abs(n) <= MAX_CENTS;
-}
-
-const sepCache = new Map();
-function getSeparators(locale = 'en-US') {
-  let seps = sepCache.get(locale);
-  if (!seps) {
-    seps = { group: ',', decimal: '.' };
-    try {
-      const parts = new Intl.NumberFormat(locale).formatToParts(1234567.5);
-      seps = {
-        group: parts.find((p) => p.type === 'group')?.value ?? ',',
-        decimal: parts.find((p) => p.type === 'decimal')?.value ?? '.',
-      };
-    } catch {
-      // keep defaults
-    }
-    sepCache.set(locale, seps);
-  }
-  return seps;
-}
-
-function fail(error) {
-  return { ok: false, error };
-}
-
-// Parses what a person types ("12", "12.5", "$1,234.56", "1.234,56", "(20)")
-// into cents. Returns { ok, cents, negative } or { ok: false, error }.
-function parseAmount(input, { locale = 'en-US' } = {}) {
-  let s = String(input ?? '').trim();
-  if (!s) return fail('Enter an amount.');
-
-  let negative = false;
-  if (/^\(.*\)$/.test(s)) {
-    negative = true;
-    s = s.slice(1, -1);
-  }
-  s = s
-    .replace(/[\s\u00a0\u202f]/g, '')
-    .replace(/\p{Sc}/gu, '')
-    .replace(/^[A-Z]{3}(?=[-+\u2212\d.,])/, '')
-    .replace(/([\d.,])[A-Z]{3}$/, '$1');
-
-  if (/^[-\u2212]/.test(s)) {
-    negative = !negative;
-    s = s.slice(1);
-  } else if (s.startsWith('+')) {
-    s = s.slice(1);
-  } else if (/[-\u2212]$/.test(s)) {
-    negative = !negative;
-    s = s.slice(0, -1);
-  }
-  // A currency symbol after the sign ("-$12") was already removed above.
-  s = s.replace(/['\u2019]/g, '');
-
-  if (!/^[\d.,]+$/.test(s) || !/\d/.test(s)) {
-    return fail('Use numbers only, like 12.50.');
-  }
-
-  const { group } = getSeparators(locale);
-  const lastDot = s.lastIndexOf('.');
-  const lastComma = s.lastIndexOf(',');
-  let decimalChar = null;
-  if (lastDot !== -1 && lastComma !== -1) {
-    decimalChar = lastDot > lastComma ? '.' : ',';
-  } else if (lastDot !== -1 || lastComma !== -1) {
-    const ch = lastDot !== -1 ? '.' : ',';
-    const count = s.split(ch).length - 1;
-    const digitsAfter = s.length - s.lastIndexOf(ch) - 1;
-    const looksGrouped = count > 1 || (digitsAfter === 3 && ch === group);
-    decimalChar = looksGrouped ? null : ch;
-  }
-
-  let intPart = s;
-  let fracPart = '';
-  if (decimalChar) {
-    const idx = s.lastIndexOf(decimalChar);
-    intPart = s.slice(0, idx);
-    fracPart = s.slice(idx + 1);
-    if (intPart.includes(decimalChar)) return fail('Check the number format, like 1,234.50.');
-    if (/[.,]/.test(fracPart)) return fail('Check the number format, like 1,234.50.');
-  }
-  if (/[.,]/.test(intPart)) {
-    if (!/^\d{1,3}([.,]\d{3})+$/.test(intPart)) return fail('Check the number format, like 1,234.50.');
-    const seps = new Set(intPart.replace(/\d/g, ''));
-    if (seps.size > 1) return fail('Check the number format, like 1,234.50.');
-  }
-  const digits = intPart.replace(/[.,]/g, '') || '0';
-  if (fracPart.length > 2) return fail('Use at most 2 decimal places.');
-  if (digits.replace(/^0+/, '').length > 10) return fail('That amount is too large.');
-
-  const cents = Number(digits) * 100 + Number((fracPart + '00').slice(0, 2));
-  if (cents > MAX_CENTS) return fail('That amount is too large.');
-  return { ok: true, cents, negative: negative && cents !== 0 };
-}
-
-const fmtCache = new Map();
-function currencyFormatter(currency, locale, compact, signDisplay) {
-  const key = `${currency}|${locale}|${compact}|${signDisplay}`;
-  let f = fmtCache.get(key);
-  if (f) return f;
-  const opts = { style: 'currency', currency, signDisplay };
-  if (compact) {
-    opts.notation = 'compact';
-    opts.minimumFractionDigits = 0;
-    opts.maximumFractionDigits = 1;
-  }
-  try {
-    f = new Intl.NumberFormat(locale, opts);
-  } catch {
-    try {
-      f = new Intl.NumberFormat('en-US', { ...opts, currency: 'USD' });
-    } catch {
-      f = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-    }
-  }
-  fmtCache.set(key, f);
-  return f;
-}
-
-function formatMoney(cents, { currency = 'USD', locale = 'en-US', sign = false, compact = false } = {}) {
-  const value = Number.isFinite(cents) ? cents : 0;
-  const f = currencyFormatter(currency, locale, compact, sign ? 'exceptZero' : 'auto');
-  // `+ 0` turns -0 into 0 so zero never shows as "-$0.00".
-  return f.format(value / 100 + 0);
-}
-
-function currencyDigits(currency) {
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
-  } catch {
-    return 2;
-  }
-}
-
-function isSupportedCurrency(code) {
-  if (!/^[A-Z]{3}$/.test(code)) return false;
-  try {
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: code });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// For pre-filling an input: 1250 -> "12.50" (or "12,50"), no grouping.
-function centsToInput(cents, { locale = 'en-US' } = {}) {
-  const abs = Math.abs(cents);
-  const whole = Math.floor(abs / 100);
-  const frac = abs % 100;
-  const sign = cents < 0 ? '-' : '';
-  if (frac === 0) return `${sign}${whole}`;
-  return `${sign}${whole}${getSeparators(locale).decimal}${String(frac).padStart(2, '0')}`;
-}
-
-// Machine-readable decimal for CSV export: 123450 -> "1234.50".
-function centsToDecimalString(cents) {
-  const abs = Math.abs(cents);
-  return `${cents < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
-}
-
-// Scales an amount by a rational factor with round-half-away-from-zero.
-function scaleCents(cents, numerator, denominator) {
-  const raw = (cents * numerator) / denominator;
-  return Math.sign(raw) * Math.round(Math.abs(raw));
-}
-
-return { MAX_CENTS, isValidCents, isValidSignedCents, getSeparators, parseAmount, formatMoney, currencyDigits, isSupportedCurrency, centsToInput, centsToDecimalString, scaleCents };
-})();
-
-// js/core/recurring.js
-const __m_js_core_recurring_js = (() => {
-// Recurring rules.
-//
-// rule = { id, type, amount, categoryId, accountId, note, frequency,
-//          startDate, endDate, mode: 'auto' | 'remind', paused,
-//          generatedThrough }
-//
-// Occurrence n is always computed from startDate (never chained from the
-// previous occurrence), so a rule on the 31st lands on Feb 28/29 and then
-// returns to Mar 31. `generatedThrough` is the last occurrence that was
-// logged or skipped. Together with a (ruleId, date) duplicate check, this
-// makes generation safe to run any number of times.
-
-const { addDays, addMonthsClamped, daysBetween, monthsBetween } = __m_js_core_dates_js;
-const { scaleCents } = __m_js_core_money_js;
-const FREQUENCIES = {
-  weekly: { label: 'Every week', perYear: 52 },
-  biweekly: { label: 'Every 2 weeks', perYear: 26 },
-  monthly: { label: 'Every month', perYear: 12 },
-  quarterly: { label: 'Every 3 months', perYear: 4 },
-  yearly: { label: 'Every year', perYear: 1 },
-};
-
-const MAX_ITERATIONS = 10000;
-const MAX_GENERATED_PER_RUN = 2000;
-
-function nthOccurrence(rule, n) {
-  switch (rule.frequency) {
-    case 'weekly':
-      return addDays(rule.startDate, 7 * n);
-    case 'biweekly':
-      return addDays(rule.startDate, 14 * n);
-    case 'monthly':
-      return addMonthsClamped(rule.startDate, n);
-    case 'quarterly':
-      return addMonthsClamped(rule.startDate, 3 * n);
-    case 'yearly':
-      return addMonthsClamped(rule.startDate, 12 * n);
-    default:
-      throw new Error(`Unknown frequency: ${rule.frequency}`);
-  }
-}
-
-// A safe (never too high) index to start scanning from.
-function startIndex(rule, afterExclusive) {
-  if (!afterExclusive || afterExclusive <= rule.startDate) return 0;
-  switch (rule.frequency) {
-    case 'weekly':
-      return Math.max(0, Math.floor(daysBetween(rule.startDate, afterExclusive) / 7) - 1);
-    case 'biweekly':
-      return Math.max(0, Math.floor(daysBetween(rule.startDate, afterExclusive) / 14) - 1);
-    case 'monthly':
-      return Math.max(0, monthsBetween(rule.startDate, afterExclusive) - 1);
-    case 'quarterly':
-      return Math.max(0, Math.floor(monthsBetween(rule.startDate, afterExclusive) / 3) - 1);
-    case 'yearly':
-      return Math.max(0, Math.floor(monthsBetween(rule.startDate, afterExclusive) / 12) - 1);
-    default:
-      return 0;
-  }
-}
-
-// Occurrence dates d with afterExclusive < d <= throughInclusive (and d <= endDate).
-function occurrencesBetween(rule, afterExclusive, throughInclusive, max = MAX_ITERATIONS) {
-  const out = [];
-  if (!rule.startDate || !throughInclusive || throughInclusive < rule.startDate) return out;
-  const limit = rule.endDate && rule.endDate < throughInclusive ? rule.endDate : throughInclusive;
-  let n = startIndex(rule, afterExclusive);
-  for (let i = 0; i < MAX_ITERATIONS && out.length < max; i++, n++) {
-    const d = nthOccurrence(rule, n);
-    if (d > limit) break;
-    if (!afterExclusive || d > afterExclusive) out.push(d);
-  }
-  return out;
-}
-
-function nextOccurrence(rule, afterExclusive) {
-  let n = startIndex(rule, afterExclusive);
-  for (let i = 0; i < MAX_ITERATIONS; i++, n++) {
-    const d = nthOccurrence(rule, n);
-    if (rule.endDate && d > rule.endDate) return null;
-    if (!afterExclusive || d > afterExclusive) return d;
-  }
-  return null;
-}
-
-function lastHandled(rule) {
-  return rule.generatedThrough ?? addDays(rule.startDate, -1);
-}
-
-// The next date the rule will produce, counting unhandled past dates.
-function nextDue(rule) {
-  return nextOccurrence(rule, lastHandled(rule));
-}
-
-function transactionFromRule(rule, date, id, nowIso) {
-  return {
-    id,
-    type: rule.type,
-    amount: rule.amount,
-    refund: false,
-    categoryId: rule.categoryId,
-    accountId: rule.accountId ?? null,
-    date,
-    note: rule.note ?? '',
-    recurringId: rule.id,
-    // A repeating entry belongs to no plan; set explicitly so every
-    // transaction the app creates has the same shape as one that has been
-    // through a backup and back.
-    planId: null,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-}
-
-// Creates transactions for automatic rules and lists due dates for
-// reminder rules. Pure: returns what should change, touches nothing.
-function processRecurring(rules, transactions, todayIso, makeId, nowIso) {
-  const existing = new Set();
-  for (const t of transactions) if (t.recurringId) existing.add(`${t.recurringId}|${t.date}`);
-  const newTransactions = [];
-  const updatedRules = [];
-  const reminders = [];
-  for (const rule of rules) {
-    if (rule.paused) continue;
-    const budgetLeft = MAX_GENERATED_PER_RUN - newTransactions.length;
-    if (rule.mode === 'auto') {
-      if (budgetLeft <= 0) break;
-      const due = occurrencesBetween(rule, lastHandled(rule), todayIso, budgetLeft);
-      if (!due.length) continue;
-      for (const date of due) {
-        const key = `${rule.id}|${date}`;
-        if (existing.has(key)) continue;
-        existing.add(key);
-        newTransactions.push(transactionFromRule(rule, date, makeId(), nowIso));
-      }
-      updatedRules.push({ ...rule, generatedThrough: due[due.length - 1] });
-    } else {
-      const due = occurrencesBetween(rule, lastHandled(rule), todayIso, 100);
-      if (due.length) reminders.push({ rule, dates: due });
-    }
-  }
-  return { newTransactions, updatedRules, reminders };
-}
-
-// Approximate monthly cost of a rule, for summaries.
-function monthlyEquivalent(rule) {
-  const f = FREQUENCIES[rule.frequency];
-  if (!f) return 0;
-  return scaleCents(rule.amount, f.perYear, 12);
-}
-
-function isFinished(rule, todayIso) {
-  return Boolean(rule.endDate && rule.endDate < todayIso && nextDue(rule) === null);
-}
-
-return { FREQUENCIES, MAX_GENERATED_PER_RUN, nthOccurrence, occurrencesBetween, nextOccurrence, lastHandled, nextDue, transactionFromRule, processRecurring, monthlyEquivalent, isFinished };
 })();
 
 // js/core/validate.js
@@ -8281,7 +8660,7 @@ function remindersBlock() {
   const items = state.reminders
     .map((r) => ({ ...r, cat: categoryById(r.rule.categoryId) }))
     .sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : 1));
-  return html`<section class="panel reminders" aria-labelledby="due-title">
+  return html`<section class="panel tinted reminders" style="--hue:var(--accent)" aria-labelledby="due-title">
     ${homeSectionHead('var(--accent)', SEC_ICONS.bell, 'Due to log', { id: 'due-title' })}
     <ul class="plain-list">
       ${items.map(({ rule, dates, cat }) => html`<li class="reminder">
@@ -8308,9 +8687,9 @@ function backupNudge() {
   const due = daysSince == null ? state.transactions.length >= 10 : daysSince >= backupReminderDays;
   if (!due) return '';
   return html`<aside class="nudge" role="note">
-    <p><strong>${lastExportAt ? `Last backup was ${timeAgo(lastExportAt)}.` : 'You haven’t made a backup yet.'}</strong>
-    Your data is stored only in this browser. Clearing site data would erase it.</p>
-    <button type="button" class="btn small" data-action="export-json">Download backup</button>
+    <p><strong>${lastExportAt ? `Last backup ${timeAgo(lastExportAt)}.` : 'No backup yet.'}</strong>
+    This device holds the only copy.</p>
+    <button type="button" class="btn small" data-action="export-json">Back up</button>
   </aside>`;
 }
 
@@ -8348,10 +8727,14 @@ function hero(key, monthTx, overview) {
           ariaLabel: `${percent(dayFraction)} of ${name} gone`,
         })
       : '';
-    return html`<section class="hero${ring ? ' small' : ''}">
-      ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
-      <p class="hero-line">${headline}</p>
-      <p class="hero-sub"><a href="#/budgets">Set monthly budgets</a> to see how much is left to spend.</p>
+    return html`<section class="hero${ring ? ' small' : ''}" data-state="accent">
+      <div class="hero-main">
+        ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
+        <div class="hero-say">
+          <p class="hero-line">${headline}</p>
+          <p class="hero-sub"><a href="#/budgets">Set monthly budgets</a> to see how much is left to spend.</p>
+        </div>
+      </div>
       ${figures(t)}
     </section>`;
   }
@@ -8377,20 +8760,24 @@ function hero(key, monthTx, overview) {
 
   const ratio = limit > 0 ? spent / limit : spent > 0 ? 2 : 0;
   const showRing = isCurrent || isPast;
-  return html`<section class="hero${showRing ? ' small' : ''}">
-    ${showRing
-      ? html`<div class="hero-ring-row">${progressRing({
-          ratio,
-          state: status.state,
-          dayFraction: dayOfMonth / days,
-          showDay: isCurrent,
-          centerTop: percent(Math.min(ratio, 9.99)),
-          centerBottom: ratio > 1 ? 'over' : 'used',
-          ariaLabel: `${percent(Math.min(ratio, 9.99))} of the budget used${isCurrent ? `, ${percent(dayOfMonth / days)} of the month gone` : ''}`,
-        })}</div>`
-      : ''}
-    <p class="hero-line s-${status.state}">${headline}</p>
-    <p class="hero-sub">${lines.join(' ')}</p>
+  return html`<section class="hero${showRing ? ' small' : ''}" data-state="${status.state}">
+    <div class="hero-main">
+      ${showRing
+        ? html`<div class="hero-ring-row">${progressRing({
+            ratio,
+            state: status.state,
+            dayFraction: dayOfMonth / days,
+            showDay: isCurrent,
+            centerTop: percent(Math.min(ratio, 9.99)),
+            centerBottom: ratio > 1 ? 'over' : 'used',
+            ariaLabel: `${percent(Math.min(ratio, 9.99))} of the budget used${isCurrent ? `, ${percent(dayOfMonth / days)} of the month gone` : ''}`,
+          })}</div>`
+        : ''}
+      <div class="hero-say">
+        <p class="hero-line s-${status.state}">${headline}</p>
+        <p class="hero-sub">${lines.join(' ')}</p>
+      </div>
+    </div>
     ${figures(t)}
   </section>`;
 }
@@ -8400,9 +8787,9 @@ function hero(key, monthTx, overview) {
 // card instead of three stacked ones.
 function figures(t) {
   return html`<dl class="figures compact hero-figures">
-    <div><dt>Income</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
-    <div><dt>Spending</dt><dd class="amt">${money(t.expenses)}</dd></div>
-    <div><dt>Net</dt><dd class="amt ${t.net < 0 ? 'amt-neg' : ''}">${money(t.net, { sign: true })}</dd></div>
+    <div style="--chip:var(--pos)"><dt>Income</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
+    <div style="--chip:var(--accent)"><dt>Spending</dt><dd class="amt">${money(t.expenses)}</dd></div>
+    <div style="--chip:${t.net < 0 ? 'var(--over)' : 'var(--pos)'}"><dt>Net</dt><dd class="amt ${t.net < 0 ? 'amt-neg' : 'amt-in'}">${money(t.net, { sign: true })}</dd></div>
   </dl>`;
 }
 
@@ -8415,7 +8802,7 @@ function budgetSnapshot(overview) {
   if (!rows.length) return '';
   rows.sort(compareBudgetRows);
   const shown = rows.slice(0, 5);
-  return html`<section class="panel" aria-labelledby="bud-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-budgets)" aria-labelledby="bud-title">
     ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.budgets, html`<span id="bud-title">Budgets</span>`, { link: html`<a class="link" href="#/budgets">${rows.length > shown.length ? `All ${rows.length}` : 'Details'}</a>` })}
     <ul class="plain-list budget-mini">
       ${shown.map((r) => html`<li>
@@ -8433,7 +8820,7 @@ function categoryBreakdown(monthTx) {
   const rows = spendingByCategory(monthTx, state.categories).filter((r) => r.amount > 0);
   const total = rows.reduce((s, r) => s + r.amount, 0);
   if (!total) {
-    return html`<section class="panel" aria-labelledby="cat-title">
+    return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
       ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
       <p class="muted">No spending this month yet. Categories will appear here as you log expenses.</p>
     </section>`;
@@ -8445,7 +8832,7 @@ function categoryBreakdown(monthTx) {
     return { value: r.amount, color: c.color, label: `${c.name}: ${money(r.amount)}`, cat: c, amount: r.amount };
   });
   if (rest > 0) segments.push({ value: rest, color: 'var(--ink-4)', label: `Everything else: ${money(rest)}`, cat: { name: 'Everything else', icon: '…', color: 'var(--ink-4)' }, amount: rest });
-  return html`<section class="panel" aria-labelledby="cat-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
     ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
     <div class="breakdown">
       ${donut(segments, {
@@ -8468,7 +8855,7 @@ function categoryBreakdown(monthTx) {
 function trend(key) {
   const series = monthlySeries(state.transactions, key, 6);
   const locale = state.settings.locale;
-  return html`<section class="panel" aria-labelledby="trend-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="trend-title">
     ${homeSectionHead('var(--hue-trend)', SEC_ICONS.trend, html`<span id="trend-title">Last 6 months</span>`)}
     ${barChart(
       series.map((s) => ({
@@ -8495,7 +8882,7 @@ function trend(key) {
 
 function recent(key, monthTx) {
   const list = sortedTransactions().filter((t) => isInMonth(t.date, key)).slice(0, 6);
-  return html`<section class="panel" aria-labelledby="recent-title">
+  return html`<section class="panel tinted" style="--hue:var(--hue-activity)" aria-labelledby="recent-title">
     ${homeSectionHead('var(--hue-activity)', SEC_ICONS.list, html`<span id="recent-title">Latest in ${month(key, { month: 'long' })}</span>`, { link: html`<a class="link" href="#/activity">All activity</a>`, dark: true })}
     ${list.length
       ? html`<ul class="tx-list">${list.map(txRow)}</ul>`
@@ -10070,8 +10457,9 @@ const { html, mount, $ } = __m_js_ui_html_js;
 const { toast } = __m_js_ui_overlay_js;
 const { resetCharts, hydrateCharts } = __m_js_ui_charts_js;
 const { watchPosture } = __m_js_ui_posture_js;
-const { txsInMonth, totals, spendingByCategory, sortTransactions } = __m_js_core_stats_js;
-const { monthRange, daysBetween } = __m_js_core_dates_js;
+const { sortTransactions } = __m_js_core_stats_js;
+const { monthKey, addDays } = __m_js_core_dates_js;
+const { isFinished, nextDue } = __m_js_core_recurring_js;
 const { planOrder, planProgress } = __m_js_core_plans_js;
 const { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } = __m_js_store_js;
 const { ui, viewMonth } = __m_js_views_components_js;
@@ -10082,7 +10470,7 @@ const { renderActivity, afterActivityMount, resetFilters, showMore } = __m_js_vi
 const { renderBudgets } = __m_js_views_budgets_js;
 const { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS } = __m_js_views_pages_js;
 const { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } = __m_js_views_settings_js;
-const { money, netMoney, month: monthLabel, badge } = __m_js_ui_format_js;
+const { money, month: monthLabel, badge, relativeDay, date: dayLabel } = __m_js_ui_format_js;
 const I = (d) => html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const NAV_ICONS = {
   home: I(html`<path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-5h-6v5H5a1 1 0 01-1-1z"/>`),
@@ -10164,35 +10552,57 @@ function renderShell() {
       <span class="topbar-side"><button type="button" class="icon-btn topbar-add" data-action="new-tx" aria-label="New transaction" title="New transaction (N)">${NAV_ICONS.plus}</button></span>
     </header>
     <main id="main" tabindex="-1"></main>
-    <aside class="companion" data-companion aria-label="Month at a glance"></aside>
+    <aside class="companion" data-companion aria-label="Quick actions and what's next"></aside>
     <div id="toasts" class="toasts" aria-live="polite"></div>`
   );
 }
 
 // The second page. On the Fold half-folded into book posture it *is* the
-// right-hand leaf; on a wide laptop window it's a third column. Either way
-// it's the same thing: where the month stands, and a one-tap way to log
-// something you buy often. CSS decides when there's room for it.
+// right-hand leaf; on a wide laptop window it's a third column. CSS decides
+// when there's room for it.
+//
+// It used to open with the month's net, in and out, and the top spending
+// categories — every one of which the hero and the "Where it went" donut are
+// already showing two inches to the left. The same figure twice on one screen
+// is noise, so this page now carries only what the main column doesn't: the
+// things you can *do* (log another of what you buy most, within reach of the
+// hand holding that side of the phone) and what is *coming* (the next
+// scheduled items, the nearest plan).
 function renderCompanion() {
   const el = $('[data-companion]');
   if (!el) return;
   const key = viewMonth();
-  const monthTx = txsInMonth(state.transactions, key);
-  const t = totals(monthTx);
-
-  const top = spendingByCategory(monthTx, state.categories).slice(0, 4);
-  const biggest = top[0]?.amount || 1;
   const catOf = (id) => state.categories.find((c) => c.id === id) ?? null;
-
-  // Days left in the month being viewed, and what's left to spend per day if
-  // this month's income is the budget. Past months just show the total.
-  const { end } = monthRange(key);
-  const left = Math.max(0, daysBetween(state.today, end) + 1);
-  const perDay = left > 0 && t.net > 0 ? Math.round(t.net / left) : null;
 
   // The plan with the nearest date, and what it costs a month to make it.
   const nextPlan = planOrder(state.goals).find((g) => planProgress(g, state.transactions, state.today).toSave > 0) ?? null;
   const nextProgress = nextPlan ? planProgress(nextPlan, state.transactions, state.today) : null;
+
+  // What the calendar is about to bring: the next date each repeating item
+  // falls due, soonest first. Nothing else on Home looks ahead.
+  const upcoming = state.recurring
+    .filter((r) => !isFinished(r, state.today))
+    .map((r) => ({ rule: r, date: nextDue(r) }))
+    .filter((x) => x.date)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .slice(0, 3);
+
+  // Everything else on Home is scoped to the month. Today is the one window
+  // it never shows, and it's the one you want while you're still adding to
+  // it — so this page keeps the running total for the day.
+  const todayTx = key === monthKey(state.today) ? state.transactions.filter((tx) => tx.date === state.today) : [];
+  const todaySpent = todayTx.reduce((sum, tx) => sum + (tx.type === 'expense' && !tx.refund ? tx.amount : 0), 0);
+
+  // The last seven days, one bar each. Home's trend is six months wide and
+  // its donut is by category, so the shape of the week is nowhere else.
+  const week = [];
+  for (let i = 6; i >= 0; i--) {
+    const iso = addDays(state.today, -i);
+    const spent = state.transactions.reduce((sum, tx) => sum + (tx.date === iso && tx.type === 'expense' && !tx.refund ? tx.amount : 0), 0);
+    week.push({ iso, spent, today: i === 0 });
+  }
+  const weekPeak = Math.max(...week.map((d) => d.spent), 1);
+  const weekTotal = week.reduce((s, d) => s + d.spent, 0);
 
   // The categories you've used most recently, for logging another one.
   const again = [];
@@ -10203,31 +10613,54 @@ function renderCompanion() {
     if (!cat) continue;
     seen.add(tx.categoryId);
     again.push(cat);
-    if (again.length === 3) break;
+    if (again.length === 4) break;
   }
 
   mount(
     el,
     html`<p class="companion-label">${monthLabel(key)}</p>
       ${state.transactions.length
-        ? html`<p class="companion-net ${t.net < 0 ? 's-over' : ''}">${netMoney(t.net)}</p>
-            <dl class="companion-figures">
-              <div><dt>In</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
-              <div><dt>Out</dt><dd class="amt">${money(t.expenses)}</dd></div>
-            </dl>
-            ${perDay != null
-              ? html`<p class="companion-pace">${money(perDay)} a day for the ${left === 1 ? 'last day' : `${left} days`} left</p>`
-              : html`<p class="companion-pace">${t.count === 1 ? '1 transaction' : `${t.count} transactions`} this month</p>`}
-            ${top.length
+        ? html`<div class="companion-block">
+              <h2>Log it now</h2>
+              <button type="button" class="btn primary companion-new" data-action="new-tx">${NAV_ICONS.plus}New transaction</button>
+              ${again.length
+                ? html`<div class="companion-again">
+                    ${again.map(
+                      (cat) =>
+                        html`<button type="button" class="btn companion-again-btn" data-action="log-again" data-cat="${cat.id}">${badge(cat, 'sm')}<span>${cat.name}</span></button>`
+                    )}
+                  </div>`
+                : ''}
+            </div>
+            ${key === monthKey(state.today)
               ? html`<div class="companion-block">
-                  <h2>Where it went</h2>
-                  <ul class="plain-list companion-top">
-                    ${top.map((row) => {
-                      const cat = catOf(row.categoryId);
+                  <h2>Today</h2>
+                  <p class="companion-today">${todaySpent > 0 ? money(todaySpent) : 'Nothing yet'}</p>
+                  <p class="companion-today-sub">${todayTx.length ? `${todayTx.length === 1 ? '1 entry' : `${todayTx.length} entries`} logged today` : 'Nothing logged today'}</p>
+                  <div class="companion-week" role="img" aria-label="Spending each day for the last seven days: ${week.map((d) => `${dayLabel(d.iso, { weekday: 'short' })} ${money(d.spent)}`).join(', ')}">
+                    ${week.map(
+                      (d) => html`<span class="cw-day${d.today ? ' cw-today' : ''}" title="${dayLabel(d.iso, { weekday: 'short', month: 'short', day: 'numeric' })}: ${money(d.spent)}">
+                        <i class="cw-bar" style="--h:${d.spent > 0 ? Math.max(12, Math.round((d.spent / weekPeak) * 100)) : 0}%"></i>
+                        <small>${dayLabel(d.iso, { weekday: 'narrow' })}</small>
+                      </span>`
+                    )}
+                  </div>
+                  <p class="companion-today-sub">${money(weekTotal)} over the last 7 days</p>
+                </div>`
+              : ''}
+            ${upcoming.length
+              ? html`<div class="companion-block">
+                  <h2>Coming up</h2>
+                  <ul class="plain-list companion-next">
+                    ${upcoming.map(({ rule, date }) => {
+                      const cat = catOf(rule.categoryId);
                       return html`<li>
-                        <span class="companion-top-name">${cat ? badge(cat, 'sm') : ''}${cat ? cat.name : 'Uncategorized'}</span>
-                        <span class="amt">${money(row.amount)}</span>
-                        <span class="companion-top-bar" style="--w:${Math.round((row.amount / biggest) * 100)}%"></span>
+                        ${cat ? badge(cat, 'sm') : ''}
+                        <span class="companion-next-main">
+                          <span class="companion-next-name">${rule.note || (cat ? cat.name : 'Repeating')}</span>
+                          <small>${relativeDay(date)}</small>
+                        </span>
+                        <span class="amt ${rule.type === 'income' ? 'amt-in' : ''}">${money(rule.type === 'income' ? rule.amount : -rule.amount, { sign: rule.type === 'income' })}</span>
                       </li>`;
                     })}
                   </ul>
@@ -10242,19 +10675,8 @@ function renderCompanion() {
                     ${nextProgress.perMonth ? html`<small>${money(nextProgress.perMonth)} a month to make ${monthLabel(nextPlan.targetDate.slice(0, 7))}</small>` : ''}
                   </a>
                 </div>`
-              : ''}
-            ${again.length
-              ? html`<div class="companion-block">
-                  <h2>Log another</h2>
-                  <div class="companion-again">
-                    ${again.map(
-                      (cat) =>
-                        html`<button type="button" class="btn small" data-action="log-again" data-cat="${cat.id}">${badge(cat, 'sm')}${cat.name}</button>`
-                    )}
-                  </div>
-                </div>`
               : ''}`
-        : html`<p class="companion-empty">Add your first transaction and this page keeps the running total.</p>`}`
+        : html`<p class="companion-empty">Add your first transaction and this page keeps what's next within reach.</p>`}`
   );
 }
 
@@ -10344,6 +10766,10 @@ function render({ keepScroll = false } = {}) {
     const to = ROUTE_ORDER.indexOf(route);
     document.documentElement.dataset.nav = to < from ? 'back' : 'forward';
     const t = document.startViewTransition(() => paintRoute(route, { keepScroll, changing, staggered: false }));
+    // Both promises have to be claimed. Starting a second transition before
+    // the first has settled — two quick taps, or a resize mid-navigation —
+    // rejects `ready`, and an unclaimed rejection surfaces as a page error.
+    t.ready.catch(() => {});
     t.finished.catch(() => {}).finally(() => delete document.documentElement.dataset.nav);
     return;
   }

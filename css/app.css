@@ -28,6 +28,13 @@
   --surface: #ffffff;
   --surface-2: #f2f2f7;
   --surface-3: #e9e9ee;
+  /* What a card is filled with right now. It inverts on wide screens, where
+     the content sits on its own opaque canvas — one variable rather than a
+     pile of later overrides, so a tinted card can mix its hue into whichever
+     fill is current without fighting source order. */
+  --card: var(--surface);
+  --card-tint: 10%;
+  --aura-strength: 0.32;
   --line: rgb(60 60 67 / 0.16);
   --line-strong: rgb(60 60 67 / 0.29);
   --edge: rgb(0 0 0 / 0.045);
@@ -126,6 +133,10 @@
   --surface: #1c1c1e;
   --surface-2: #2c2c2e;
   --surface-3: #3a3a3c;
+  --card: var(--surface);
+  /* Colour has to work harder against black to register at all. */
+  --card-tint: 16%;
+  --aura-strength: 0.95;
   --line: rgb(84 84 88 / 0.5);
   --line-strong: rgb(84 84 88 / 0.78);
   --edge: rgb(255 255 255 / 0.08);
@@ -660,15 +671,21 @@ main {
     grid-column: 1;
   }
 
+  :root {
+    --card: var(--surface-2);
+  }
+
   main {
     grid-column: 1;
     width: auto;
     max-width: none;
     /* The canvas. Opaque, so the glass floating over it has something worth
-       blurring, and rounded to the same scale as everything else. */
-    margin: 12px;
+       blurring, and rounded to the same scale as everything else. The top
+       margin clears the status bar: on a phone this width — the Fold opened
+       flat — there is one, and a canvas that starts at 12px runs under it. */
+    margin: calc(var(--safe-t) + 12px) 12px 12px;
     padding: calc(var(--topbar-h) + 14px) var(--pad) 56px;
-    min-height: calc(100dvh - 24px);
+    min-height: calc(100dvh - var(--safe-t) - 24px);
     border-radius: var(--r-screen);
     background: var(--surface);
     box-shadow: var(--shadow-1);
@@ -677,13 +694,18 @@ main {
   /* The toolbar belongs to the canvas: it starts and ends with it and rounds
      off with its top corners. Title on the left, add on the right, and the
      capsule floating over the middle — the two share a centre line. */
+  /* The toolbar belongs to the canvas, so it starts where the canvas does —
+     below the status bar. Its own safe-area padding has to go with it, or
+     the bar keeps a 56px box while its contents sit an inset lower, and the
+     capsule lands on the first line of the page. */
   .topbar {
     left: 0;
-    top: 12px;
+    top: calc(var(--safe-t) + 12px);
     right: calc(var(--aside-w) + 12px);
     margin-left: 12px;
     height: var(--topbar-h);
     padding: 0 12px;
+    padding-top: 0;
     justify-content: space-between;
     border-radius: var(--r-screen) var(--r-screen) 0 0;
     overflow: hidden;
@@ -787,7 +809,7 @@ main {
   }
 
   main {
-    margin: 12px 12px 12px 0;
+    margin: calc(var(--safe-t) + 12px) 12px 12px 0;
     padding-top: calc(var(--topbar-h) + 4px);
   }
 
@@ -795,10 +817,11 @@ main {
      the sidebar ends and rounds off with the canvas's own top corners. */
   .topbar {
     left: var(--rail-w);
-    top: 12px;
+    top: calc(var(--safe-t) + 12px);
     right: calc(var(--aside-w) + 12px);
     height: var(--topbar-h);
     padding: 0 20px;
+    padding-top: 0;
     justify-content: center;
     border-radius: var(--r-screen) var(--r-screen) 0 0;
     overflow: hidden;
@@ -983,6 +1006,61 @@ main {
   }
 }
 
+/* ---------- Where the capsule lives on a touch screen ---------- */
+
+/* Width alone was the wrong thing to decide this on. The Fold opened flat is
+   841px, so it took the wide layout and moved every control to the top of a
+   7.6" screen — the one place a thumb holding the phone cannot reach. Width
+   says how much room there is; the pointer says how the screen is held. So
+   on any touch screen short of the sidebar, the capsule goes back to the
+   bottom where the hand already is, and takes the add button with it.
+   Pointing devices keep the toolbar layout: a cursor reaches the top for
+   free, and a laptop wants the vertical space for content. */
+@media (pointer: coarse) and (max-width: 1119px) {
+  .tabbar {
+    position: fixed;
+    /* Centred on the content column, not the window: with the second page
+       taking 280px on the right, a capsule centred on the window straddles
+       the divide between them. */
+    left: calc(50% - var(--aside-w) / 2);
+    bottom: calc(var(--safe-b) + 10px);
+    transform: translateX(-50%);
+    width: min(440px, calc(100% - var(--aside-w) - 24px));
+    height: var(--tabbar-h);
+    grid-template-columns: repeat(5, 1fr);
+    flex: none;
+  }
+
+  /* Room for labels again down here, and they earn their place: the capsule
+     is the only navigation on screen. */
+  .tabbar a span {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    overflow: visible;
+  }
+
+  .fab {
+    display: grid;
+  }
+
+  /* Adding belongs to the capsule at this size, so the toolbar's button
+     would be the same action offered twice on one screen. */
+  .topbar-side {
+    display: none;
+  }
+
+  main {
+    padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 48px);
+  }
+
+  /* A sheet covers the page, so the capsule drops away under it again. */
+  :root[data-sheet] .tabbar {
+    transform: translateX(-50%) translateY(28px);
+  }
+}
+
 /* ---------- Page structure ---------- */
 
 .page-head {
@@ -1057,8 +1135,30 @@ main {
   padding: 18px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r);
-  background: var(--surface);
+  background: var(--card);
   box-shadow: var(--shadow-1);
+}
+
+/* Home's sections are tinted with the hue their icon chip carries, so a
+   screenful of cards reads as five different places rather than five grey
+   slabs. The tint is a wash across the top corner only — enough to colour
+   the card, never enough to touch the contrast of the text on it. */
+.panel.tinted {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--hue) var(--card-tint), transparent), transparent 62%),
+    var(--card);
+}
+
+.panel.tinted::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  border-radius: var(--r) var(--r) 0 0;
+  background: linear-gradient(90deg, var(--hue), color-mix(in srgb, var(--hue) 20%, transparent));
+  opacity: 0.85;
 }
 
 /* Anything nested inside a card takes the card's radius minus the gap it
@@ -1098,14 +1198,20 @@ main {
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 27px;
+  height: 27px;
   border-radius: var(--r-sm);
-  background: var(--hue);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--hue) 78%, white), var(--hue));
   color: #fff;
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--hue) 50%, transparent);
-  animation: pop-in 380ms var(--spring) backwards;
+  animation:
+    pop-in 380ms var(--spring) backwards,
+    chip-breathe 5.5s ease-in-out 380ms infinite;
 }
+
+/* Staggered, so the five chips on Home breathe out of step with each other
+   rather than blinking in unison. */
+.dash-col:nth-child(2) .sec-icon { animation-delay: 380ms, 1.4s; }
+.reminders .sec-icon { animation-delay: 380ms, 2.6s; }
 
 .sec-icon.on-light {
   color: #1c1c1e;
@@ -1153,12 +1259,74 @@ main {
 
 /* ---------- Hero and figures ---------- */
 
+/* The one card that has to carry the month. Two soft washes of the state's
+   own colour drift across it for as long as the screen is on, so Home is
+   never a still picture — the movement is the card breathing, not anything
+   asking to be read. */
 .hero {
-  padding: 24px 20px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 22px 20px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r-lg);
-  background: var(--surface);
+  background: var(--card);
   box-shadow: var(--shadow-1);
+}
+
+.hero::before,
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(46px) opacity(var(--aura-strength));
+  pointer-events: none;
+}
+
+.hero::before {
+  top: -34%;
+  right: -18%;
+  background: radial-gradient(circle, var(--aura-a, var(--accent)), transparent 68%);
+  animation: aurora-a 19s var(--ease-inout, ease-in-out) infinite alternate;
+}
+
+.hero::after {
+  bottom: -40%;
+  left: -20%;
+  background: radial-gradient(circle, var(--aura-b, var(--accent)), transparent 68%);
+  animation: aurora-b 26s var(--ease-inout, ease-in-out) infinite alternate;
+}
+
+/* The wash takes its colour from where the month actually stands. */
+.hero[data-state='ok'] { --aura-a: var(--bar-in); --aura-b: var(--accent); }
+.hero[data-state='warning'] { --aura-a: var(--warn); --aura-b: #ff9500; }
+.hero[data-state='over'] { --aura-a: var(--over); --aura-b: #ff2d55; }
+.hero[data-state='accent'] { --aura-a: var(--accent); --aura-b: var(--hue-budgets); }
+
+/* Ring and words share a line as soon as the content column can carry both;
+   stacked, the ring left a band of empty card either side of it. */
+.hero-main {
+  display: grid;
+  gap: 4px;
+}
+
+@container page (min-width: 430px) {
+  .hero-main {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 22px;
+  }
+
+  .hero-main .hero-ring-row {
+    margin-bottom: 0;
+  }
+
+  .hero.small .hero-line {
+    font-size: clamp(1.375rem, 4.4cqi, 2rem);
+  }
 }
 
 .hero-line {
@@ -1197,7 +1365,7 @@ main {
   padding: 16px 18px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r);
-  background: var(--surface);
+  background: var(--card);
   box-shadow: var(--shadow-1);
 }
 
@@ -1231,11 +1399,47 @@ main {
 
 /* The hero used to hand off to a separate figures card below it; now the
    numbers live inside the same card as the ring, one focal panel instead of
-   two stacked ones, set off only by a hairline. */
+   two stacked ones. Each is a tinted chip in its own money colour, so the
+   three of them read apart without a label being needed. */
 .hero-figures {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.hero-figures dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+/* On the cover screen the three figures are labelled with a dot of their
+   own colour rather than boxed: a box costs 24px of the column each, which
+   is the difference between "+$5,972.42" fitting on one line and breaking
+   across two. */
+.hero-figures dt::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chip, var(--ink-3));
+}
+
+.hero-figures dd {
+  font-size: clamp(0.9375rem, 3.9cqi, 1.1875rem);
+}
+
+/* Room for the boxes once the column is wide enough to keep the figures on
+   one line inside them. */
+@container page (min-width: 430px) {
+  .hero-figures > div {
+    padding: 9px 12px 10px;
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, var(--chip, var(--ink)) 12%, var(--card));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--ink)) 16%, transparent);
+  }
 }
 
 /* ---------- Progress ring ---------- */
@@ -1264,37 +1468,40 @@ main {
 }
 
 .ring-track {
-  stroke: var(--surface-3);
+  stroke: color-mix(in srgb, var(--ink) 9%, transparent);
 }
+
+/* Each ring is a two-stop gradient rather than one flat colour, and the
+   money state picks the pair. The day ring stays in interface colours,
+   because elapsed time is not money. */
+.hero-ring[data-state='ok'] { --ring-a: #30d158; --ring-b: #00c7a3; --ring-glow: var(--ok); }
+.hero-ring[data-state='warning'] { --ring-a: #ffb340; --ring-b: #ff8a00; --ring-glow: var(--warn); }
+.hero-ring[data-state='over'] { --ring-a: #ff6961; --ring-b: #ff2d55; --ring-glow: var(--over); }
+.hero-ring[data-state='accent'] { --ring-a: #40a2ff; --ring-b: #5e5ce6; --ring-glow: var(--accent); }
+.hero-ring { --ring2-a: #0a84ff; --ring2-b: #64d2ff; }
 
 .ring-fill,
 .ring-fill-inner {
   transition: stroke-dasharray 0.5s var(--ease);
 }
 
-.ring-fill.s-ok {
-  stroke: var(--ok);
-  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--ok) 45%, transparent));
-}
-
-.ring-fill.s-warning {
-  stroke: var(--warn);
-  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--warn) 45%, transparent));
-}
-
-.ring-fill.s-over {
-  stroke: var(--over);
-  filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--over) 55%, transparent));
-}
-
-.ring-fill.s-accent {
-  stroke: var(--accent);
-  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--accent) 40%, transparent));
+.ring-fill {
+  filter: drop-shadow(0 3px 11px color-mix(in srgb, var(--ring-glow, var(--accent)) 50%, transparent));
 }
 
 .ring-fill-inner {
-  stroke: var(--accent);
-  filter: drop-shadow(0 2px 7px color-mix(in srgb, var(--accent) 35%, transparent));
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--ring2-a) 40%, transparent));
+}
+
+/* A short specular arc travels the dial for as long as the page is open.
+   It is the one thing on Home that moves without being asked to, which is
+   what keeps the screen feeling live rather than printed. */
+.ring-sheen {
+  stroke: #fff;
+  opacity: 0.32;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: ring-orbit 6.5s linear infinite;
 }
 
 .hero-ring-center {
@@ -1355,18 +1562,34 @@ main {
 }
 
 .bar {
-  height: 8px;
-  border-radius: 4px;
-  background: var(--surface-3);
+  position: relative;
+  height: 9px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
   overflow: hidden;
 }
 
 .bar-fill {
+  position: relative;
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--ink-3);
+  overflow: hidden;
   transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* A highlight crosses each filled bar every few seconds. It is the quietest
+   of the ambient motions and the one that makes a list of budgets read as
+   live figures rather than printed ones. */
+.bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: bar-sheen 4.5s var(--ease) infinite;
 }
 
 /* ---------- Buttons ---------- */
@@ -2412,6 +2635,10 @@ dialog .toasts {
   line-height: 1.5;
 }
 
+/* The category's colour, carried properly rather than hinted at. A 17% wash
+   on white read as grey on a phone and as nothing at all against black, so
+   the fill is stronger, gradient-lit from the top corner, and ringed in the
+   full-strength hue — colour you can actually identify a category by. */
 .badge {
   flex: none;
   display: grid;
@@ -2420,7 +2647,9 @@ dialog .toasts {
   height: 38px;
   /* Proportional, so the small badge keeps the same corner as the large one. */
   border-radius: 28%;
-  background: color-mix(in srgb, var(--c, var(--ink-4)) 17%, var(--surface));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--c, var(--ink-4)) 42%, var(--card)), color-mix(in srgb, var(--c, var(--ink-4)) 22%, var(--card)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--ink-4)) 55%, transparent);
   font-size: 1.125rem;
   line-height: 1;
 }
@@ -2744,22 +2973,35 @@ dialog .toasts {
   }
 }
 
+/* A housekeeping note, not a section of the app — so it reads as a slim
+   strip rather than a card with the same weight as the month itself. */
 .nudge {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  margin: 4px 0 12px;
-  padding: 14px 16px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-  font-size: var(--t-subhead);
+  gap: 6px 14px;
+  margin: 2px 0 12px;
+  padding: 9px 10px 9px 14px;
+  border: 0;
+  border-radius: var(--pill);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: none;
+  font-size: var(--t-footnote);
+  color: var(--ink-2);
 }
 
 .nudge p {
-  flex: 1 1 260px;
+  flex: 1 1 200px;
+}
+
+.nudge strong {
+  color: var(--ink);
+}
+
+.nudge .btn {
+  min-height: 34px;
+  padding: 0 14px;
+  background: var(--card);
 }
 
 /* Donut and legend */
@@ -3343,43 +3585,132 @@ dialog .toasts {
   color: var(--ink-3);
 }
 
-.companion-net {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  margin-top: -10px;
+/* Logging is the reason to look at this page, so it leads with a full-width
+   commit button and the categories you reach for most. */
+.companion-new {
+  width: 100%;
+  margin-bottom: 10px;
 }
 
-.companion-figures {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.companion-again-btn {
+  justify-content: flex-start;
+  width: 100%;
   gap: 10px;
-  margin: 0;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  font-size: var(--t-subhead);
+  font-weight: 580;
 }
 
-.companion-figures > div {
-  padding: 10px 12px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
+.companion-again-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.companion-figures dt {
+.companion-today {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  animation: reveal-up 520ms var(--ease) backwards;
+}
+
+.companion-today-sub {
+  margin-top: 2px;
   font-size: var(--t-caption);
   color: var(--ink-3);
 }
 
-.companion-figures dd {
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 650;
+/* Seven days, one bar each. Small enough to be a sparkline, big enough to
+   see which day got away from you. */
+.companion-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+  height: 58px;
+  margin: 12px 0 8px;
 }
 
-.companion-pace {
-  font-size: 0.875rem;
+.cw-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+}
+
+/* A faint slot behind every day, so a quiet week still reads as seven days
+   rather than one lonely bar. */
+.cw-day::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 15px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.cw-bar {
+  position: relative;
+  width: 100%;
+  height: var(--h, 3%);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent));
+  transform-origin: bottom;
+  animation: grow-y 520ms var(--ease) backwards;
+}
+
+.cw-day small {
+  font-size: 0.625rem;
+  color: var(--ink-4);
+  line-height: 1;
+}
+
+/* Today keeps a slow glow of its own, so the pane has something moving in
+   it even when the ring is off screen. */
+.cw-today .cw-bar {
+  background: linear-gradient(180deg, var(--hue-activity), var(--warn));
+  animation: grow-y 520ms var(--ease) backwards, day-glow 3.4s ease-in-out 520ms infinite;
+}
+
+.cw-today small {
   color: var(--ink-2);
-  margin-top: -8px;
+  font-weight: 700;
+}
+
+.companion-next > li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 0.875rem;
+}
+
+.companion-next > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.companion-next-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.companion-next-name {
+  font-weight: 580;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companion-next-main small {
+  color: var(--ink-3);
+  font-size: var(--t-caption);
 }
 
 .companion-block h2 {
@@ -3388,41 +3719,6 @@ dialog .toasts {
   letter-spacing: 0.02em;
   color: var(--ink-3);
   margin-bottom: 8px;
-}
-
-.companion-top > li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 0 9px;
-  font-size: 0.875rem;
-}
-
-.companion-top-name {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A hairline bar under each row, scaled to the biggest category. It grows
-   from the left whenever the figures change. */
-.companion-top-bar {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: var(--w, 0%);
-  height: 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  opacity: 0.55;
-  transform-origin: left center;
-  animation: fill-x 620ms var(--ease) backwards;
 }
 
 .companion-plan {
@@ -3453,8 +3749,7 @@ dialog .toasts {
 }
 
 .companion-again {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
 }
 
@@ -3494,7 +3789,9 @@ dialog .toasts {
     align-self: start;
     height: 100dvh;
     overflow-y: auto;
-    padding: 24px var(--pad) 32px;
+    /* Clears the status bar: this column runs the full height of the window,
+       so without the inset its first line sits under the clock. */
+    padding: calc(var(--safe-t) + 24px) var(--pad) calc(var(--safe-b) + 32px);
     border-left: var(--bw) solid var(--line);
     background: var(--surface);
     animation: leaf-open 420ms var(--ease);
@@ -3866,10 +4163,80 @@ dialog .toasts {
 
 @keyframes ring-pulse {
   0%, 100% {
-    filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--over) 55%, transparent));
+    filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--ring-glow) 55%, transparent));
   }
   50% {
-    filter: drop-shadow(0 3px 20px color-mix(in srgb, var(--over) 85%, transparent));
+    filter: drop-shadow(0 3px 22px color-mix(in srgb, var(--ring-glow) 90%, transparent));
+  }
+}
+
+/* ---------- Ambient motion ---------- */
+
+/* Motion that runs on its own, with nothing touched. The app should look
+   alive when it is just sitting on the desk: light travelling round the
+   dial, colour drifting behind the month, a highlight crossing each budget
+   bar as it settles. All of it is transform, opacity or filter, and all of
+   it stops dead under reduced motion. */
+@keyframes ring-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aurora-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate3d(-12%, 9%, 0) scale(1.18);
+    opacity: 0.62;
+  }
+  100% {
+    transform: translate3d(6%, -6%, 0) scale(0.94);
+    opacity: 0.4;
+  }
+}
+
+@keyframes aurora-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.38;
+  }
+  50% {
+    transform: translate3d(14%, -10%, 0) scale(0.9);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(-8%, 8%, 0) scale(1.16);
+    opacity: 0.34;
+  }
+}
+
+@keyframes bar-sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%, 100% {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes day-glow {
+  0%, 100% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: brightness(1.22) drop-shadow(0 0 8px color-mix(in srgb, var(--hue-activity) 70%, transparent));
+  }
+}
+
+@keyframes chip-breathe {
+  0%, 100% {
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--hue) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 3px 14px color-mix(in srgb, var(--hue) 80%, transparent);
   }
 }
 
@@ -4090,7 +4457,7 @@ main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
   animation: ring-in 640ms var(--ease) 140ms backwards;
 }
 
-.ring-fill.s-over {
+.hero-ring[data-state='over'] .ring-fill {
   animation: ring-in 640ms var(--ease) backwards, ring-pulse 2.2s ease-in-out 700ms infinite;
 }
 
@@ -4114,7 +4481,7 @@ main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
    saved transaction doesn't restart the whole list. */
 main[data-enter] .tx-row,
 main[data-enter] .budget-row,
-main[data-enter] .companion-top > li {
+main[data-enter] .companion-next > li {
   animation: slide-in-left 320ms var(--ease) backwards;
 }
 
@@ -4339,7 +4706,6 @@ body {
   .hero,
   .figures,
   .nudge {
-    background: var(--surface-2);
     border-color: transparent;
     box-shadow: none;
   }
@@ -4357,11 +4723,14 @@ body {
    the canvas fill and vanish into the background. This has to sit after the
    canvas rules above, which is why it is last in the file. */
 @media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
+  :root {
+    --card: var(--surface);
+  }
+
   .panel,
   .hero,
   .figures,
   .nudge {
-    background: var(--surface);
     box-shadow: var(--shadow-1);
   }
 

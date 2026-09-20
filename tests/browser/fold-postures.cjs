@@ -91,8 +91,12 @@ const TABLETOP = { width: 701, height: 841, feature: { orientation: 'horizontal'
   expect(Boolean(compBox) && compBox.x >= 441 - 1, `facing page should sit on the right page, starts at ${compBox ? Math.round(compBox.x) : 'hidden'}`);
   const compText = (await page.textContent('.companion')).replace(/\s+/g, ' ').trim();
   step(`facing page: ${compText}`);
-  expect(/In\$|Out\$|In[0-9]/.test(compText.replace(/\s/g, '')) && /Where it went/.test(compText), 'facing page shows the month summary and where the money went');
-  expect(/Log another/.test(compText), 'facing page offers a one-tap repeat');
+  expect(/Log it now/.test(compText), 'facing page leads with logging, within reach of the hand holding that leaf');
+  // The facing page must not repeat what the left page is already showing:
+  // the hero carries the month's figures and the donut carries the
+  // categories, so seeing either again here is duplication, not a summary.
+  expect(!/Where it went/.test(compText), 'facing page should not repeat the spending breakdown');
+  expect(!/In\$|Out\$/.test(compText.replace(/\s/g, '')), 'facing page should not repeat the hero figures');
   await shot('fold-book-home');
 
   // The sheet opens on the right page, clear of the crease.
@@ -138,6 +142,49 @@ const TABLETOP = { width: 701, height: 841, feature: { orientation: 'horizontal'
   expect(Boolean(flatComp) && flatComp.width >= 240, 'the second page stays on as a column when the Fold opens flat');
   const flatMain = await box('#main');
   expect(flatMain.x + flatMain.width <= flatComp.x + 1, 'content and the second page do not overlap when flat');
+
+  // ---- Opened flat, with the phone's own status bar ----
+  //
+  // Both of these went unnoticed until the app was on the device, because a
+  // laptop has no safe-area insets and a mouse is not a thumb. Chromium
+  // can't be told to report insets, so the tokens are redefined after the
+  // stylesheet, which is the same thing as far as the layout is concerned.
+  await page.goto(BASE_URL);
+  await page.waitForSelector('.month-title');
+  // Let the route's view transition finish before measuring; starting a new
+  // one on top of it makes the browser report the old one as skipped.
+  await page.waitForTimeout(400);
+  await page.addStyleTag({ content: ':root{--safe-t:48px !important;--safe-b:24px !important;}' });
+  await page.waitForTimeout(200);
+
+  const hits = await page.evaluate(() => {
+    const r = (sel) => document.querySelector(sel)?.getBoundingClientRect() ?? null;
+    const bar = r('.tabbar');
+    const title = r('.month-title');
+    const comp = r('.companion-label');
+    const overlaps = (a, b) => !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right);
+    return {
+      barOnTitle: bar && title ? overlaps(bar, title) : null,
+      barTop: bar ? Math.round(bar.top) : null,
+      viewport: window.innerHeight,
+      canvasTop: Math.round(r('#main').top),
+      barBottomGap: bar ? Math.round(window.innerHeight - bar.bottom) : null,
+      companionTop: comp ? Math.round(comp.top) : null,
+      coarse: matchMedia('(pointer: coarse)').matches,
+    };
+  });
+  step(`flat with a status bar: ${JSON.stringify(hits)}`);
+  expect(hits.barOnTitle === false, 'the capsule must not land on the month title once the status bar is inset');
+  // The canvas is an inset card, so its own top edge has to clear the status
+  // bar — not just the text inside it, which the toolbar padding hides.
+  expect(hits.canvasTop >= 48, `the canvas must start below the status bar, starts at ${hits.canvasTop}`);
+  expect(hits.companionTop >= 48, 'the second page must start below the status bar');
+  expect(hits.barBottomGap >= 24, `the capsule must clear the gesture bar, sits ${hits.barBottomGap}px from the edge`);
+  // A 7.6" screen held in two hands: the top edge is the one place a thumb
+  // cannot get to, so the capsule belongs at the bottom on a touch screen
+  // however wide it is.
+  expect(hits.coarse && hits.barTop > hits.viewport / 2, 'on a touch screen the capsule stays within thumb reach at the bottom');
+  await shot('fold-flat-statusbar');
 
   for (const [name, geom] of [['book', BOOK], ['tabletop', TABLETOP]]) {
     await fold(geom);
