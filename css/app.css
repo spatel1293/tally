@@ -53,6 +53,18 @@
   --bar-in: #34c759;
   --bar-out: #007aff;
 
+  /* Section identity, not money: as of September 2026 the interface is no
+     longer held to a single accent everywhere. Home's sections each carry
+     one of these instead, the way iOS gives Settings rows or widgets their
+     own colour, so the eye can tell them apart without reading every word.
+     Kept clear of the money hues above (green/amber/red) and clear of
+     --accent, so nothing here is ever mistaken for a state or for the one
+     colour that means "do this". */
+  --hue-budgets: #5856d6;
+  --hue-spending: #30b0c7;
+  --hue-trend: #a2845e;
+  --hue-activity: #ffcc00;
+
   --scrim: rgb(0 0 0 / 0.28);
 
   /* Liquid glass. The rim is the tell: a bright hairline where light lands
@@ -136,6 +148,11 @@
   --goal: #0a84ff;
   --bar-in: #30d158;
   --bar-out: #0a84ff;
+
+  --hue-budgets: #7d7aff;
+  --hue-spending: #40c8e0;
+  --hue-trend: #b59469;
+  --hue-activity: #ffd60a;
 
   --scrim: rgb(0 0 0 / 0.5);
 
@@ -1069,8 +1086,48 @@ main {
   animation: stroke-in 340ms cubic-bezier(0.2, 0.9, 0.2, 1) backwards;
 }
 
+/* Home replaces the stroke with a coloured icon chip instead — each section
+   carries its own hue there, so the stroke (which reads as one more grey
+   mark) would just be doubling up on the same job. */
+.section-head.no-stroke h2::before {
+  display: none;
+}
+
+.sec-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--hue);
+  color: #fff;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--hue) 50%, transparent);
+  animation: pop-in 380ms var(--spring) backwards;
+}
+
+.sec-icon.on-light {
+  color: #1c1c1e;
+}
+
 .panel + .panel {
   margin-top: 16px;
+}
+
+/* A card a mouse can hover lifts slightly, the way a button compresses under
+   a press — the same feedback vocabulary, the other direction. Left off
+   touch screens, where there's no hover to give it. */
+@media (hover: hover) {
+  .panel,
+  .hero {
+    transition: transform 0.35s var(--spring);
+  }
+
+  .panel:hover,
+  .hero:hover {
+    transform: translateY(-3px);
+  }
 }
 
 .dash-grid {
@@ -1172,95 +1229,110 @@ main {
   box-shadow: none;
 }
 
-/* ---------- Pace track ---------- */
-
-.pace {
-  margin-top: 20px;
-  max-width: 760px;
+/* The hero used to hand off to a separate figures card below it; now the
+   numbers live inside the same card as the ring, one focal panel instead of
+   two stacked ones, set off only by a hairline. */
+.hero-figures {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 
-.pace-track {
+/* ---------- Progress ring ---------- */
+
+/* The month's headline used to be a linear track; it's now a pair of
+   concentric rings, the single boldest thing on Home and the answer to "am I
+   okay?" at a glance — Apple's own shorthand for progress, not a re-invented
+   one. Sized by the hero card's own container width (cqi), not the window,
+   for the same reason the headline figures are. */
+.hero-ring-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.hero-ring {
   position: relative;
-  height: 14px;
-  border-radius: 7px;
-  background: var(--surface-3);
-  overflow: hidden;
+  flex: none;
+  width: clamp(108px, 30cqi, 168px);
+  aspect-ratio: 1;
 }
 
-.pace-fill {
-  height: 100%;
-  border-radius: 7px;
-  background: var(--ok);
-  transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+.hero-ring svg {
+  display: block;
+  overflow: visible;
 }
 
-.pace-overflow {
+.ring-track {
+  stroke: var(--surface-3);
+}
+
+.ring-fill,
+.ring-fill-inner {
+  transition: stroke-dasharray 0.5s var(--ease);
+}
+
+.ring-fill.s-ok {
+  stroke: var(--ok);
+  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--ok) 45%, transparent));
+}
+
+.ring-fill.s-warning {
+  stroke: var(--warn);
+  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--warn) 45%, transparent));
+}
+
+.ring-fill.s-over {
+  stroke: var(--over);
+  filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--over) 55%, transparent));
+}
+
+.ring-fill.s-accent {
+  stroke: var(--accent);
+  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--accent) 40%, transparent));
+}
+
+.ring-fill-inner {
+  stroke: var(--accent);
+  filter: drop-shadow(0 2px 7px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+
+.hero-ring-center {
   position: absolute;
-  inset: 0 0 0 auto;
-  width: 22px;
-  background: repeating-linear-gradient(135deg, var(--over) 0 4px, color-mix(in srgb, var(--over) 60%, var(--surface)) 4px 8px);
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
-.pace-ruler {
-  position: relative;
-  height: 26px;
+.hero-ring-center strong {
+  font-size: clamp(1.25rem, 6.5cqi, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-.pace-ruler i {
-  position: absolute;
-  top: 3px;
-  width: 1px;
-  height: 6px;
-  background: var(--line-strong);
-}
-
-.pace-today {
-  position: absolute;
-  top: -20px;
-  width: 2px;
-  height: 26px;
-  margin-left: -1px;
-  background: var(--ink);
-  border-radius: 1px;
-}
-
-.pace-today span {
-  position: absolute;
-  top: 28px;
-  left: 50%;
-  transform: translateX(-50%);
+.hero-ring-center span {
+  margin-top: 3px;
   font-size: var(--t-caption);
-  font-weight: 600;
-  white-space: nowrap;
-  color: var(--ink-2);
-}
-
-/* Keep the label inside the track near the edges. */
-.pace-today.edge-end span {
-  transform: translateX(-100%);
-  left: 100%;
-}
-
-.pace-today.edge-start span {
-  transform: none;
-  left: 0;
+  color: var(--ink-3);
 }
 
 /* ---------- State colors for fills ---------- */
 
 .s-ok.bar-fill,
-.bar-fill.s-ok,
-.pace-fill.s-ok {
+.bar-fill.s-ok {
   background: var(--ok);
 }
 
-.bar-fill.s-warning,
-.pace-fill.s-warning {
+.bar-fill.s-warning {
   background: var(--warn);
 }
 
-.bar-fill.s-over,
-.pace-fill.s-over {
+.bar-fill.s-over {
   background: var(--over);
 }
 
@@ -3792,6 +3864,15 @@ dialog .toasts {
   }
 }
 
+@keyframes ring-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--over) 55%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 3px 20px color-mix(in srgb, var(--over) 85%, transparent));
+  }
+}
+
 @keyframes pop-in {
   from {
     opacity: 0;
@@ -3951,7 +4032,6 @@ main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
 /* Bars and budget fills wipe out from the left every time the figure
    changes. */
 .bar-fill,
-.pace-fill,
 .goal .bar-fill {
   transform-origin: left center;
   animation: fill-x 620ms var(--ease) backwards;
@@ -3996,6 +4076,26 @@ main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
 
 .donut-center {
   animation: pop-in 420ms var(--spring) 220ms backwards;
+}
+
+/* The hero ring draws in the same way the donut segments thicken into place —
+   the outer (money) ring first, the inner (day-of-month) ring just behind
+   it — and an over-budget ring keeps a slow glow going afterward so it's the
+   one thing on Home that's still moving when you glance back at it. */
+.ring-fill {
+  animation: ring-in 640ms var(--ease) backwards;
+}
+
+.ring-fill-inner {
+  animation: ring-in 640ms var(--ease) 140ms backwards;
+}
+
+.ring-fill.s-over {
+  animation: ring-in 640ms var(--ease) backwards, ring-pulse 2.2s ease-in-out 700ms infinite;
+}
+
+.hero-ring-center {
+  animation: pop-in 420ms var(--spring) 260ms backwards;
 }
 
 .legend li {

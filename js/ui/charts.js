@@ -117,20 +117,35 @@ export function donut(segments, { size = 160, stroke = 24, centerTop = '', cente
   </div>`;
 }
 
-// Month ruler: how much of the budget is gone vs. how much of the month is gone.
-export function paceTrack({ ratio, state, dayFraction, days, showToday, ariaLabel }) {
-  const fill = Math.min(1, Math.max(0, ratio));
-  const ticks = [];
-  for (let d = 7; d < days; d += 7) ticks.push(d / days);
-  return html`<div class="pace" role="img" aria-label="${ariaLabel}">
-    <div class="pace-track">
-      <div class="pace-fill s-${state}" style="width:${(fill * 100).toFixed(2)}%"></div>
-      ${ratio > 1 ? html`<div class="pace-overflow"></div>` : ''}
-    </div>
-    <div class="pace-ruler" aria-hidden="true">
-      ${ticks.map((t) => html`<i style="left:${(t * 100).toFixed(2)}%"></i>`)}
-      ${showToday ? html`<b class="pace-today ${dayFraction < 0.08 ? 'edge-start' : dayFraction > 0.92 ? 'edge-end' : ''}" style="left:${(dayFraction * 100).toFixed(2)}%"><span>Today</span></b>` : ''}
-    </div>
+// The month's headline, as concentric rings rather than a linear track — the
+// outer ring is how much of the budget is gone (colour carries the money
+// state: s-ok/s-warning/s-over), the inner ring, current month only, is how
+// far the month itself has gone, drawn in the interface's own accent since
+// elapsed time isn't income or spending. Geometry is worked out at a fixed
+// reference size; the container sizes the svg responsively with `width:100%`,
+// so the stroke scales with it rather than staying a fixed pixel width.
+export function progressRing({ size = 132, stroke = 15, ratio, state, dayFraction, showDay, centerTop, centerBottom, ariaLabel }) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const r1 = (size - stroke) / 2;
+  const c1 = 2 * Math.PI * r1;
+  const fill1 = Math.min(1, Math.max(0, ratio));
+  const dash1 = fill1 * c1;
+  const stroke2 = Math.max(7, stroke * 0.5);
+  const r2 = r1 - stroke / 2 - stroke2 / 2 - 5;
+  const c2 = 2 * Math.PI * r2;
+  const fill2 = Math.min(1, Math.max(0, dayFraction ?? 0));
+  const dash2 = fill2 * c2;
+
+  let circles = `<circle class="ring-track" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}"/>`;
+  circles += `<circle class="ring-fill s-${state}" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${dash1.toFixed(2)} ${(c1 - dash1).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+  if (showDay && r2 > 4) {
+    circles += `<circle class="ring-track" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke-width="${stroke2}"/>`;
+    circles += `<circle class="ring-fill-inner" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke-width="${stroke2}" stroke-linecap="round" stroke-dasharray="${dash2.toFixed(2)} ${(c2 - dash2).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+  }
+  return html`<div class="hero-ring" role="img" aria-label="${ariaLabel}">
+    ${raw(`<svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" aria-hidden="true" focusable="false">${circles}</svg>`)}
+    <div class="hero-ring-center" aria-hidden="true"><strong>${centerTop}</strong><span>${centerBottom}</span></div>
   </div>`;
 }
 
