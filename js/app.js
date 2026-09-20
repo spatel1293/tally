@@ -85,16 +85,19 @@ function renderShell() {
       <p class="side-foot" data-side-foot></p>
     </aside>
     <div class="banner-slot" data-banner></div>
-    <header class="topbar" data-topbar><span class="topbar-title" data-topbar-title></span></header>
+    <header class="topbar" data-topbar>
+      <span class="topbar-title" data-topbar-title></span>
+      <nav class="tabbar" aria-label="Main">
+        <a href="#/" data-route="home">${NAV_ICONS.home}<span>Home</span></a>
+        <a href="#/activity" data-route="activity">${NAV_ICONS.activity}<span>Activity</span></a>
+        <button type="button" class="fab" data-action="new-tx" aria-label="New transaction">${NAV_ICONS.plus}</button>
+        <a href="#/budgets" data-route="budgets">${NAV_ICONS.budgets}<span>Budgets</span></a>
+        <a href="#/more" data-route="more">${NAV_ICONS.more}<span>More</span></a>
+      </nav>
+      <span class="topbar-side"><button type="button" class="icon-btn topbar-add" data-action="new-tx" aria-label="New transaction" title="New transaction (N)">${NAV_ICONS.plus}</button></span>
+    </header>
     <main id="main" tabindex="-1"></main>
     <aside class="companion" data-companion aria-label="Month at a glance"></aside>
-    <nav class="tabbar" aria-label="Main">
-      <a href="#/" data-route="home">${NAV_ICONS.home}<span>Home</span></a>
-      <a href="#/activity" data-route="activity">${NAV_ICONS.activity}<span>Activity</span></a>
-      <button type="button" class="fab" data-action="new-tx" aria-label="New transaction">${NAV_ICONS.plus}</button>
-      <a href="#/budgets" data-route="budgets">${NAV_ICONS.budgets}<span>Budgets</span></a>
-      <a href="#/more" data-route="more">${NAV_ICONS.more}<span>More</span></a>
-    </nav>
     <div id="toasts" class="toasts" aria-live="polite"></div>`
   );
 }

@@ -34,7 +34,7 @@ There is no framework and no build step. Plain ES modules load directly in the b
 - `js/app.js`: hash router, shell (sidebar and tab bar), `data-action` click delegation, keyboard shortcuts, theme, service worker registration.
 - `css/app.css`: all styles.
   - Tokens live on `:root` and are overridden in `:root[data-theme='dark']`.
-  - Breakpoints: sheets become centered dialogs at ≥640px; the floating tab-bar capsule gives way to a glass nav rail (and the content lifts onto its own canvas) at ≥600px; **the second page appears at ≥820px** (the Pixel Fold opened flat); the rail widens into a full sidebar at ≥1120px; the dashboard goes two-column at 760–819px and again at ≥1180px — in between, the second page has the width instead.
+  - Breakpoints: sheets become centered dialogs at ≥640px; at ≥600px the content lifts onto its own canvas and the tab-bar capsule moves from the bottom of the screen into the toolbar (icons only, with the compact title beside it and an add button opposite); **the second page appears at ≥820px** (the Pixel Fold opened flat); the capsule gives way to a labelled sidebar at ≥1120px; the dashboard goes two-column at 760–819px and again at ≥1180px — in between, the second page has the width instead.
   - Radii come from `--r-sm/--r/--r-lg/--r-screen` and *change with the breakpoint*, so don't hardcode a corner value.
   - The liquid-glass material is `--glass*` plus the `.glass` class; every floating piece of chrome uses it.
 - `sw.js`: precaches every shipped file.
@@ -72,6 +72,24 @@ language, not "clean and modern" in general.
   `@supports` block falls back to an opaque fill where a backdrop can't be
   blurred, so nothing is ever unreadable. The tab bar is a **capsule**, not a
   bar — never restore a full-bleed bottom bar with a top border.
+- **One capsule, three homes.** `<nav class="tabbar">` is a child of
+  `.topbar`, and `position: fixed` is what lets it sit at the bottom of the
+  cover screen and of either folded leaf regardless of where it sits in the
+  markup. From 600px it goes `position: static` and is laid out *inside* the
+  toolbar, where the equal flex slots either side hold it on the centre line.
+  It drops its labels there: a labelled capsule and the compact title were
+  fighting over the same ~550px on the Fold opened flat, and the title is the
+  one carrying something the capsule can't say — which month you are looking
+  at. Because it lives in a `pointer-events: none` toolbar, the capsule sets
+  `pointer-events: auto` itself, or nothing on it is clickable.
+- **Type comes from `--t-*`,** the system's text styles: body is 17px and
+  everything else is a step on the same ladder. Don't write a bare font-size.
+- **List separators start at the text, not the edge** (`--row-inset`), drawn
+  as a background on the `<li>` so no extra element is needed. Rows fill on
+  press.
+- **The segmented control's pill slides.** One `::before` moves between the
+  options, driven by `:has()` — no script. Its `<input>` needs a z-index above
+  the label text, or the text swallows the tap.
 - **Corners are concentric with the hardware.** `--r-sm/--r/--r-lg/--r-screen`
   still step *down* as the viewport widens, because a folding phone's display
   is rounded far harder than a laptop window. Anything nested in a rounded
