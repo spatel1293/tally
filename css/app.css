@@ -1,5 +1,15 @@
-/* Tally — shaped like the device it's on: corners echo the hardware's own
-   radius, surfaces are soft and continuous, and colour is reserved for money. */
+/* Tally — designed the way Apple would design it for a folding iPhone.
+   Three ideas carry the whole look:
+     1. The chrome is liquid glass. Navigation floats above the content in
+        translucent capsules that blur and enrich what passes underneath,
+        catch a specular rim along their lit edge, and never touch the
+        screen edge. Content scrolls under glass, so the blur does real work.
+     2. Corners are concentric with the hardware. The radii still step down
+        as the viewport widens — a folding phone's display is rounded far
+        harder than a laptop window — and anything nested inside a rounded
+        shape takes its parent's radius minus the gap between them, so
+        corners run parallel instead of fighting.
+     3. Colour is the system palette, and it only ever means money. */
 
 @font-face {
   font-family: 'Public Sans';
@@ -10,115 +20,136 @@
 }
 
 :root {
-  --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font: 'Public Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
 
-  /* Warm paper under one cool signal hue. The chrome uses a single blue, so
-     the three money colours further down never compete with the interface. */
-  --bg: #f1eee8;
-  --surface: #fffefb;
-  --surface-2: #f6f3ed;
-  --surface-3: #eae5dc;
-  --line: #e4dfd5;
-  --line-strong: #cdc6b9;
-  --edge: #e4dfd5;
-  --ink: #17161a;
-  --ink-2: #44424a;
-  --ink-3: #6f6c75;
-  --ink-4: #9b98a1;
+  /* Grouped background under white cards, the way a wallet or a settings
+     screen is built: the page is the darker surface, content sits on it. */
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #f2f2f7;
+  --surface-3: #e9e9ee;
+  --line: rgb(60 60 67 / 0.16);
+  --line-strong: rgb(60 60 67 / 0.29);
+  --edge: rgb(0 0 0 / 0.045);
+  --ink: #000000;
+  --ink-2: rgb(60 60 67 / 0.78);
+  --ink-3: rgb(60 60 67 / 0.6);
+  --ink-4: rgb(60 60 67 / 0.36);
 
-  --accent: #1f43c8;
-  --accent-hover: #17349e;
+  --accent: #007aff;
+  --accent-hover: #0062cc;
   --accent-ink: #ffffff;
-  --accent-soft: #e6eafb;
+  --accent-soft: rgb(0 122 255 / 0.12);
 
-  /* Money, and only money: in, nearly out, over. */
-  --pos: #0b7a3b;
-  --ok: #0b7a3b;
-  --warn: #a86400;
-  --warn-soft: #f7e8cd;
-  --over: #c62516;
-  --over-soft: #f8dcd8;
-  --goal: #1f43c8;
-  --bar-in: #0b7a3b;
-  --bar-out: #1f43c8;
+  /* Money, and only money: in, nearly out, over. Text takes the darker
+     accessible variants so it carries on white; fills take the vivid ones. */
+  --pos: #248a3d;
+  --ok: #248a3d;
+  --warn: #b25000;
+  --warn-soft: rgb(255 149 0 / 0.16);
+  --over: #d70015;
+  --over-soft: rgb(255 59 48 / 0.14);
+  --goal: #007aff;
+  --bar-in: #34c759;
+  --bar-out: #007aff;
 
-  --scrim: rgb(23 22 26 / 0.44);
+  --scrim: rgb(0 0 0 / 0.28);
 
-  /* Depth is soft and warm — light falling across a rounded surface. */
-  --shadow-1: 0 1px 2px rgb(40 34 26 / 0.06), 0 2px 6px rgb(40 34 26 / 0.05);
-  --shadow-2: 0 2px 6px rgb(40 34 26 / 0.07), 0 10px 22px rgb(40 34 26 / 0.08);
-  --shadow: 0 6px 16px rgb(40 34 26 / 0.1), 0 26px 56px rgb(40 34 26 / 0.14);
+  /* Liquid glass. The rim is the tell: a bright hairline where light lands
+     on the lit edge, fading to nothing around the rest of the shape. */
+  --glass: rgb(255 255 255 / 0.68);
+  --glass-strong: rgb(255 255 255 / 0.84);
+  --glass-filter: saturate(180%) blur(22px);
+  --glass-rim: inset 0 0.5px 0 0 rgb(255 255 255 / 0.9), inset 0 0 0 0.5px rgb(255 255 255 / 0.4), inset 0 -0.5px 0 0 rgb(255 255 255 / 0.25);
+  --glass-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.06), 0 12px 32px rgb(0 0 0 / 0.16);
+
+  /* Soft, neutral, low-contact — a card resting on the page, not lifted off it. */
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.045), 0 1px 4px rgb(0 0 0 / 0.035);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.06), 0 10px 24px rgb(0 0 0 / 0.08);
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.14), 0 40px 80px rgb(0 0 0 / 0.18);
   --ring: 0 0 0 4px var(--accent-soft);
   --bw: 1px;
 
-  /* Corners match the screen they sit on. A phone's display is rounded far
-     more than a laptop window is, so the radii move with the breakpoints
-     (see the Radius scale below). These are the phone values. */
+  /* Corners match the screen they sit on. These are the folding phone's
+     cover-screen values, the hardest-rounded of the three. */
   --r-sm: 12px;
-  --r: 22px;
-  --r-lg: 30px;
+  --r: 20px;
+  --r-lg: 28px;
+  --r-screen: 40px;
   --pill: 999px;
 
-  /* Slight overshoot, so things arrive rather than just stop. */
-  --spring: cubic-bezier(0.2, 0.9, 0.25, 1.15);
-  --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease: cubic-bezier(0.2, 0.85, 0.25, 1);
-  --tabbar-h: 68px;
-  --rail-w: 88px;
+  /* Apple's motion: a real spring for things that arrive, and the sheet
+     curve — fast to leave, long to settle — for things that travel. */
+  --spring: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.98 57.1%, 0.998 69.8%, 1.004 76.9%, 1);
+  --bounce: linear(0, 0.004, 0.016, 0.035, 0.063, 0.098, 0.141 11.6%, 0.25, 0.391, 0.563, 0.765, 1 44.1%, 1.06, 1.104, 1.132, 1.145, 1.143, 1.128, 1.11 71.2%, 1.062, 1.039, 1.025, 1.013, 1.004, 1);
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+
+  --aside-w: 0px;
+  --tabbar-h: 60px;
+  --topbar-h: 52px;
+  --rail-w: 84px;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
   --pad: 16px;
 
   color-scheme: light;
 }
 
 :root[data-theme='dark'] {
-  --bg: #100f13;
-  --surface: #1a191f;
-  --surface-2: #212027;
-  --surface-3: #2b2a33;
-  --line: #302f39;
-  --line-strong: #474655;
-  --edge: #302f39;
-  --ink: #f3f1f6;
-  --ink-2: #c8c5d0;
-  --ink-3: #97949f;
-  --ink-4: #6a6773;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --line: rgb(84 84 88 / 0.5);
+  --line-strong: rgb(84 84 88 / 0.78);
+  --edge: rgb(255 255 255 / 0.08);
+  --ink: #ffffff;
+  --ink-2: rgb(235 235 245 / 0.72);
+  --ink-3: rgb(235 235 245 / 0.56);
+  --ink-4: rgb(235 235 245 / 0.32);
 
-  --accent: #8aa2ff;
-  --accent-hover: #a7b9ff;
-  --accent-ink: #0d1330;
-  --accent-soft: #242b4c;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --accent-ink: #ffffff;
+  --accent-soft: rgb(10 132 255 / 0.22);
 
-  --pos: #45c178;
-  --ok: #45c178;
-  --warn: #e0a233;
-  --warn-soft: #3a2c12;
-  --over: #f4604c;
-  --over-soft: #3d1a16;
-  --goal: #8aa2ff;
-  --bar-in: #45c178;
-  --bar-out: #8aa2ff;
+  --pos: #30d158;
+  --ok: #30d158;
+  --warn: #ff9f0a;
+  --warn-soft: rgb(255 159 10 / 0.2);
+  --over: #ff453a;
+  --over-soft: rgb(255 69 58 / 0.2);
+  --goal: #0a84ff;
+  --bar-in: #30d158;
+  --bar-out: #0a84ff;
 
-  --scrim: rgb(0 0 0 / 0.66);
+  --scrim: rgb(0 0 0 / 0.5);
 
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 6px rgb(0 0 0 / 0.28);
-  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.45), 0 10px 22px rgb(0 0 0 / 0.38);
-  --shadow: 0 6px 16px rgb(0 0 0 / 0.5), 0 26px 56px rgb(0 0 0 / 0.55);
+  --glass: rgb(30 30 32 / 0.68);
+  --glass-strong: rgb(30 30 32 / 0.86);
+  --glass-rim: inset 0 0.5px 0 0 rgb(255 255 255 / 0.18), inset 0 0 0 0.5px rgb(255 255 255 / 0.09), inset 0 -0.5px 0 0 rgb(255 255 255 / 0.05);
+  --glass-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.12), 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.55);
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 1px 4px rgb(0 0 0 / 0.35);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.5), 0 10px 24px rgb(0 0 0 / 0.45);
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.6), 0 40px 80px rgb(0 0 0 / 0.65);
   color-scheme: dark;
 }
 
 /* ---------- Radius scale ---------- */
 
-/* The one idea the look is built on: the app's corners should match the
-   corners of the screen it is running on. A Pixel Fold's cover screen is
-   rounded hard, its inner screen a little less, a laptop window least of
-   all — so the radii step down as the viewport widens. */
+/* The corners of the app track the corners of the screen it is running on.
+   A folding phone's cover screen is rounded hard, its inner screen a little
+   less, a laptop window least of all — so every radius steps down together
+   as the viewport widens, and nothing hardcodes a corner. */
 
 @media (min-width: 600px) {
   :root {
-    --r-sm: 12px;
-    --r: 20px;
-    --r-lg: 26px;
+    --r-sm: 11px;
+    --r: 18px;
+    --r-lg: 24px;
+    --r-screen: 30px;
   }
 }
 
@@ -126,7 +157,27 @@
   :root {
     --r-sm: 10px;
     --r: 14px;
-    --r-lg: 18px;
+    --r-lg: 20px;
+    --r-screen: 20px;
+  }
+}
+
+/* ---------- Liquid glass ---------- */
+
+/* One material, used by every piece of floating chrome: the tab bar, the
+   title bar, the rail, sheets and toasts. Translucent and saturating, with
+   a specular rim along the lit edge. Where a browser can't blur a backdrop
+   the fill falls back to opaque, so nothing ever turns unreadable. */
+.glass {
+  background: var(--glass-strong);
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
   }
 }
 
@@ -322,7 +373,7 @@ main:focus-visible {
 }
 
 main {
-  padding: 12px var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 40px);
+  padding: calc(var(--topbar-h) + var(--safe-t) + 4px) var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 56px);
   max-width: 720px;
   margin: 0 auto;
   outline: none;
@@ -340,58 +391,156 @@ main {
   display: none;
 }
 
+/* ---------- Title bar ---------- */
+
+/* Sits over the content rather than above it, so the page scrolls beneath
+   the glass. It is invisible until the large page title has scrolled away,
+   and then fades in carrying that title in compact form — the same handover
+   the system apps make. Both halves are always in the DOM; only opacity and
+   a small slide move, so the swap costs nothing. */
+.topbar {
+  position: fixed;
+  z-index: 25;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--topbar-h) + var(--safe-t));
+  padding-top: var(--safe-t);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* The glass itself is a separate layer so it can fade without taking the
+   title's own transition with it. */
+.topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass);
+  box-shadow: var(--glass-rim), 0 1px 0 0 var(--line);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .topbar::before {
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
+  }
+}
+
+.topbar[data-scrolled]::before {
+  opacity: 1;
+}
+
+.topbar-title {
+  position: relative;
+  max-width: calc(100% - 96px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.26s var(--ease), transform 0.26s var(--ease);
+}
+
+.topbar[data-scrolled] .topbar-title {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- Tab bar ---------- */
+
+/* A capsule floating clear of the screen edge, not a bar welded to it. On a
+   display this rounded, chrome that runs into the corners fights them; held
+   inside its own radius it sits in the same family as the hardware. */
 .tabbar {
   position: fixed;
   z-index: 20;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-  height: calc(var(--tabbar-h) + var(--safe-b));
-  padding-bottom: var(--safe-b);
+  left: 50%;
+  bottom: calc(var(--safe-b) + 10px);
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 24px));
+  height: var(--tabbar-h);
+  border-radius: var(--pill);
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   align-items: center;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border-top: var(--bw) solid var(--edge);
+  background: var(--glass-strong);
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+  transition: transform 0.4s var(--ease), opacity 0.3s var(--ease);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .tabbar {
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
+  }
 }
 
 .tabbar a {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 6px 0;
+  height: 100%;
+  padding: 0;
   color: var(--ink-3);
   text-decoration: none;
-  font-size: 0.6875rem;
-  font-weight: 560;
-  letter-spacing: 0.01em;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  transition: color 0.2s var(--ease);
+}
+
+.tabbar a svg {
+  transition: transform 0.4s var(--spring);
 }
 
 .tabbar a[aria-current='page'] {
   color: var(--accent);
 }
 
+.tabbar a[aria-current='page'] svg {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.tabbar a:active svg {
+  transform: scale(0.88);
+  transition-duration: 0.1s;
+}
+
+/* The add button breaks the capsule's plane, which is what makes it read as
+   the one thing on the bar that does something rather than goes somewhere. */
 .fab {
   justify-self: center;
-  width: 56px;
-  height: 56px;
-  margin-top: -18px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
-  border: var(--bw) solid var(--edge);
+  border: 0;
   border-radius: var(--pill);
   background: var(--accent);
   color: var(--accent-ink);
-  box-shadow: var(--shadow-2);
-  transition: transform 0.16s var(--spring), box-shadow 0.16s var(--spring);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 6px 16px color-mix(in srgb, var(--accent) 38%, transparent);
+  transition: transform 0.4s var(--spring), box-shadow 0.2s var(--ease), background-color 0.2s var(--ease);
 }
 
 .fab svg {
-  transition: transform 0.24s var(--spring);
+  transition: transform 0.45s var(--spring);
+}
+
+.fab:hover {
+  background: var(--accent-hover);
 }
 
 .fab:hover svg {
@@ -399,8 +548,9 @@ main {
 }
 
 .fab:active {
-  transform: scale(0.9);
-  box-shadow: var(--shadow-1);
+  transform: scale(0.88);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 2px 6px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition-duration: 0.1s;
 }
 
 .banner {
@@ -420,9 +570,11 @@ main {
   }
 }
 
-/* 600–899px: the Fold's inner screen and other medium widths get a slim
-   navigation rail instead of the bottom tab bar, so content can use the
-   full width. Laptops widen the rail into a full sidebar at 900px. */
+/* 600px and up — the folding phone opened flat, and every laptop window.
+   The bottom capsule gives way to a glass rail down the side, and the
+   content lifts onto its own canvas: a rounded, opaque sheet inset from the
+   window with the rail's glass visible beside it. That inset is what makes
+   the radius read; a full-bleed page has no corners to be concentric with. */
 @media (min-width: 600px) {
   :root {
     --pad: 24px;
@@ -432,6 +584,7 @@ main {
     display: grid;
     grid-template-columns: var(--rail-w) minmax(0, 1fr);
     grid-template-rows: auto 1fr;
+    gap: 0;
   }
 
   .sidebar {
@@ -442,10 +595,17 @@ main {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
-    padding: 16px 8px;
-    border-right: var(--bw) solid var(--edge);
-    background: var(--surface);
+    gap: 10px;
+    padding: calc(var(--safe-t) + 14px) 10px 14px;
+    background: var(--glass);
+    box-shadow: inset -0.5px 0 0 0 var(--line);
+  }
+
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .sidebar {
+      -webkit-backdrop-filter: var(--glass-filter);
+      backdrop-filter: var(--glass-filter);
+    }
   }
 
   .banner-slot {
@@ -456,7 +616,31 @@ main {
     grid-column: 2;
     width: 100%;
     max-width: 1120px;
-    padding: 20px var(--pad) 64px;
+    /* The canvas. Opaque, so the glass rail beside it has something worth
+       blurring, and rounded to the same scale as everything else. */
+    margin: 12px 12px 12px 0;
+    padding: calc(var(--topbar-h) + 4px) var(--pad) 56px;
+    min-height: calc(100dvh - 24px);
+    border-radius: var(--r-screen);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+  }
+
+  /* The title bar belongs to the canvas now, so it starts where the rail
+     ends and rounds off with it. */
+  .topbar {
+    left: var(--rail-w);
+    top: 12px;
+    right: calc(var(--aside-w) + 12px);
+    height: var(--topbar-h);
+    padding-top: 0;
+    margin-left: 12px;
+    border-radius: var(--r-screen) var(--r-screen) 0 0;
+    overflow: hidden;
+  }
+
+  .topbar::before {
+    box-shadow: var(--glass-rim), 0 1px 0 0 var(--line);
   }
 
   .tabbar {
@@ -469,6 +653,7 @@ main {
     --pad: 32px;
   }
 }
+
 
 /* The rail only widens into a full sidebar once the window can carry the
    sidebar, the content and the second page at once. Below that the rail
@@ -508,20 +693,22 @@ main {
   flex: none;
   width: 32px;
   height: 32px;
-  padding: 2px;
-  border: var(--bw) solid var(--edge);
-  border-radius: 10px;
+  padding: 3px;
+  border: 0;
+  /* A squircle in the app-icon family, not a rounded rectangle. */
+  border-radius: 24%;
   background: var(--accent);
   color: var(--accent-ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.14), 0 3px 10px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .rail-cta {
   flex-direction: column;
   gap: 2px;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   padding: 0;
-  border-radius: 16px;
+  border-radius: var(--pill);
 }
 
 .rail-cta svg {
@@ -547,26 +734,32 @@ main {
   justify-content: center;
   gap: 3px;
   width: 100%;
-  padding: 7px 2px;
+  padding: 8px 2px;
   border-radius: var(--r-sm);
   color: var(--ink-2);
   text-decoration: none;
-  font-weight: 560;
+  font-weight: 580;
   font-size: 0.6875rem;
   line-height: 1.15;
   text-align: center;
   text-wrap: balance;
+  transition: background-color 0.18s var(--ease), color 0.18s var(--ease), transform 0.3s var(--spring);
 }
 
 .side-nav a:hover {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
+}
+
+.side-nav a:active {
+  transform: scale(0.94);
+  transition-duration: 0.1s;
 }
 
 .side-nav a[aria-current='page'] {
   background: var(--accent-soft);
   color: var(--accent);
-  font-weight: 620;
+  font-weight: 640;
 }
 
 .side-nav .sep {
@@ -639,15 +832,18 @@ main {
 
 .page-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
   min-height: 48px;
-  margin: 4px 0 12px;
+  margin: 8px 0 16px;
 }
 
 .page-head h1 {
-  font-size: 1.75rem;
+  font-size: 2.125rem;
+  font-weight: 730;
+  letter-spacing: -0.022em;
+  line-height: 1.1;
 }
 
 .page-actions {
@@ -665,7 +861,9 @@ main {
 }
 
 .month-title {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 730;
+  letter-spacing: -0.02em;
   min-width: 0;
   padding: 0 4px;
 }
@@ -705,6 +903,12 @@ main {
   border-radius: var(--r);
   background: var(--surface);
   box-shadow: var(--shadow-1);
+}
+
+/* Anything nested inside a card takes the card's radius minus the gap it
+   sits in, so the two curves run parallel instead of crossing. */
+.panel {
+  --r-nested: max(var(--r-sm), calc(var(--r) - 18px));
 }
 
 /* A single tally stroke marks every section heading. */
@@ -758,12 +962,12 @@ main {
   border: var(--bw) solid var(--edge);
   border-radius: var(--r-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-1);
 }
 
 .hero-line {
   font-size: clamp(1.625rem, 6.2cqi, 2.375rem);
-  font-weight: 680;
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.025em;
   max-width: 22ch;
@@ -813,8 +1017,8 @@ main {
 
 .figures dd {
   font-size: clamp(1.0625rem, 4.2cqi, 1.375rem);
-  font-weight: 620;
-  letter-spacing: -0.01em;
+  font-weight: 660;
+  letter-spacing: -0.015em;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -956,36 +1160,37 @@ main {
 
 /* ---------- Buttons ---------- */
 
+/* Secondary by default: a tinted capsule, no drawn border and no lift.
+   Weight comes from the fill, which is how the system separates a button
+   that suggests from a button that commits. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-height: 44px;
-  padding: 0 16px;
-  border: var(--bw) solid var(--edge);
+  padding: 0 18px;
+  border: 0;
   border-radius: var(--pill);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink);
   font-weight: 620;
   font-size: 0.9375rem;
+  letter-spacing: -0.01em;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: var(--shadow-1);
-  transition: background-color 0.14s ease, transform 0.14s var(--spring), box-shadow 0.14s var(--spring);
+  transition: background-color 0.18s var(--ease), transform 0.4s var(--spring), opacity 0.18s var(--ease);
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--surface-2);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-2);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 /* Pressing compresses the button under your finger and lets it spring back. */
 .btn:active:not(:disabled) {
-  transform: scale(0.955);
-  box-shadow: var(--shadow-1);
-  transition-duration: 0.08s;
+  transform: scale(0.94);
+  opacity: 0.75;
+  transition-duration: 0.1s;
 }
 
 .btn:disabled {
@@ -1000,8 +1205,8 @@ main {
 
 .btn.primary {
   background: var(--accent);
-  border-color: var(--edge);
   color: var(--accent-ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .btn.primary:hover:not(:disabled) {
@@ -1010,26 +1215,16 @@ main {
 
 .btn.danger {
   background: var(--over);
-  border-color: var(--over);
   color: #fff;
-}
-
-:root[data-theme='dark'] .btn.danger {
-  color: #1a0806;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 4px 14px color-mix(in srgb, var(--over) 30%, transparent);
 }
 
 .btn.ghost {
   background: transparent;
-  border-color: transparent;
-  box-shadow: none;
 }
 
 .btn.ghost:hover:not(:disabled) {
-  box-shadow: none;
-}
-
-.btn.ghost:hover:not(:disabled) {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .btn.danger-text {
@@ -1038,9 +1233,9 @@ main {
 
 .btn.small {
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 14px;
   font-size: 0.875rem;
-  border-radius: var(--r-sm);
+  border-radius: var(--pill);
 }
 
 .btn.block {
@@ -1158,12 +1353,12 @@ input:not([type='radio']):not([type='checkbox']),
 select,
 textarea {
   width: 100%;
-  min-height: 46px;
-  padding: 10px 12px;
+  min-height: 48px;
+  padding: 11px 14px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r-sm);
-  background: var(--surface-2);
-  transition: box-shadow 0.14s var(--ease), background-color 0.14s ease;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  transition: box-shadow 0.18s var(--ease), background-color 0.18s var(--ease);
   font-size: 1rem;
   appearance: none;
   -webkit-appearance: none;
@@ -1189,9 +1384,9 @@ input:not([type='radio']):not([type='checkbox']):focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--edge);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  box-shadow: var(--ring);
 }
 
 [aria-invalid='true'] {
@@ -1531,22 +1726,36 @@ dialog.sheet[open] {
 }
 
 .sheet-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   max-height: 94dvh;
-  border: var(--bw) solid var(--edge);
-  border-bottom: 0;
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  border: 0;
+  border-radius: var(--r-screen) var(--r-screen) 0 0;
   background: var(--surface);
   box-shadow: var(--shadow);
-  animation: sheet-up 0.34s var(--spring);
+  animation: sheet-up 0.5s var(--ease);
+}
+
+/* The grabber. It says the card can be dragged away before you try, which
+   is the whole reason the system draws one. */
+.sheet-panel::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  border-radius: var(--pill);
+  background: var(--ink-4);
+  transform: translateX(-50%);
 }
 
 @keyframes sheet-up {
   from {
-    transform: translateY(64px);
-    opacity: 0;
+    transform: translateY(100%);
   }
 }
 
@@ -1565,7 +1774,7 @@ dialog[open]::backdrop {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 8px 4px 20px;
+  padding: 18px 8px 4px 20px;
 }
 
 .sheet-head h2 {
@@ -1599,9 +1808,14 @@ dialog[open]::backdrop {
   .sheet-panel {
     max-width: 480px;
     max-height: min(820px, 92dvh);
-    border: var(--bw) solid var(--edge);
+    border: 0;
     border-radius: var(--r-lg);
-    animation-name: sheet-pop;
+    animation: sheet-pop 0.44s var(--spring);
+  }
+
+  /* Centred in a window it is a dialog, not a card you can flick away. */
+  .sheet-panel::before {
+    display: none;
   }
 
   dialog.sheet.wide .sheet-panel {
@@ -1614,7 +1828,7 @@ dialog[open]::backdrop {
 
   @keyframes sheet-pop {
     from {
-      transform: translate(-10px, 14px) scale(0.97);
+      transform: scale(0.92);
       opacity: 0;
     }
   }
@@ -1745,7 +1959,7 @@ dialog.confirm[open] {
   position: fixed;
   z-index: 60;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
+  bottom: calc(var(--tabbar-h) + var(--safe-b) + 22px);
   transform: translateX(-50%);
   width: min(560px, calc(100% - 24px));
   display: flex;
@@ -1761,24 +1975,43 @@ dialog.confirm[open] {
   }
 }
 
+/* A glass capsule, the same material as the bar it floats above. */
 .toast {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
-  padding: 8px 8px 8px 16px;
-  border-radius: var(--r);
-  background: var(--ink);
-  color: var(--bg);
-  box-shadow: var(--shadow);
+  min-height: 50px;
+  padding: 7px 7px 7px 18px;
+  border-radius: var(--pill);
+  background: var(--glass-strong);
+  color: var(--ink);
+  box-shadow: var(--glass-rim), var(--shadow);
   pointer-events: auto;
-  animation: sheet-up 0.2s ease;
+  animation: toast-in 0.44s var(--spring);
   font-size: 0.9375rem;
+  font-weight: 560;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .toast {
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(16px) scale(0.9);
+    opacity: 0;
+  }
 }
 
 .toast.error {
   background: var(--over);
   color: #fff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .toast-msg {
@@ -1788,12 +2021,18 @@ dialog.confirm[open] {
 .toast-action {
   flex: none;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 0;
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--bg) 16%, transparent);
+  border-radius: var(--pill);
+  background: color-mix(in srgb, currentColor 14%, transparent);
   color: inherit;
   font-weight: 650;
+  transition: transform 0.35s var(--spring), background-color 0.18s var(--ease);
+}
+
+.toast-action:active {
+  transform: scale(0.92);
+  transition-duration: 0.1s;
 }
 
 /* Inside an open dialog (top layer) toasts sit at the bottom of the viewport. */
@@ -2220,7 +2459,7 @@ dialog .toasts {
   padding: 14px 16px;
   border: var(--bw) solid var(--edge);
   border-radius: var(--r);
-  background: var(--warn-soft);
+  background: var(--surface);
   box-shadow: var(--shadow-1);
   font-size: 0.9375rem;
 }
@@ -2940,8 +3179,12 @@ dialog .toasts {
    phone spends most of its life in, so it gets the second page too — the
    half-folded spread below is the same idea, not a separate feature. */
 @media (min-width: 820px) {
+  :root {
+    --aside-w: 280px;
+  }
+
   .app {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, 280px);
+    grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, var(--aside-w));
   }
 
   main {
@@ -3006,12 +3249,30 @@ dialog .toasts {
   main {
     /* Sit against the outer edge, not centred across the crease. */
     margin: 0;
-    padding: 12px var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 40px);
+    padding: calc(var(--topbar-h) + var(--safe-t) + 4px) var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 48px);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    min-height: 0;
+  }
+
+  /* Both bars belong to the left leaf: the capsule centres in that page, and
+     the title bar stops at the crease instead of reaching across it. */
+  .topbar {
+    left: 0;
+    top: 0;
+    right: auto;
+    width: var(--page-w);
+    margin-left: 0;
+    height: calc(var(--topbar-h) + var(--safe-t));
+    padding-top: var(--safe-t);
+    border-radius: 0;
   }
 
   .tabbar {
     display: grid;
-    width: var(--page-w);
+    left: calc(var(--page-w) / 2);
+    width: min(420px, calc(var(--page-w) - 24px));
   }
 
   /* A page is phone-width even though the viewport spans both, so type that
@@ -3113,7 +3374,23 @@ dialog .toasts {
 
   main {
     max-width: none;
-    padding: 12px var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 40px);
+    padding: calc(var(--topbar-h) + var(--safe-t) + 4px) var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 48px);
+    margin: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    min-height: 0;
+  }
+
+  .topbar {
+    left: 0;
+    top: 0;
+    right: 0;
+    width: auto;
+    margin-left: 0;
+    height: calc(var(--topbar-h) + var(--safe-t));
+    padding-top: var(--safe-t);
+    border-radius: 0;
   }
 
   .tabbar {
@@ -3234,31 +3511,35 @@ dialog .toasts {
   }
 }
 
+/* Screens push sideways in the direction you're travelling — the screen you
+   leave slides out the way you came from, the new one arrives from the far
+   side. The offset stays a fraction of the width rather than a full screen,
+   so nothing ever escapes the content column on a folded phone. */
 @keyframes page-out {
   to {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateX(-24%);
   }
 }
 
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateX(24%);
   }
 }
 
 @keyframes page-out-back {
   to {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateX(24%);
   }
 }
 
 @keyframes page-in-back {
   from {
     opacity: 0;
-    transform: translateY(-14px);
+    transform: translateX(-24%);
   }
 }
 
@@ -3272,7 +3553,7 @@ main {
 }
 
 ::view-transition-group(page) {
-  animation-duration: 300ms;
+  animation-duration: 360ms;
 }
 
 ::view-transition-image-pair(page) {
@@ -3287,11 +3568,11 @@ main {
 }
 
 ::view-transition-old(page) {
-  animation: page-out 160ms var(--ease) both;
+  animation: page-out 190ms var(--ease) both;
 }
 
 ::view-transition-new(page) {
-  animation: page-in 300ms var(--ease) 60ms both;
+  animation: page-in 360ms var(--ease) 50ms both;
 }
 
 /* Going back reverses the direction. Separate keyframes rather than
@@ -3309,7 +3590,7 @@ main {
    top first. Set only on a route change (app.js), so saving a transaction
    doesn't replay the whole page. */
 main[data-enter] > * {
-  animation: rise 360ms var(--ease) backwards;
+  animation: rise 420ms var(--spring) backwards;
 }
 
 main[data-enter] > *:nth-child(2) { animation-delay: 50ms; }
@@ -3416,28 +3697,12 @@ main[data-enter] .tx-row:nth-child(n + 6) { animation-delay: 190ms; }
 
 /* The tab bar's current page is underlined by a stroke that springs out from
    the middle, and its icon lifts. */
-.tabbar a::after {
-  content: '';
-  display: block;
-  width: 18px;
-  height: 3px;
-  margin-top: 3px;
-  border-radius: 999px;
-  background: currentColor;
-  transform: scaleX(0);
-  transition: transform 280ms var(--bounce);
-}
-
-.tabbar a[aria-current='page']::after {
-  transform: scaleX(1);
-}
-
 .tabbar a svg {
-  transition: transform 280ms var(--bounce);
+  transition: transform 280ms var(--spring);
 }
 
 .tabbar a[aria-current='page'] svg {
-  transform: translateY(-2px) scale(1.08);
+  transform: translateY(-1px) scale(1.06);
 }
 
 .tabbar a:active svg {
@@ -3551,5 +3816,132 @@ textarea {
 
   main {
     padding: 0;
+  }
+}
+
+
+/* ---------- Presenting a sheet ---------- */
+
+/* A sheet doesn't just cover the page, it pushes it back a step: the page
+   shrinks into a rounded card and the black behind it shows through at the
+   edges, so the two read as a stack rather than as one flat screen. The
+   bottom capsule drops away at the same time, since nothing on it is
+   reachable while a sheet is up. */
+.app {
+  background: var(--bg);
+  transform-origin: top center;
+  transition: transform 0.5s var(--ease), border-radius 0.5s var(--ease);
+}
+
+body {
+  transition: background-color 0.5s var(--ease);
+}
+
+:root[data-sheet] body {
+  background: #000;
+}
+
+:root[data-sheet] .app {
+  transform: translateY(10px) scale(0.93);
+  border-radius: var(--r-screen);
+  overflow: clip;
+}
+
+:root[data-sheet] .tabbar {
+  opacity: 0;
+  transform: translateX(-50%) translateY(28px);
+}
+
+/* The receded card is content only. Both bars go with it — and the title bar
+   has to, because shrinking the page reparents anything fixed inside it and
+   would otherwise strand the bar at the top of the document. */
+:root[data-sheet] .topbar {
+  opacity: 0;
+}
+
+.topbar {
+  transition: opacity 0.3s var(--ease);
+}
+
+/* Half-folded, each leaf already has its own job and the sheet takes a whole
+   leaf rather than covering the page, so there is nothing to push back. */
+@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
+  :root[data-sheet] .app {
+    transform: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  :root[data-sheet] body {
+    background: var(--bg);
+  }
+
+  :root[data-sheet] .tabbar {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+
+  :root[data-sheet] .topbar {
+    opacity: 1;
+  }
+}
+
+
+/* ---------- Cards on the canvas ---------- */
+
+/* With the content lifted onto an opaque canvas, the cards on it can no
+   longer be the same white — so the ladder inverts one step: the canvas
+   takes the lighter surface and the cards take the grouped one. Same
+   contrast, same reading order. */
+@media (min-width: 600px) {
+  .panel,
+  .hero,
+  .figures,
+  .nudge {
+    background: var(--surface-2);
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  .figures.compact {
+    background: none;
+  }
+}
+
+/* ---------- Cards on a leaf ---------- */
+
+/* Half-folded, a leaf is phone-sized and there is no canvas to lift the
+   content onto — so the ladder goes back the way round it is on the cover
+   screen: page underneath, white cards on top. Without this the cards keep
+   the canvas fill and vanish into the background. This has to sit after the
+   canvas rules above, which is why it is last in the file. */
+@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
+  .panel,
+  .hero,
+  .figures,
+  .nudge {
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+  }
+
+  .figures.compact {
+    background: none;
+    box-shadow: none;
+  }
+}
+
+/* Standing on a table the sheet is a card you can flick away again, so the
+   grabber comes back and the corners match the cover screen's. */
+@media (vertical-viewport-segments: 2) {
+  .sheet-panel {
+    border-radius: var(--r-screen) var(--r-screen) 0 0;
+  }
+
+  .sheet-panel::before {
+    display: block;
+  }
+
+  .sheet-head {
+    padding-top: 18px;
   }
 }

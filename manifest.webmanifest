@@ -8,8 +8,8 @@
   "display": "standalone",
   "orientation": "any",
   "launch_handler": { "client_mode": "focus-existing" },
-  "background_color": "#F1EEE8",
-  "theme_color": "#F1EEE8",
+  "background_color": "#F2F2F7",
+  "theme_color": "#F2F2F7",
   "categories": ["finance", "productivity"],
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },

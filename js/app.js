@@ -53,7 +53,7 @@ const SECONDARY = new Set(MORE_LINKS.map((l) => l.route).concat('more'));
 const SIDEBAR = [
   ['home', 'Home'], ['activity', 'Activity'], ['budgets', 'Budgets'],
   null,
-  ['recurring', 'Repeating'], ['goals', 'Plans'], ['accounts', 'Accounts'], ['review', 'Year in review'],
+  ['recurring', 'Repeating'], ['goals', 'Plans'], ['accounts', 'Accounts'], ['review', 'Review'],
   null,
   ['categories', 'Categories'], ['settings', 'Settings'],
 ];
@@ -85,6 +85,7 @@ function renderShell() {
       <p class="side-foot" data-side-foot></p>
     </aside>
     <div class="banner-slot" data-banner></div>
+    <header class="topbar" data-topbar><span class="topbar-title" data-topbar-title></span></header>
     <main id="main" tabindex="-1"></main>
     <aside class="companion" data-companion aria-label="Month at a glance"></aside>
     <nav class="tabbar" aria-label="Main">
@@ -195,6 +196,7 @@ function updateChrome(route) {
     else a.removeAttribute('aria-current');
   }
   document.title = route === 'home' ? 'Tally' : `${ROUTES[route].title} – Tally`;
+  watchPageTitle(ROUTES[route].title);
 
   const banner = $('[data-banner]');
   if (banner) {
@@ -215,6 +217,41 @@ function updateChrome(route) {
         : 'Not backed up yet'
       : '';
   }
+}
+
+// The large page title hands over to the compact one in the title bar as it
+// scrolls out of reach — the page's own heading stays the real one, and the
+// bar only takes over once that heading has gone. An observer on the heading
+// does this without listening to scroll, so it costs nothing while idle.
+let titleObserver;
+
+function watchPageTitle(fallback) {
+  const bar = $('[data-topbar]');
+  if (!bar) return;
+  titleObserver?.disconnect();
+  const heading = $('#main h1');
+  // The bar repeats the screen's own heading, so on Home it carries the
+  // month rather than the word "Home" — the same thing you just scrolled
+  // past, which is what makes the handover read as one title moving.
+  $('[data-topbar-title]').textContent = heading?.textContent.trim() || fallback;
+  if (!heading) {
+    bar.dataset.scrolled = '1';
+    return;
+  }
+  delete bar.dataset.scrolled;
+  // Measured, not assumed, because the bar's height changes with the safe
+  // area and the breakpoint. Clamped at zero: while a sheet is up the page
+  // is transformed, which reparents the fixed bar and can put its bottom
+  // above the viewport — and a negative rootMargin is a syntax error.
+  const edge = Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) || 52;
+  titleObserver = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting) delete bar.dataset.scrolled;
+      else bar.dataset.scrolled = '1';
+    },
+    { rootMargin: `-${edge}px 0px 0px 0px`, threshold: 0 }
+  );
+  titleObserver.observe(heading);
 }
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -291,7 +328,7 @@ function applyTheme() {
   const pref = state.settings.theme;
   const dark = pref === 'dark' || (pref === 'system' && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#100F13' : '#F1EEE8');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#000000' : '#F2F2F7');
   try {
     localStorage.setItem('tally:theme', pref);
   } catch {

@@ -56,6 +56,20 @@ const monthStart = (offset) => {
     if (overflow > 0) problems.push(`${hash} overflows by ${overflow}px`);
     await page.screenshot({ path: SHOTS + name + '.png' });
   }
+  // The large title hands over to the compact one in the title bar once it
+  // has scrolled out of reach, and hands back on the way up.
+  await page.goto(BASE_URL + '#/activity');
+  await page.waitForSelector('.tx-row');
+  if (await page.locator('.topbar[data-scrolled]').count()) problems.push('title bar took over before the heading scrolled away');
+  await page.mouse.wheel(0, 700);
+  await page.waitForSelector('.topbar[data-scrolled]', { timeout: 5000 });
+  const barTitle = (await page.textContent('.topbar-title')).trim();
+  console.log('STEP title bar took over: ' + barTitle);
+  if (barTitle !== 'Activity') problems.push(`title bar should repeat the screen's heading, got "${barTitle}"`);
+  await page.screenshot({ path: SHOTS + 'p10-title-bar.png' });
+  await page.mouse.wheel(0, -1200);
+  await page.waitForSelector('.topbar[data-scrolled]', { state: 'detached', timeout: 5000 });
+
   await page.goto(BASE_URL + '#/recurring');
   await page.click('main [data-action=new-rule]');
   await page.waitForTimeout(300);

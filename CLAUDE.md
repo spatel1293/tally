@@ -34,8 +34,9 @@ There is no framework and no build step. Plain ES modules load directly in the b
 - `js/app.js`: hash router, shell (sidebar and tab bar), `data-action` click delegation, keyboard shortcuts, theme, service worker registration.
 - `css/app.css`: all styles.
   - Tokens live on `:root` and are overridden in `:root[data-theme='dark']`.
-  - Breakpoints: sheets become centered dialogs at ≥640px; the bottom tab bar becomes a nav rail at ≥600px; **the second page appears at ≥820px** (the Pixel Fold opened flat); the rail widens into a full sidebar at ≥1120px; the dashboard goes two-column at 760–819px and again at ≥1180px — in between, the second page has the width instead.
-  - Radii come from `--r-sm/--r/--r-lg` and *change with the breakpoint*, so don't hardcode a corner value.
+  - Breakpoints: sheets become centered dialogs at ≥640px; the floating tab-bar capsule gives way to a glass nav rail (and the content lifts onto its own canvas) at ≥600px; **the second page appears at ≥820px** (the Pixel Fold opened flat); the rail widens into a full sidebar at ≥1120px; the dashboard goes two-column at 760–819px and again at ≥1180px — in between, the second page has the width instead.
+  - Radii come from `--r-sm/--r/--r-lg/--r-screen` and *change with the breakpoint*, so don't hardcode a corner value.
+  - The liquid-glass material is `--glass*` plus the `.glass` class; every floating piece of chrome uses it.
 - `sw.js`: precaches every shipped file.
 - `scripts/`: `serve.js` (dev server), `build-single-file.js` (a small bundler), `browser-test.js`.
 
@@ -58,17 +59,58 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
 ## Design
 
-**Shaped like the device it's on**, adopted September 2026 after the owner rejected the original flat "quiet ledger", a soft indigo/violet version ("meh purplish"), and a squared-off neo-brutalist version. Don't go back to any of the three.
+**What Apple would ship on a folding iPhone**, adopted September 2026 at the
+owner's request, replacing the flat "quiet ledger", the indigo/violet round,
+the neo-brutalist "ink and paper" round and its warm-paper successor. Don't go
+back to any of them. Take the reference literally: this is the system design
+language, not "clean and modern" in general.
 
-- **The one idea: the app's corners match the corners of the screen it's running on.** A phone display is rounded hard, a laptop window barely at all, so `--r-sm/--r/--r-lg` step *down* as the viewport widens (the Radius scale block near the top of `css/app.css`). Always use the tokens; a hardcoded `border-radius` breaks the idea on one of the devices.
-- **Colour still only ever means money.** Green is money coming in, amber is nearing a limit, red is over. The interface itself uses one hue — a deep signal blue (`--accent`) — and nothing else is tinted, so those three read instantly. Never add a second decorative colour.
-- **Depth is soft and warm**, not stamped and not frosted: `--shadow-1/-2/--shadow` are layered warm shadows. Pressing something compresses it (`scale(0.955)`) and lets it spring back. Edges are a 1px hairline (`--bw`, `--edge`), not a hard rule.
-- **The motif is the tally stroke.** Section headings carry one (`.panel > h2::before`), the tab bar marks the current page with one, and the brand mark draws its five strokes in sequence.
-- **Links need underlines**, not colour — `.link` carries a rule of its own.
-- **Category colours** (`PALETTE` in `core/defaults.js`) are printer's inks for chart identity only, deliberately containing no strong red or green so a category swatch is never mistaken for a signal.
-- **Structure:** sections are cards (`.panel`, `.hero`, `.figures`); rows *inside* a card stay hairline-separated. Tabular figures (`.amt`) wherever numbers appear.
-- **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate card per list row, arrows in button text, and middle-dot separators in text.
-- **A card inside a card** is the usual mistake: `.figures.compact` exists because that one already sits inside a `.panel`.
+- **The chrome is liquid glass.** Navigation floats *above* the content in
+  translucent pieces that blur and saturate whatever scrolls under them, carry
+  a specular rim along the lit edge, and never touch the screen edge. The
+  `.glass` class and the `--glass-*` tokens are the one definition; a
+  `@supports` block falls back to an opaque fill where a backdrop can't be
+  blurred, so nothing is ever unreadable. The tab bar is a **capsule**, not a
+  bar — never restore a full-bleed bottom bar with a top border.
+- **Corners are concentric with the hardware.** `--r-sm/--r/--r-lg/--r-screen`
+  still step *down* as the viewport widens, because a folding phone's display
+  is rounded far harder than a laptop window. Anything nested in a rounded
+  shape takes the parent's radius minus the gap (`--r-nested` on `.panel`), so
+  curves run parallel. A hardcoded `border-radius` breaks this on one device.
+- **Colour is the system palette, and only ever means money.** Green in, amber
+  near a limit, red over — the darker accessible variants for text, the vivid
+  ones for fills. The interface itself uses one hue, system blue (`--accent`),
+  and nothing else is tinted. The backup reminder is deliberately *not* amber.
+- **Surfaces are a ladder, and it inverts on wide screens.** On a phone the
+  page is the grouped background and cards are white. From 600px the content
+  lifts onto an opaque **canvas** inset from the window with the glass rail
+  beside it, so the cards step to `--surface-2` instead. That override lives at
+  the very end of `css/app.css` — it has to come after `.panel`, or source
+  order hands the plain rule the win.
+- **Large titles hand over on scroll.** `.topbar` is invisible until the
+  screen's own `h1` scrolls under it, then fades in carrying that heading's
+  text (so Home's bar reads "September 2026", not "Home"). `watchPageTitle()`
+  in `app.js` does this with an IntersectionObserver on the heading, not a
+  scroll listener.
+- **A sheet pushes the page back a step.** `overlay.js` sets `data-sheet` on
+  `<html>`; CSS shrinks `.app` into a rounded card against black and drops the
+  tab bar. It's switched off in both folded postures, where the sheet takes a
+  whole leaf and there is nothing to push back.
+- **Depth is fill plus a soft neutral shadow**, not a drawn border and not a
+  stamped offset block. Buttons are capsules: tinted by default, filled for
+  the one that commits, and they compress under a press.
+- **The motif is the tally stroke**, kept to section headings
+  (`.panel > h2::before`) and the brand mark. It is deliberately *not* on the
+  tab bar any more — that marks the current page with tint and a lifted icon,
+  the way the system does.
+- **Links need underlines**, not colour.
+- **Category colours** (`PALETTE` in `core/defaults.js`) are printer's inks for
+  chart identity only, with no strong red or green, so a swatch is never
+  mistaken for a signal.
+- **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate
+  card per list row, arrows in button text, and middle-dot separators.
+- **A card inside a card** is the usual mistake: `.figures.compact` exists
+  because that one already sits inside a `.panel`.
 
 ### Plans
 
@@ -96,7 +138,16 @@ It carries the month's net, in and out, what's left to spend per day, where the 
 
 Animation is load-bearing here, not decoration — see the `Motion` section of `css/app.css`.
 
-- **Route changes use the View Transitions API.** Only `main` is given a `view-transition-name`, so the rail, tab bar and second page stay live while the screen slides across. `app.js` sets `data-nav="forward" | "back"` on `<html>` for the duration.
+- **The easings are the system's.** `--spring` and `--bounce` are real spring
+  curves written as `linear()`, and `--ease` is the sheet curve
+  (`cubic-bezier(0.32, 0.72, 0, 1)`) — fast to leave, long to settle. Reach for
+  those rather than inventing a curve.
+- **Route changes push sideways** through the View Transitions API, in the
+  direction you're travelling. Only `main` is given a `view-transition-name`,
+  so the rail, tab bar and second page stay live while the screen slides
+  across. `app.js` sets `data-nav="forward" | "back"` on `<html>` for the
+  duration. The slide is a *fraction* of the width, not a full screen, so it
+  can't escape the content column on a folded phone.
 - **The stagger is the fallback.** `main[data-enter]` is set only when there's no view transition to play, and only on a route change — otherwise saving a transaction replays the whole page.
 - Figures wipe upward (`reveal-up`) by **masking, never by counting**, so the number on screen is always the real one and tests can read it at any moment.
 - Bars, chart columns and donut segments **re-animate whenever their figures change** — that's deliberate feedback that a save landed.

@@ -64,6 +64,12 @@ export function openSheet({ title, body, footer = null, onMount, onClose, size =
   if (!dialog.dataset.wired) {
     dialog.dataset.wired = '1';
     closeOnBackdrop(dialog, () => current?.close());
+    // The page behind recedes while a sheet is up; CSS does the work off
+    // this flag. `close` fires however the sheet goes away — button, back
+    // gesture or backdrop — so the flag can never be left behind.
+    dialog.addEventListener('close', () => {
+      delete document.documentElement.dataset.sheet;
+    });
     dialog.addEventListener('cancel', (e) => {
       e.preventDefault();
       current?.close();
@@ -75,6 +81,7 @@ export function openSheet({ title, body, footer = null, onMount, onClose, size =
 
   current = controller;
   dialog.showModal();
+  document.documentElement.dataset.sheet = '1';
   onMount?.(dialog, controller);
   return controller;
 }
