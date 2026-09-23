@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v3.3.0';
+const VERSION = 'tally-v4.0.0';
 
 const FILES = [
   './',
@@ -20,6 +20,8 @@ const FILES = [
   './js/app.js',
   './js/store.js',
   './js/storage.js',
+  './js/vault.js',
+  './js/core/advisor.js',
   './js/core/csv.js',
   './js/core/dates.js',
   './js/core/defaults.js',
@@ -34,6 +36,7 @@ const FILES = [
   './js/ui/overlay.js',
   './js/ui/posture.js',
   './js/views/activity.js',
+  './js/views/advisor.js',
   './js/views/budgets.js',
   './js/views/components.js',
   './js/views/forms.js',

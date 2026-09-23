@@ -5,7 +5,7 @@
 // and nothing is shown as saved that wasn't.
 
 import { openStorage, requestPersistence, STORES } from './storage.js';
-import { defaultCategories, DEFAULT_SETTINGS, makeId } from './core/defaults.js';
+import { defaultCategories, DEFAULT_SETTINGS, makeId, newAccount } from './core/defaults.js';
 import { todayISO, addDays } from './core/dates.js';
 import { processRecurring, transactionFromRule, MAX_GENERATED_PER_RUN } from './core/recurring.js';
 import { sanitizeSettings } from './core/validate.js';
@@ -271,7 +271,7 @@ export async function saveAccount(value, id = null) {
   const existing = id ? state.accounts.find((a) => a.id === id) : null;
   const record = existing
     ? { ...existing, ...value }
-    : { id: makeId(), ...value, order: state.accounts.length ? Math.max(...state.accounts.map((a) => a.order ?? 0)) + 1 : 0 };
+    : newAccount({ id: makeId(), ...value, order: state.accounts.length ? Math.max(...state.accounts.map((a) => a.order ?? 0)) + 1 : 0 });
   await commit([put('accounts', record)]);
   state.accounts = (existing ? state.accounts.map((a) => (a.id === id ? record : a)) : [...state.accounts, record]).sort(byOrder);
   emit();
@@ -373,7 +373,7 @@ export async function saveGoal(value, id = null) {
   // two need to match.
   const record = existing
     ? { ...existing, ...value }
-    : { id: makeId(), kind: 'fund', saved: 0, targetDate: null, startDate: null, endDate: null, ...value, createdAt: nowIso() };
+    : { id: makeId(), kind: 'fund', saved: 0, targetDate: null, startDate: null, endDate: null, apyBp: 0, allocBp: 0, accountId: null, ...value, createdAt: nowIso() };
   await commit([put('goals', record)]);
   state.goals = existing ? state.goals.map((g) => (g.id === id ? record : g)) : [...state.goals, record];
   emit();

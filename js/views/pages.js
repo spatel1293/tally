@@ -1,24 +1,28 @@
 import { html, mount, $ } from '../ui/html.js';
 import { state } from '../store.js';
 import { accountBalances, yearReview, yearsWithData, sortTransactions } from '../core/stats.js';
-import { planProgress, monthlySurplus, projectPlans, requiredMonthly, planTransactions, PLAN_KINDS } from '../core/plans.js';
+import { planProgress, monthlySurplus, projectPlans, requiredMonthly, planTransactions, PLAN_KINDS, planKind, allocate, BP, projectGrowth } from '../core/plans.js';
+import { REVIEW_EVERY_DAYS } from '../core/advisor.js';
 import { FREQUENCIES, nextDue, monthlyEquivalent, isFinished } from '../core/recurring.js';
-import { ACCOUNT_KINDS } from '../core/defaults.js';
-import { formatMonth } from '../core/dates.js';
+import { ACCOUNT_KINDS, ACCOUNT_ROLES } from '../core/defaults.js';
+import { formatMonth, daysBetween } from '../core/dates.js';
 import { centsToInput, parseAmount } from '../core/money.js';
 import { money, badge, categoryById, date, plural, percent, timeAgo, month, relativeDay } from '../ui/format.js';
-import { progressBar, barChart } from '../ui/charts.js';
-import { pageHead, emptyState, icons } from './components.js';
+import { progressBar, barChart, progressRing } from '../ui/charts.js';
+import { pageHead, emptyState, icons, ui, homeSectionHead, SEC_ICONS } from './components.js';
 import { remindersBlock } from './home.js';
+import { milestoneTable } from './advisor.js';
+import { vaultAvailable, vaultExists, isUnlocked } from '../vault.js';
 
 // ---------- More (phone menu) ----------
 
 export const MORE_LINKS = [
+  { route: 'advisor', label: 'Advisor', desc: 'Runway, checklist and five years out' },
+  { route: 'activity', label: 'Activity', desc: 'Every transaction, searchable' },
+  { route: 'budgets', label: 'Budgets', desc: 'Monthly limits by category' },
   { route: 'recurring', label: 'Repeating', desc: 'Rent, salary, subscriptions' },
-  { route: 'categories', label: 'Categories', desc: 'Names, colors, icons and order' },
-  { route: 'accounts', label: 'Accounts', desc: 'Checking, cards, cash and balances' },
-  { route: 'goals', label: 'Plans', desc: 'Nest eggs, trips and what-ifs' },
   { route: 'review', label: 'Year in review', desc: 'How the year added up' },
+  { route: 'categories', label: 'Categories', desc: 'Names, colors, icons and order' },
   { route: 'settings', label: 'Settings and backup', desc: 'Currency, theme, export and import' },
 ];
 
@@ -122,36 +126,150 @@ export function renderCategories() {
     </section>`;
 }
 
-// ---------- Accounts ----------
+// ---------- Accounts and the vault ----------
+
+// Every account with its job, its rate, whether the login has a second
+// step, and — sealed — the numbers and the login itself. The sealed part is
+// rendered as an empty slot and filled after the page mounts, because
+// opening it is asynchronous and only possible while the vault is unlocked.
+
+const ROLE_HUE = { hub: 'var(--accent)', spending: 'var(--hue-activity)', savings: 'var(--hue-spending)', investing: 'var(--hue-budgets)', other: 'var(--ink-3)' };
+
+function vaultStrip() {
+  if (!vaultAvailable()) {
+    return html`<aside class="nudge vault-strip" role="note"><p><strong>Vault unavailable here.</strong> Account numbers and logins need the installed app or an https address.</p></aside>`;
+  }
+  if (!vaultExists()) {
+    return html`<aside class="nudge vault-strip" role="note">
+      <p><strong>No vault yet.</strong> Choose a passphrase and account numbers and logins can live here, sealed.</p>
+      <button type="button" class="btn small primary" data-action="vault-create">Set a passphrase</button>
+    </aside>`;
+  }
+  return isUnlocked()
+    ? html`<aside class="nudge vault-strip open" role="note"><p><strong>Vault open.</strong> It locks itself in a few minutes, or when the app leaves the screen.</p><button type="button" class="btn small" data-action="vault-lock">Lock now</button></aside>`
+    : html`<aside class="nudge vault-strip" role="note"><p><strong>Vault locked.</strong> Account numbers and logins are sealed until you open it.</p><button type="button" class="btn small primary" data-action="vault-unlock">Unlock</button></aside>`;
+}
+
+function reviewedLabel(a) {
+  if (!a.reviewedAt) return { text: 'Never reviewed', stale: true };
+  const days = daysBetween(a.reviewedAt, state.today);
+  return { text: `Reviewed ${relativeDay(a.reviewedAt)}`, stale: days > REVIEW_EVERY_DAYS };
+}
+
+function accountCard(a, balance, selected) {
+  const rev = reviewedLabel(a);
+  const held = state.goals.filter((g) => g.accountId === a.id);
+  return html`<li class="panel acct-card${selected ? ' selected' : ''}" style="--hue:${ROLE_HUE[a.role] ?? ROLE_HUE.other}">
+    <button type="button" class="acct-head" data-action="select-account" data-id="${a.id}">
+      <span class="badge acct" aria-hidden="true">${(a.institution || a.name).slice(0, 1).toUpperCase()}</span>
+      <span class="tx-main">
+        <span class="tx-title">${a.name}</span>
+        <span class="tx-sub"><span>${a.institution || ACCOUNT_KINDS[a.kind] || 'Account'}</span><span>${ACCOUNT_ROLES[a.role] ?? 'Other'}</span></span>
+      </span>
+      <span class="amt ${balance < 0 ? 'amt-neg' : ''}">${money(balance)}</span>
+    </button>
+    <ul class="plain-list acct-meta">
+      ${a.apyBp ? html`<li class="tag good">${(a.apyBp / 100).toFixed(2)}% APY</li>` : html`<li class="tag">No yield</li>`}
+      <li class="tag ${a.mfa ? 'good' : 'bad'}">${a.mfa ? '2-step on' : 'No 2-step'}</li>
+      <li class="tag ${rev.stale ? 'bad' : ''}">${rev.text}</li>
+      ${held.length ? html`<li class="tag">${held.length === 1 ? `Holds ${held[0].name}` : `Holds ${held.length} plans`}</li>` : ''}
+      ${a.vault ? html`<li class="tag">${SEC_ICONS.lock}Sealed details</li>` : ''}
+    </ul>
+  </li>`;
+}
+
+// The masked, sealed fields. Filled in by fillVaultFields() once the vault
+// is open; until then the slot says why it's empty.
+export function accountDetail(a) {
+  const rev = reviewedLabel(a);
+  const held = state.goals.filter((g) => g.accountId === a.id);
+  return html`<div class="acct-detail" data-account-detail="${a.id}">
+    <div class="acct-detail-head">
+      <span class="badge acct" aria-hidden="true" style="--hue:${ROLE_HUE[a.role] ?? ROLE_HUE.other}">${(a.institution || a.name).slice(0, 1).toUpperCase()}</span>
+      <div>
+        <h2>${a.name}</h2>
+        <p class="muted small">${[a.institution, ACCOUNT_KINDS[a.kind], ACCOUNT_ROLES[a.role]].filter(Boolean).join(' · ')}</p>
+      </div>
+    </div>
+    <dl class="detail-rows">
+      <div><dt>Yield</dt><dd>${a.apyBp ? `${(a.apyBp / 100).toFixed(2)}% a year` : 'None recorded'}</dd></div>
+      <div><dt>Sign-in</dt><dd class="${a.mfa ? 's-ok' : 's-over'}">${a.mfa ? 'Two-step on' : 'No second step'}</dd></div>
+      <div><dt>Last review</dt><dd class="${rev.stale ? 's-warning' : ''}">${rev.text}${rev.stale ? ' — rates move' : ''}</dd></div>
+      ${held.length ? html`<div><dt>Holds</dt><dd>${held.map((g) => g.name).join(', ')}</dd></div>` : ''}
+      ${a.notes ? html`<div><dt>Notes</dt><dd class="prewrap">${a.notes}</dd></div>` : ''}
+    </dl>
+    <div class="btn-row">
+      <button type="button" class="btn small" data-action="mark-reviewed" data-id="${a.id}">Mark reviewed today</button>
+      <button type="button" class="btn small ghost" data-action="edit-account" data-id="${a.id}">Edit</button>
+    </div>
+    <section class="vault-box" aria-label="Sealed details">
+      <h3>${SEC_ICONS.lock}Sealed details</h3>
+      <div data-vault-fields="${a.id}">${vaultSlotMessage(a)}</div>
+    </section>
+  </div>`;
+}
+
+function vaultSlotMessage(a) {
+  if (!vaultAvailable()) return html`<p class="muted small">Needs the installed app or an https address.</p>`;
+  if (!vaultExists()) return html`<p class="muted small">Set a passphrase to keep the account number and login here.</p><button type="button" class="btn small primary" data-action="vault-create">Set a passphrase</button>`;
+  if (!isUnlocked()) return html`<p class="muted small">${a.vault ? 'Sealed. Unlock the vault to see them.' : 'Nothing sealed for this account yet.'}</p><button type="button" class="btn small primary" data-action="vault-unlock">Unlock</button>`;
+  if (!a.vault) return html`<p class="muted small">Nothing sealed for this account yet.</p><button type="button" class="btn small" data-action="edit-account" data-id="${a.id}">Add the details</button>`;
+  return html`<p class="muted small">Opening…</p>`;
+}
+
+const VAULT_FIELDS = [
+  ['accountNumber', 'Account number'],
+  ['routingNumber', 'Routing number'],
+  ['username', 'Username'],
+  ['password', 'Password'],
+  ['notes', 'Private notes'],
+];
+
+// A secret shows its last four and nothing else until asked. On the cover
+// screen it never shows more than that: a screen this small is read in a
+// queue or on a table, and the full number waits for the inner screen.
+export function vaultFieldsMarkup(values) {
+  const rows = VAULT_FIELDS.filter(([k]) => values?.[k]);
+  if (!rows.length) return html`<p class="muted small">Nothing sealed for this account yet.</p>`;
+  return html`<dl class="vault-fields">
+    ${rows.map(([k, label]) => {
+      const v = String(values[k]);
+      const last = k === 'notes' ? '' : v.slice(-4);
+      return html`<div>
+        <dt>${label}</dt>
+        <dd>
+          <span class="secret" data-secret="${v}" data-masked="${k === 'notes' ? '••••••' : `•••• ${last}`}">${k === 'notes' ? '••••••' : `•••• ${last}`}</span>
+          <span class="secret-actions">
+            <button type="button" class="btn small ghost" data-action="reveal-secret">Show</button>
+            <button type="button" class="btn small ghost" data-action="copy-secret" aria-label="Copy ${label}">Copy</button>
+          </span>
+        </dd>
+      </div>`;
+    })}
+    <p class="muted small cover-only">Unfold to see a full number.</p>
+  </dl>`;
+}
 
 export function renderAccounts() {
   const head = pageHead('Accounts', html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Add</button>`);
   if (!state.accounts.length) {
-    return html`${head}${emptyState({
-      title: 'Accounts are optional',
-      body: 'Add checking, credit cards or cash to see a balance for each. With two or more, the add form asks which one you used.',
+    return html`${head}${vaultStrip()}${emptyState({
+      title: 'Your accounts, in one place',
+      body: 'Which institution, what each account is for, what it earns, whether the login has a second step — and, sealed with a passphrase, the account number and login themselves.',
       actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Add an account</button>`,
     })}`;
   }
   const { balances, unassigned, total } = accountBalances(state.accounts, state.transactions);
+  const selected = ui.selectedAccount && state.accounts.find((a) => a.id === ui.selectedAccount) ? ui.selectedAccount : null;
   return html`${head}
+    ${vaultStrip()}
     <section class="hero small">
       <p class="hero-line ${total < 0 ? 's-over' : ''}">${money(total)} across ${plural(state.accounts.length, 'account')}</p>
       ${unassigned !== 0 ? html`<p class="hero-sub">Transactions without an account add up to ${money(unassigned, { sign: true })} and aren’t included.</p>` : ''}
     </section>
-    <ul class="plain-list card-list">
-      ${state.accounts.map((a) => {
-        const bal = balances.get(a.id) ?? 0;
-        const count = state.transactions.filter((t) => t.accountId === a.id).length;
-        return html`<li><button type="button" class="list-btn" data-action="edit-account" data-id="${a.id}">
-          <span class="badge acct" aria-hidden="true">${a.name.slice(0, 1).toUpperCase()}</span>
-          <span class="tx-main">
-            <span class="tx-title">${a.name}</span>
-            <span class="tx-sub"><span>${ACCOUNT_KINDS[a.kind] ?? 'Other'}</span><span>${plural(count, 'transaction')}</span></span>
-          </span>
-          <span class="amt ${bal < 0 ? 'amt-neg' : ''}">${money(bal)}</span>
-        </button></li>`;
-      })}
+    <ul class="plain-list acct-list">
+      ${state.accounts.map((a) => html`${accountCard(a, balances.get(a.id) ?? 0, a.id === selected)}
+        ${a.id === selected ? html`<li class="panel acct-inline" data-inline-detail>${accountDetail(a)}</li>` : ''}`)}
     </ul>
     <p class="muted small footnote">Balance is the starting balance plus income and refunds, minus spending. Transfers between accounts aren’t tracked, so log a card payment as an expense from checking only if you don’t also log the card purchases.</p>`;
 }
@@ -197,7 +315,7 @@ function chargedList(plan) {
     </ul>`;
 }
 
-function planCard(row, locale) {
+function planCard(row, locale, share, selected) {
   const { plan: g, progress: p } = row;
   const trip = p.kind === 'trip';
   const when = whenLabel(row.fundedKey, locale);
@@ -214,12 +332,18 @@ function planCard(row, locale) {
   else if (row.onTime === false) verdict = html`<p class="plan-verdict late">Misses ${date(g.targetDate)} — not ready until ${when}</p>`;
   else if (!row.fundedKey && g.targetDate) verdict = html`<p class="plan-verdict late">Nothing going in, so ${date(g.targetDate)} isn’t reachable</p>`;
 
-  return html`<li class="panel plan" style="--c:${g.color}">
+  const account = g.accountId ? state.accounts.find((a) => a.id === g.accountId) : null;
+  return html`<li class="panel plan${selected ? ' selected' : ''}" style="--c:${g.color}">
     <div class="plan-top">
-      <h2>${g.name}</h2>
-      <span class="plan-kind">${trip ? PLAN_KINDS.trip : PLAN_KINDS.fund}</span>
+      <h2><button type="button" class="plan-select" data-action="select-plan" data-id="${g.id}">${g.name}</button></h2>
+      <span class="plan-kind">${PLAN_KINDS[p.kind]}</span>
     </div>
     <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(g.target)}</span> <span class="goal-pct">${percent(p.ratio)}</span></p>
+    <ul class="plain-list acct-meta">
+      ${g.allocBp ? html`<li class="tag good">${percent(g.allocBp / BP)} of surplus${share ? ` · ${money(share)}/mo` : ''}</li>` : html`<li class="tag">No share yet</li>`}
+      ${g.apyBp ? html`<li class="tag">${(g.apyBp / 100).toFixed(2)}% ${p.kind === 'invest' ? 'assumed' : 'APY'}</li>` : ''}
+      ${account ? html`<li class="tag">In ${account.name}</li>` : ''}
+    </ul>
     ${progressBar(p.ratio, p.done ? 'done' : 'goal', `${g.name}: ${money(p.saved)} of ${money(g.target)}`)}
     ${trip && p.spent !== 0
       ? html`<p class="plan-spend"><span>Spent on this trip</span> <span class="amt">${money(p.spent)}</span></p>
@@ -262,8 +386,56 @@ function planResults() {
       ? html`<p class="plan-note">Hitting every date needs ${money(needed)} a month, which this covers.</p>`
       : '';
 
+  const shares = allocate(projection.rows.map((r) => r.plan), monthly);
+  const selected = ui.selectedPlan && state.goals.find((g) => g.id === ui.selectedPlan) ? ui.selectedPlan : null;
   return html`${headline}${gap}
-    <ul class="plain-list goal-list">${projection.rows.map((row) => planCard(row, locale))}</ul>`;
+    ${shares.sharedBp > 0 && shares.sharedBp < BP ? html`<p class="plan-note">${percent((BP - shares.sharedBp) / BP)} of the surplus has no share; it goes to whichever plan is due soonest.</p>` : ''}
+    ${shares.sharedBp > BP ? html`<p class="plan-note late">The shares add up to ${percent(shares.sharedBp / BP)}. Bring them back to 100%.</p>` : ''}
+    <ul class="plain-list goal-list">${projection.rows.map((row) => planCard(row, locale, shares.byPlan.get(row.plan.id) ?? 0, row.plan.id === selected))}</ul>
+    <section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="ms-title">
+      ${homeSectionHead('var(--hue-trend)', SEC_ICONS.calendar, html`<span id="ms-title">Five years out</span>`)}
+      <p class="muted small">Year-end balances at ${money(monthly)} a month, dealt out by the shares, each pot at its own yield.</p>
+      ${milestoneTable(state.goals, monthly)}
+    </section>`;
+}
+
+// One plan in full: the second page's view of it when a plan is chosen on
+// the other leaf, and the inline view on a screen without a second page.
+export function planDetail(plan) {
+  const { locale } = state.settings;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const monthly = scenarioMonthly(surplus);
+  const projection = projectPlans(state.goals, state.transactions, { monthly, lumpSum: planScenario.lumpSum, todayIso: state.today });
+  const row = projection.rows.find((r) => r.plan.id === plan.id);
+  const p = row.progress;
+  const share = allocate(state.goals, monthly).byPlan.get(plan.id) ?? 0;
+  const years = projectGrowth(p.saved, share, plan.apyBp ?? 0, 60);
+  const account = plan.accountId ? state.accounts.find((a) => a.id === plan.accountId) : null;
+  const when = whenLabel(row.fundedKey, locale);
+  return html`<div class="plan-detail" style="--c:${plan.color}">
+    <div class="plan-detail-head">
+      <span class="ring-sm" style="--ring-a:${plan.color};--ring-b:color-mix(in srgb, ${plan.color} 55%, white);--ring-glow:${plan.color}">
+        ${progressRing({ size: 96, stroke: 12, ratio: p.ratio, state: 'plan', showDay: false, centerTop: percent(p.ratio), centerBottom: '', ariaLabel: `${plan.name}: ${percent(p.ratio)} funded` })}
+      </span>
+      <div>
+        <h2>${plan.name}</h2>
+        <p class="muted small">${PLAN_KINDS[planKind(plan)]}${account ? ` · in ${account.name}` : ''}</p>
+        <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(plan.target)}</span></p>
+      </div>
+    </div>
+    <dl class="detail-rows">
+      <div><dt>Share of surplus</dt><dd>${plan.allocBp ? `${percent(plan.allocBp / BP)} — ${money(share)} a month` : 'None yet'}</dd></div>
+      <div><dt>Yield</dt><dd>${plan.apyBp ? `${(plan.apyBp / 100).toFixed(2)}% a year` : 'None'}</dd></div>
+      ${plan.targetDate ? html`<div><dt>Wanted by</dt><dd class="${row.onTime === false ? 's-over' : row.onTime ? 's-ok' : ''}">${date(plan.targetDate)}${when ? ` — ready ${when}` : ''}</dd></div>` : when ? html`<div><dt>Funded by</dt><dd>${when}</dd></div>` : ''}
+      <div><dt>In a year</dt><dd>${money(years[11])}</dd></div>
+      <div><dt>In five years</dt><dd>${money(years[59])}</dd></div>
+    </dl>
+    ${p.kind === 'trip' && p.spent ? html`<p class="plan-spend"><span>Spent on this trip</span> <span class="amt">${money(p.spent)}</span></p>${chargedList(plan)}` : ''}
+    <div class="btn-row">
+      <button type="button" class="btn small primary" data-action="adjust-goal" data-id="${plan.id}">${icons.plus}Set aside</button>
+      <button type="button" class="btn small ghost" data-action="edit-goal" data-id="${plan.id}">Edit</button>
+    </div>
+  </div>`;
 }
 
 export function renderGoals() {
@@ -271,8 +443,8 @@ export function renderGoals() {
   if (!state.goals.length) {
     return html`${head}${emptyState({
       title: 'Save toward something',
-      body: 'A nest egg you’re filling, or a trip you’ll spend down. Set a target and a date, and Tally works out what it costs a month and whether you’ll make it.',
-      actions: html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add a plan</button>`,
+      body: 'A safety net that covers a few months, nest eggs you fill, trips you spend down, money put to work. Give each a target, a share of what’s left over each month, and what it earns — Tally works out when it arrives.',
+      actions: html`<button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button><button type="button" class="btn" data-action="new-goal">Add a plan</button>`,
     })}`;
   }
 
@@ -284,7 +456,7 @@ export function renderGoals() {
     : html`<p class="muted small">Once there are a few months of history here, Tally can tell you what you usually have spare.</p>`;
 
   return html`${head}
-    <section class="panel plan-whatif">
+    <section class="panel plan-whatif" data-tabletop-bottom>
       <h2>What if</h2>
       <form class="plan-levers" data-plan-levers novalidate autocomplete="off">
         <label class="field">

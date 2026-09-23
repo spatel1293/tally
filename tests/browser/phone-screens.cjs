@@ -93,9 +93,9 @@ const monthStart = (offset) => {
   await p2.click('[data-save]');
   await closed(p2);
   await p2.reload();
-  await p2.waitForSelector('.hero-line');
-  expect((await p2.textContent('.hero-line')).includes('$9.99'), 'single-file build saves and reloads');
-  console.log('file:// after reload:', (await p2.textContent('.hero-line')).trim(), '| storage:', await p2.evaluate(async () => (await indexedDB.databases()).map((d) => d.name).join(',')));
+  await p2.waitForSelector('.hero-spend .hero-line');
+  expect((await p2.textContent('.hero-spend .hero-line')).includes('$9.99'), 'single-file build saves and reloads');
+  console.log('file:// after reload:', (await p2.textContent('.hero-spend .hero-line')).trim(), '| storage:', await p2.evaluate(async () => (await indexedDB.databases()).map((d) => d.name).join(',')));
   await ctx2.close();
 
   console.log('PROBLEMS', JSON.stringify(problems, null, 1));

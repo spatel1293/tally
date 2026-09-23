@@ -67,7 +67,7 @@ const monthStart = (offset) => {
   step('zero budget row: ' + await text('.budget-row:has-text("Entertainment")') + ' class=' + await page.getAttribute('.budget-row:has-text("Entertainment")', 'class'));
   expect((await page.getAttribute('.budget-row:has-text("Entertainment")', 'class')).includes('s-over'), 'spending against a $0 budget is over');
   await page.goto(BASE_URL);
-  step('home with $0 budget: ' + await text('.hero-line'));
+  step('home with $0 budget: ' + await text('.hero-spend .hero-line'));
 
   // Largest amount allowed, and one over
   await page.click('.fab');
@@ -81,7 +81,7 @@ const monthStart = (offset) => {
   await page.click('[data-save]');
   await closed();
   await page.waitForTimeout(100);
-  step('huge income figures: ' + await text('.figures'));
+  step('huge income figures: ' + await text('.hero-figures'));
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow === 0, 'huge numbers do not widen the page');
   step('overflow with huge numbers: ' + overflow);
@@ -89,13 +89,13 @@ const monthStart = (offset) => {
 
   // Future month with nothing
   await page.click('[data-action=month-shift][data-step="1"]');
-  step('next month: ' + await text('.month-title') + ' | ' + await text('.hero-line') + ' | back link: ' + await page.isVisible('[data-action=month-today]'));
-  expect((await text('.hero-line')).includes('hasn’t started yet'), 'future month wording');
+  step('next month: ' + await text('.month-title') + ' | ' + await text('.hero-spend .hero-line') + ' | back link: ' + await page.isVisible('[data-action=month-today]'));
+  expect((await text('.hero-spend .hero-line')).includes('hasn’t started yet'), 'future month wording');
   await page.click('[data-action=month-today]');
   // A month far in the past
   for (let i = 0; i < 14; i++) await page.click('[data-action=month-shift][data-step="-1"]');
-  step('past month: ' + await text('.month-title') + ' | ' + await text('.hero-line'));
-  expect((await text('.hero-line')).startsWith('Nothing was recorded'), 'empty past month wording');
+  step('past month: ' + await text('.month-title') + ' | ' + await text('.hero-spend .hero-line'));
+  expect((await text('.hero-spend .hero-line')).startsWith('Nothing was recorded'), 'empty past month wording');
   await page.screenshot({ path: SHOTS + 'e02-empty-month.png' });
 
   // Offline reload

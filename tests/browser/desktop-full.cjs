@@ -49,8 +49,8 @@ const CSV = FIXTURES + 'history.csv';
   await page.click('[data-apply]');
   await closed();
   step('import toast: ' + await lastToast());
-  await page.waitForSelector('.hero-line');
-  step('home hero: ' + await text('.hero-line'));
+  await page.waitForSelector('.hero-spend .hero-line');
+  step('home hero: ' + await text('.hero-spend .hero-line'));
 
   // Re-import: everything is a duplicate
   const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), page.evaluate(() => document.querySelector('.sidebar') && null).then(() => page.goto(BASE + '#/settings')).then(() => page.click('[data-action=import-csv]'))]);
@@ -75,20 +75,27 @@ const CSV = FIXTURES + 'history.csv';
 
   // ---- Accounts ----
   await page.goto(BASE + '#/accounts');
-  await page.waitForSelector('.list-btn');
-  step('accounts: ' + await text('.card-list'));
-  await page.click('.list-btn:has-text("Checking")');
+  await page.waitForSelector('.acct-card');
+  step('accounts: ' + await text('.acct-list'));
+  // Choosing an account opens it; the detail carries the edit button.
+  const editAccount = async (name) => {
+    await page.click(`.acct-card:has-text("${name}") .acct-head`);
+    await page.waitForSelector(`[data-account-detail] [data-action=edit-account]`);
+    await page.click('[data-account-detail] [data-action=edit-account]');
+    await page.waitForSelector('dialog#sheet[open]');
+  };
+  await editAccount('Checking');
   await page.fill('input[name=openingBalance]', '2,500');
   await page.selectOption('select[name=kind]', 'checking');
   await page.click('[data-save]');
   await closed();
-  await page.click('.list-btn:has-text("Credit card")');
+  await editAccount('Credit card');
   await page.fill('input[name=openingBalance]', '-310.25');
   await page.selectOption('select[name=kind]', 'credit');
   await page.click('[data-save]');
   await closed();
   expect((await text('main')).includes('across 2 accounts'), 'accounts created by import');
-  step('accounts after: ' + await text('main'));
+  step('accounts after: ' + await text('.acct-list'));
   await shot('d03-accounts');
 
   // ---- Keyboard shortcut and account picker ----
@@ -219,8 +226,8 @@ const CSV = FIXTURES + 'history.csv';
 
   // ---- Home full page ----
   await page.goto(BASE);
-  await page.waitForSelector('.hero-line');
-  step('home: ' + await text('.hero'));
+  await page.waitForSelector('.hero-spend .hero-line');
+  step('home: ' + await text('.hero-spend'));
   await shot('d10-home', { fullPage: true });
 
   // ---- Export ----
@@ -277,8 +284,8 @@ const CSV = FIXTURES + 'history.csv';
   await page.waitForTimeout(150);
   step('theme attr: ' + await page.getAttribute('html', 'data-theme'));
   await page.goto(BASE);
-  await page.waitForSelector('.hero-line');
-  step('home in EUR: ' + await text('.hero-line') + ' | ' + await text('.figures'));
+  await page.waitForSelector('.hero-spend .hero-line');
+  step('home in EUR: ' + await text('.hero-spend .hero-line') + ' | ' + await text('.figures'));
   await shot('d12-home-dark', { fullPage: true });
   await page.keyboard.press('i');
   await page.waitForSelector('dialog#sheet[open]');
@@ -294,7 +301,7 @@ const CSV = FIXTURES + 'history.csv';
 
   // Reload keeps theme and data
   await page.reload();
-  await page.waitForSelector('.hero-line');
+  await page.waitForSelector('.hero-spend .hero-line');
   expect((await page.getAttribute('html', 'data-theme')) === 'dark', 'theme survives reload');
   step('after reload theme=' + await page.getAttribute('html', 'data-theme') + ' figures=' + await text('.figures'));
 

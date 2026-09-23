@@ -5,15 +5,18 @@ import { watchPosture } from './ui/posture.js';
 import { sortTransactions } from './core/stats.js';
 import { monthKey, addDays } from './core/dates.js';
 import { isFinished, nextDue } from './core/recurring.js';
-import { planOrder, planProgress } from './core/plans.js';
-import { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } from './store.js';
+import { planOrder, planProgress, allocate, monthlySurplus, PLAN_KINDS, planKind } from './core/plans.js';
+import { advisorReview } from './core/advisor.js';
+import { isUnlocked, lock as lockVault, onVaultChange, open as openSealed, describeVaultError } from './vault.js';
+import { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, saveAccount, describeError } from './store.js';
 import { ui, viewMonth } from './views/components.js';
 import { openTransactionForm } from './views/txForm.js';
-import { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust } from './views/forms.js';
+import { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust, passphraseDialog } from './views/forms.js';
 import { renderHome, shiftMonth } from './views/home.js';
 import { renderActivity, afterActivityMount, resetFilters, showMore } from './views/activity.js';
 import { renderBudgets } from './views/budgets.js';
-import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS } from './views/pages.js';
+import { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS, planDetail, accountDetail, vaultFieldsMarkup } from './views/pages.js';
+import { renderAdvisor, afterAdvisorMount } from './views/advisor.js';
 import { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } from './views/settings.js';
 import { money, month as monthLabel, badge, relativeDay, date as dayLabel } from './ui/format.js';
 
@@ -26,9 +29,11 @@ const NAV_ICONS = {
   categories: I(html`<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`),
   accounts: I(html`<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>`),
   goals: I(html`<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6" fill="currentColor"/>`),
+  vault: I(html`<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M12 5v2M12 17v2"/>`),
   review: I(html`<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`),
   settings: I(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>`),
   more: I(html`<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>`),
+  advisor: I(html`<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>`),
   plus: html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
 };
 
@@ -40,11 +45,12 @@ const BRAND_MARK = html`<svg class="brand-mark" viewBox="0 0 28 28" aria-hidden=
 
 const ROUTES = {
   home: { title: 'Home', render: renderHome },
+  advisor: { title: 'Advisor', render: renderAdvisor, after: afterAdvisorMount },
   activity: { title: 'Activity', render: renderActivity, after: afterActivityMount },
   budgets: { title: 'Budgets', render: renderBudgets },
   recurring: { title: 'Repeating', render: renderRecurring },
   categories: { title: 'Categories', render: renderCategories },
-  accounts: { title: 'Accounts', render: renderAccounts },
+  accounts: { title: 'Accounts', render: renderAccounts, after: afterAccountsMount },
   goals: { title: 'Plans', render: renderGoals, after: afterPlansMount },
   review: { title: 'Year in review', render: renderReview },
   settings: { title: 'Settings', render: renderSettings, after: afterSettingsMount },
@@ -52,9 +58,9 @@ const ROUTES = {
 };
 const SECONDARY = new Set(MORE_LINKS.map((l) => l.route).concat('more'));
 const SIDEBAR = [
-  ['home', 'Home'], ['activity', 'Activity'], ['budgets', 'Budgets'],
+  ['home', 'Home'], ['goals', 'Plans'], ['advisor', 'Advisor'], ['accounts', 'Accounts'],
   null,
-  ['recurring', 'Repeating'], ['goals', 'Plans'], ['accounts', 'Accounts'], ['review', 'Review'],
+  ['activity', 'Activity'], ['budgets', 'Budgets'], ['recurring', 'Repeating'], ['review', 'Review'],
   null,
   ['categories', 'Categories'], ['settings', 'Settings'],
 ];
@@ -90,9 +96,9 @@ function renderShell() {
       <span class="topbar-title" data-topbar-title></span>
       <nav class="tabbar" aria-label="Main">
         <a href="#/" data-route="home">${NAV_ICONS.home}<span>Home</span></a>
-        <a href="#/activity" data-route="activity">${NAV_ICONS.activity}<span>Activity</span></a>
+        <a href="#/goals" data-route="goals">${NAV_ICONS.goals}<span>Plans</span></a>
         <button type="button" class="fab" data-action="new-tx" aria-label="New transaction">${NAV_ICONS.plus}</button>
-        <a href="#/budgets" data-route="budgets">${NAV_ICONS.budgets}<span>Budgets</span></a>
+        <a href="#/advisor" data-route="advisor">${NAV_ICONS.advisor}<span>Advisor</span></a>
         <a href="#/more" data-route="more">${NAV_ICONS.more}<span>More</span></a>
       </nav>
       <span class="topbar-side"><button type="button" class="icon-btn topbar-add" data-action="new-tx" aria-label="New transaction" title="New transaction (N)">${NAV_ICONS.plus}</button></span>
@@ -107,25 +113,46 @@ function renderShell() {
 // right-hand leaf; on a wide laptop window it's a third column. CSS decides
 // when there's room for it.
 //
-// It used to open with the month's net, in and out, and the top spending
-// categories — every one of which the hero and the "Where it went" donut are
-// already showing two inches to the left. The same figure twice on one screen
-// is noise, so this page now carries only what the main column doesn't: the
-// things you can *do* (log another of what you buy most, within reach of the
-// hand holding that side of the phone) and what is *coming* (the next
-// scheduled items, the nearest plan).
+// What it carries follows the screen you are on, which is the whole point of
+// having two pages: a list on one leaf and the thing you picked on the
+// other. Plans puts the chosen plan here, Accounts the chosen account and
+// its sealed details, and everywhere else it is the quick-log pane. It never
+// repeats a figure the main column is already showing.
 function renderCompanion() {
   const el = $('[data-companion]');
   if (!el) return;
+  const route = currentRoute();
+  el.dataset.pane = route === 'goals' || route === 'accounts' ? 'detail' : 'actions';
+
+  if (route === 'goals') {
+    const plan = ui.selectedPlan ? state.goals.find((g) => g.id === ui.selectedPlan) : null;
+    mount(el, plan
+      ? planDetail(plan)
+      : html`<p class="companion-label">Plans</p>
+          <p class="companion-empty">${state.goals.length ? 'Choose a plan to see what it costs a month, when it lands, and where it’s kept.' : 'Add a plan and it opens here.'}</p>`);
+    return;
+  }
+
+  if (route === 'accounts') {
+    const account = ui.selectedAccount ? state.accounts.find((a) => a.id === ui.selectedAccount) : null;
+    mount(el, account
+      ? accountDetail(account)
+      : html`<p class="companion-label">Accounts</p>
+          <p class="companion-empty">${state.accounts.length ? 'Choose an account to see its rate, its security and its sealed details.' : 'Add an account and it opens here.'}</p>`);
+    if (account) fillVaultFields(el);
+    return;
+  }
+
   const key = viewMonth();
   const catOf = (id) => state.categories.find((c) => c.id === id) ?? null;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const typical = Math.max(0, surplus.typical);
+  const shares = allocate(planOrder(state.goals), typical);
 
   // The plan with the nearest date, and what it costs a month to make it.
   const nextPlan = planOrder(state.goals).find((g) => planProgress(g, state.transactions, state.today).toSave > 0) ?? null;
   const nextProgress = nextPlan ? planProgress(nextPlan, state.transactions, state.today) : null;
 
-  // What the calendar is about to bring: the next date each repeating item
-  // falls due, soonest first. Nothing else on Home looks ahead.
   const upcoming = state.recurring
     .filter((r) => !isFinished(r, state.today))
     .map((r) => ({ rule: r, date: nextDue(r) }))
@@ -133,14 +160,9 @@ function renderCompanion() {
     .sort((a, b) => (a.date < b.date ? -1 : 1))
     .slice(0, 3);
 
-  // Everything else on Home is scoped to the month. Today is the one window
-  // it never shows, and it's the one you want while you're still adding to
-  // it — so this page keeps the running total for the day.
   const todayTx = key === monthKey(state.today) ? state.transactions.filter((tx) => tx.date === state.today) : [];
   const todaySpent = todayTx.reduce((sum, tx) => sum + (tx.type === 'expense' && !tx.refund ? tx.amount : 0), 0);
 
-  // The last seven days, one bar each. Home's trend is six months wide and
-  // its donut is by category, so the shape of the week is nowhere else.
   const week = [];
   for (let i = 6; i >= 0; i--) {
     const iso = addDays(state.today, -i);
@@ -150,7 +172,6 @@ function renderCompanion() {
   const weekPeak = Math.max(...week.map((d) => d.spent), 1);
   const weekTotal = week.reduce((s, d) => s + d.spent, 0);
 
-  // The categories you've used most recently, for logging another one.
   const again = [];
   const seen = new Set();
   for (const tx of sortTransactions(state.transactions)) {
@@ -165,7 +186,7 @@ function renderCompanion() {
   mount(
     el,
     html`<p class="companion-label">${monthLabel(key)}</p>
-      ${state.transactions.length
+      ${state.transactions.length || state.goals.length
         ? html`<div class="companion-block">
               <h2>Log it now</h2>
               <button type="button" class="btn primary companion-new" data-action="new-tx">${NAV_ICONS.plus}New transaction</button>
@@ -178,6 +199,16 @@ function renderCompanion() {
                   </div>`
                 : ''}
             </div>
+            ${state.goals.length
+              ? html`<div class="companion-block">
+                  <h2>Set aside</h2>
+                  <div class="companion-again">
+                    ${planOrder(state.goals).slice(0, 3).map((g) => html`<button type="button" class="btn companion-again-btn" data-action="adjust-goal" data-id="${g.id}">
+                      <i class="key" style="background:${g.color}"></i><span>${g.name}</span>${(shares.byPlan.get(g.id) ?? 0) > 0 ? html`<small class="amt">${money(shares.byPlan.get(g.id))}</small>` : ''}
+                    </button>`)}
+                  </div>
+                </div>`
+              : ''}
             ${key === monthKey(state.today)
               ? html`<div class="companion-block">
                   <h2>Today</h2>
@@ -222,8 +253,27 @@ function renderCompanion() {
                   </a>
                 </div>`
               : ''}`
-        : html`<p class="companion-empty">Add your first transaction and this page keeps what's next within reach.</p>`}`
+        : html`<p class="companion-empty">Add your first plan and this page keeps what's next within reach.</p>`}`
   );
+}
+
+// Sealed details are opened after the markup is on screen: decryption is
+// asynchronous, and a locked vault simply leaves the slot as it was.
+async function fillVaultFields(root = document) {
+  if (!isUnlocked()) return;
+  for (const slot of root.querySelectorAll('[data-vault-fields]')) {
+    const account = state.accounts.find((a) => a.id === slot.dataset.vaultFields);
+    if (!account?.vault) continue;
+    try {
+      mount(slot, vaultFieldsMarkup(await openSealed(account.vault)));
+    } catch (err) {
+      mount(slot, html`<p class="field-error">Couldn’t open these. ${describeVaultError(err) ?? ''}</p>`);
+    }
+  }
+}
+
+function afterAccountsMount(root) {
+  fillVaultFields(root);
 }
 
 function updateChrome(route) {
@@ -293,7 +343,7 @@ function watchPageTitle(fallback) {
 }
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const ROUTE_ORDER = ['home', 'activity', 'budgets', 'recurring', 'goals', 'accounts', 'review', 'categories', 'settings', 'more'];
+const ROUTE_ORDER = ['home', 'goals', 'advisor', 'accounts', 'activity', 'budgets', 'recurring', 'review', 'categories', 'settings', 'more'];
 
 let lastRoute = null;
 let enterTimer;
@@ -418,9 +468,72 @@ const actions = {
     resetPlanScenario();
     render({ keepScroll: true });
   },
-  'new-goal': () => openGoalForm(),
+  'new-goal': (el) => openGoalForm(null, el.dataset.kind ? { kind: el.dataset.kind } : {}),
   'edit-goal': (el) => openGoalForm(el.dataset.id),
   'adjust-goal': (el) => openGoalAdjust(el.dataset.id),
+  // Picking something on one leaf fills the other. On a screen with no
+  // second page the same tap opens it inline, and tapping it again closes
+  // it — so the gesture means the same thing at every size.
+  'select-plan': (el) => {
+    ui.selectedPlan = ui.selectedPlan === el.dataset.id ? null : el.dataset.id;
+    render({ keepScroll: true });
+  },
+  'select-account': (el) => {
+    ui.selectedAccount = ui.selectedAccount === el.dataset.id ? null : el.dataset.id;
+    render({ keepScroll: true });
+  },
+  'vault-create': async () => {
+    if (await passphraseDialog({ mode: 'create' })) toast('Vault sealed. It opens with your passphrase.');
+  },
+  'vault-unlock': async () => {
+    if (await passphraseDialog({ mode: 'unlock' })) toast('Vault open');
+  },
+  'vault-change': async () => {
+    if (await passphraseDialog({ mode: 'change' })) toast('Passphrase changed');
+  },
+  'vault-lock': () => {
+    lockVault();
+    toast('Vault locked');
+  },
+  'mark-reviewed': async (el) => {
+    try {
+      await saveAccount({ reviewedAt: state.today }, el.dataset.id);
+      toast('Marked reviewed today');
+    } catch (err) {
+      fail(err);
+    }
+  },
+  // A secret shows itself where it was hidden, and hides again after a
+  // while: long enough to read a number off the screen, short enough that
+  // it isn't still there when the phone is handed to someone.
+  'reveal-secret': (el) => {
+    const field = el.closest('dd');
+    const secret = field?.querySelector('.secret');
+    if (!secret) return;
+    const showing = secret.dataset.showing === '1';
+    secret.textContent = showing ? secret.dataset.masked : secret.dataset.secret;
+    secret.dataset.showing = showing ? '0' : '1';
+    el.textContent = showing ? 'Show' : 'Hide';
+    clearTimeout(secret._hide);
+    if (!showing) {
+      secret._hide = setTimeout(() => {
+        secret.textContent = secret.dataset.masked;
+        secret.dataset.showing = '0';
+        el.textContent = 'Show';
+      }, 20000);
+    }
+  },
+  'copy-secret': async (el) => {
+    const secret = el.closest('dd')?.querySelector('.secret');
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret.dataset.secret);
+      toast('Copied. The clipboard clears in 30 seconds.');
+      setTimeout(() => navigator.clipboard.writeText('').catch(() => {}), 30000);
+    } catch {
+      toast('This browser wouldn’t let Tally use the clipboard.', { tone: 'error' });
+    }
+  },
   'export-json': () => exportJSON(),
   'export-csv': () => exportCSV(),
   'import-csv': () => startImportCSV(),
@@ -483,13 +596,20 @@ document.addEventListener('keydown', (e) => {
       go('#/');
       break;
     case '2':
-      go('#/activity');
+      go('#/goals');
       break;
     case '3':
-      go('#/budgets');
+      go('#/advisor');
       break;
     case '4':
-      go('#/recurring');
+      go('#/accounts');
+      break;
+    case '5':
+      go('#/activity');
+      break;
+    case 'l':
+    case 'L':
+      lockVault();
       break;
     case '[':
     case ']':
@@ -523,6 +643,9 @@ async function boot() {
     return;
   }
   applyTheme();
+  // Opening or locking the vault changes what is on screen, and the lock can
+  // happen on a timer or when the app is backgrounded — so it redraws.
+  onVaultChange(() => render({ keepScroll: true }));
   subscribe((reason) => {
     if (reason === 'blocked') {
       toast('Tally was updated in another tab. Reload to keep going.', { duration: 60000, action: { label: 'Reload', onClick: () => location.reload() } });

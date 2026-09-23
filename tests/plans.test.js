@@ -270,3 +270,189 @@ test('plan kinds are named for people, not for the database', () => {
   assert.equal(PLAN_KINDS.fund, 'Nest egg');
   assert.equal(PLAN_KINDS.trip, 'Trip');
 });
+
+// ---------- Savings first: yield, shares, runway, milestones ----------
+
+import { growMonthly, allocate, projectGrowth, milestones, runway, essentialMonthly, safetyPlan, BP } from '../js/core/plans.js';
+import { advisorReview } from '../js/core/advisor.js';
+
+describe('growth', () => {
+  test('one month of yield is rounded to whole cents every month', () => {
+    // $10,000 at 4.25%: 10000 * 0.0425 / 12 = 35.4166… → 3542 cents
+    assert.equal(growMonthly(1000000, 425), 3542);
+    assert.equal(growMonthly(0, 425), 0);
+    assert.equal(growMonthly(1000000, 0), 0);
+    assert.equal(growMonthly(-5, 425), 0);
+  });
+
+  test('a year of contributions compounds the way a savings account posts', () => {
+    // Growth first, then the deposit, twelve times; every step an integer.
+    const series = projectGrowth(100000, 10000, 1200, 12);
+    assert.equal(series.length, 12);
+    assert.equal(series[0], 100000 + 1000 + 10000);
+    for (const v of series) assert.ok(Number.isInteger(v));
+    assert.ok(series[11] > 100000 + 12 * 10000, 'yield adds something over the year');
+    assert.ok(series[11] < 100000 + 12 * 10000 + (100000 + 120000) * 0.13, 'but no more than 12% on everything that was ever in it');
+  });
+
+  test('no yield is plain addition', () => {
+    assert.deepEqual(projectGrowth(0, 500, 0, 3), [500, 1000, 1500]);
+  });
+});
+
+describe('shares of the surplus', () => {
+  const plans = [plan({ id: 'a', allocBp: 6875 }), plan({ id: 'b', allocBp: 937 }), plan({ id: 'c', allocBp: 0 })];
+
+  test('each plan gets its share, floored, and the rest is reported', () => {
+    const r = allocate(plans, 160000);
+    assert.equal(r.byPlan.get('a'), 110000);
+    assert.equal(r.byPlan.get('b'), 14992);
+    assert.equal(r.byPlan.get('c'), 0);
+    assert.equal(r.allocated, 124992);
+    assert.equal(r.unallocated, 160000 - 124992);
+    assert.equal(r.sharedBp, 7812);
+  });
+
+  test('a negative surplus allocates nothing', () => {
+    const r = allocate(plans, -500);
+    assert.equal(r.allocated, 0);
+    assert.equal(r.unallocated, 0);
+  });
+
+  test('shares never add up to more than the surplus, whatever the basis points say', () => {
+    const r = allocate([plan({ id: 'a', allocBp: 10000 }), plan({ id: 'b', allocBp: 10000 })], 999);
+    assert.ok(r.byPlan.get('a') + r.byPlan.get('b') <= 999 * 2);
+    assert.equal(r.byPlan.get('a'), 999);
+  });
+});
+
+describe('projection with shares and yield', () => {
+  test('a plan with a share fills from its share, not from the pour', () => {
+    // Two plans, both undated. With no shares, the first in order takes
+    // everything; with shares, each takes its own.
+    const a = plan({ id: 'a', name: 'A', kind: 'fund', target: 60000, saved: 0, createdAt: '2026-01-01', allocBp: 5000 });
+    const b = plan({ id: 'b', name: 'B', kind: 'fund', target: 60000, saved: 0, createdAt: '2026-02-01', allocBp: 5000 });
+    const r = projectPlans([a, b], [], { monthly: 20000, todayIso: TODAY });
+    const row = (id) => r.rows.find((x) => x.plan.id === id);
+    assert.equal(row('a').monthsAway, 6);
+    assert.equal(row('b').monthsAway, 6);
+    const plain = projectPlans([{ ...a, allocBp: 0 }, { ...b, allocBp: 0 }], [], { monthly: 20000, todayIso: TODAY });
+    assert.equal(plain.rows.find((x) => x.plan.id === 'a').monthsAway, 3);
+    assert.equal(plain.rows.find((x) => x.plan.id === 'b').monthsAway, 6);
+  });
+
+  test('a share a plan does not need goes back into the pour', () => {
+    const a = plan({ id: 'a', kind: 'fund', target: 1000, saved: 0, createdAt: '2026-01-01', allocBp: 9000 });
+    const b = plan({ id: 'b', kind: 'fund', target: 100000, saved: 0, createdAt: '2026-02-01', allocBp: 1000 });
+    const r = projectPlans([a, b], [], { monthly: 10000, todayIso: TODAY });
+    // B gets its 10% plus everything A didn't need: 10000 a month in total
+    // after the first, so 100000 takes 10 months, give or take A's 1000.
+    assert.equal(r.rows.find((x) => x.plan.id === 'b').monthsAway, 11);
+  });
+
+  test('yield shortens the wait', () => {
+    const slow = projectPlans([plan({ id: 'a', kind: 'fund', target: 2000000, saved: 1000000, apyBp: 0 })], [], { monthly: 20000, todayIso: TODAY });
+    const fast = projectPlans([plan({ id: 'a', kind: 'fund', target: 2000000, saved: 1000000, apyBp: 500 })], [], { monthly: 20000, todayIso: TODAY });
+    assert.ok(fast.rows[0].monthsAway < slow.rows[0].monthsAway);
+    assert.equal(slow.rows[0].monthsAway, 50);
+  });
+});
+
+describe('milestones', () => {
+  test('year-end balances for every plan, and the total across them', () => {
+    const plans = [plan({ id: 'a', kind: 'safety', saved: 1100000, apyBp: 350, allocBp: 6875 }), plan({ id: 'b', kind: 'invest', saved: 0, apyBp: 700, allocBp: 937 })];
+    const m = milestones(plans, 160000, { years: 5 });
+    assert.equal(m.rows.length, 2);
+    assert.equal(m.rows[0].yearEnds.length, 5);
+    assert.equal(m.rows[0].monthly, 110000);
+    assert.ok(m.rows[0].yearEnds[0] > 1100000 + 12 * 110000, 'year one includes yield');
+    assert.ok(m.rows[0].yearEnds[4] > m.rows[0].yearEnds[3]);
+    assert.equal(m.totals[2], m.rows[0].yearEnds[2] + m.rows[1].yearEnds[2]);
+    for (const v of m.totals) assert.ok(Number.isInteger(v));
+  });
+});
+
+describe('runway', () => {
+  test('months of essentials the safety net covers, to one decimal', () => {
+    assert.equal(runway(1100000, 360000), 3.1);
+    assert.equal(runway(0, 360000), 0);
+    assert.equal(runway(1100000, 0), null);
+  });
+
+  test('essentials come from budgets when there are any, else the median month', () => {
+    const cats = [{ type: 'expense', budget: 150000 }, { type: 'expense', budget: 60000 }, { type: 'income', budget: 999999 }];
+    assert.equal(essentialMonthly(cats, [], TODAY), 210000);
+    const txs = [
+      tx({ amount: 10000, date: '2026-08-05' }), tx({ amount: 30000, date: '2026-07-05' }), tx({ amount: 20000, date: '2026-06-05' }),
+    ];
+    assert.equal(essentialMonthly([], txs, TODAY), 20000);
+    assert.equal(essentialMonthly([], [], TODAY), 0);
+  });
+
+  test('the safety net is the plan marked as one', () => {
+    assert.equal(safetyPlan([plan({ id: 'x', kind: 'fund' }), plan({ id: 'y', kind: 'safety' })]).id, 'y');
+    assert.equal(safetyPlan([plan({ id: 'x' })]), null);
+  });
+});
+
+describe('advisor review', () => {
+  const months = (over) => [
+    tx({ type: 'income', amount: 450000, date: '2026-08-01' }), tx({ amount: 290000, date: '2026-08-10' }),
+    tx({ type: 'income', amount: 450000, date: '2026-07-01' }), tx({ amount: 290000, date: '2026-07-10' }),
+    tx({ type: 'income', amount: 450000, date: '2026-06-01' }), tx({ amount: 290000, date: '2026-06-10' }),
+  ];
+  const account = (over = {}) => ({ id: 'acc1', name: 'Hub', kind: 'checking', openingBalance: 0, order: 0, institution: '', role: 'hub', apyBp: 0, mfa: true, reviewedAt: '2026-08-01', notes: '', vault: null, ...over });
+  const base = () => ({
+    plans: [plan({ id: 's', name: 'Rainy day', kind: 'safety', target: 8640000, saved: 1100000, allocBp: 10000 })],
+    accounts: [account()],
+    categories: [{ type: 'expense', budget: 360000 }],
+    transactions: months(),
+    settings: { ...DEFAULT_SETTINGS, lastExportAt: '2026-09-18T00:00:00.000Z', lastChangeAt: '2026-09-17T00:00:00.000Z' },
+    todayIso: TODAY,
+  });
+
+  test('scores each item and lists what needs attention', () => {
+    const r = advisorReview(base());
+    const by = Object.fromEntries(r.checks.map((c) => [c.id, c]));
+    assert.equal(by.mfa.ok, true);
+    assert.equal(by.reviewed.ok, true);
+    assert.equal(by.allocation.ok, true);
+    assert.equal(by.backup.ok, true);
+    assert.equal(by.safety.ok, false, '3.1 months is short of 6');
+    assert.equal(r.runway, 3.1);
+    assert.equal(r.runwayTarget, 6);
+    assert.equal(by.invest.ok, false);
+    assert.equal(by.invest.soft, true);
+    assert.ok(r.attention.some((c) => c.id === 'safety'));
+    assert.equal(r.surplus.typical, 160000);
+    assert.equal(r.allocated, 160000);
+    assert.equal(r.savingsRate, 36);
+  });
+
+  test('flags accounts without two-factor and stale reviews by name', () => {
+    const d = base();
+    d.accounts = [account({ name: 'Hub', mfa: false }), account({ id: 'acc2', name: 'Card', reviewedAt: '2025-01-01' })];
+    const by = Object.fromEntries(advisorReview(d).checks.map((c) => [c.id, c]));
+    assert.equal(by.mfa.ok, false);
+    assert.match(by.mfa.detail, /Hub/);
+    assert.equal(by.reviewed.ok, false);
+    assert.match(by.reviewed.detail, /Card/);
+  });
+
+  test('an unallocated surplus and a missed date both come up', () => {
+    const d = base();
+    d.plans = [plan({ id: 's', kind: 'safety', target: 8640000, saved: 1100000, allocBp: 5000, targetDate: '2026-12-01' })];
+    const by = Object.fromEntries(advisorReview(d).checks.map((c) => [c.id, c]));
+    assert.equal(by.allocation.ok, false);
+    assert.match(by.allocation.title, /50%/);
+    assert.equal(by['on-track'].ok, false);
+  });
+
+  test('with nothing set up, nothing crashes and everything is a suggestion', () => {
+    const r = advisorReview({ plans: [], accounts: [], categories: [], transactions: [], settings: { ...DEFAULT_SETTINGS }, todayIso: TODAY });
+    assert.equal(r.checks.length, 7);
+    assert.equal(r.runway, null);
+    assert.equal(r.savingsRate, null);
+    assert.equal(r.checks.find((c) => c.id === 'backup').ok, true, 'nothing to back up yet');
+  });
+});

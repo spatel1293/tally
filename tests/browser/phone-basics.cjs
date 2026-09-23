@@ -60,7 +60,7 @@ const BASE = BASE_URL;
   const firstToast = await toastText();
   step('toast: ' + firstToast);
   expect(firstToast === 'Expense of $12.50 saved', 'save confirmation toast');
-  step('hero: ' + await page.textContent('.hero-line'));
+  step('hero: ' + await page.textContent('.hero-spend .hero-line'));
 
   // Save income with save-and-add-another
   await page.click('.fab');
@@ -80,12 +80,12 @@ const BASE = BASE_URL;
   await shot('m03-add-form');
   await page.click('[data-save]');
   await page.waitForSelector('dialog#sheet[open]', { state: 'detached' });
-  const figs = (await page.textContent('.figures')).replace(/\s+/g, '');
+  const figs = (await page.textContent('.hero-figures')).replace(/\s+/g, '');
   step('figures: ' + figs);
   expect(figs === 'Income$3,000.00Spending$54.50Net+$2,945.50', 'month figures add up');
 
   // Budget
-  await page.click('.tabbar a[data-route=budgets]');
+  await page.goto(BASE + '#/budgets');
   await page.waitForSelector('.budget-list');
   await page.click('.budget-btn:has-text("Groceries")');
   await page.fill('input[name=budget]', '400');
@@ -109,15 +109,15 @@ const BASE = BASE_URL;
   await shot('m04-budgets');
 
   // Home again
-  await page.click('.tabbar a[data-route=home]');
-  await page.waitForSelector('.hero-line');
-  step('home hero: ' + await page.textContent('.hero-line') + ' | ' + await page.textContent('.hero-sub'));
+  await page.goto(BASE + '#/');
+  await page.waitForSelector('.hero-spend .hero-line');
+  step('home hero: ' + await page.textContent('.hero-spend .hero-line') + ' | ' + await page.textContent('.hero-spend .hero-sub'));
   await shot('m05-home');
   await page.evaluate(() => window.scrollTo(0, 99999));
   await shot('m05b-home-bottom');
 
   // Edit and delete with undo on Activity
-  await page.click('.tabbar a[data-route=activity]');
+  await page.goto(BASE + '#/activity');
   await page.waitForSelector('.tx-row');
   step('activity rows: ' + await page.locator('.tx-row').count());
   await page.click('.tx-row:has-text("Taqueria")');

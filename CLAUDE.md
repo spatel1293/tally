@@ -1,6 +1,15 @@
 # Tally: notes for Claude
 
-Tally is a personal budgeting web app (installable PWA) that runs entirely in the browser: no backend, no accounts, no AI. Version 1.0.0 is complete and tested. The owner now wants it set up as their app on a **Google Pixel Fold (first generation, 2023)** and their **laptop**.
+Tally is a personal **savings and financial-records** web app (installable PWA)
+that runs entirely in the browser: no backend, no accounts, no AI. It began as
+a budgeting app, and in September 2026 the owner refocused it: what it is
+*for* is the pots you are saving into, the runway they buy you, and the
+records a financial planner would keep — which institution holds what, at what
+rate, with which login. Spending tracking is still all there, but it is now in
+service of the surplus, not the point of the app.
+
+Its home is a **Google Pixel Fold (first generation, 2023)** and a **laptop**,
+and the Fold is the device to design for when the two disagree.
 
 - Current task, including questions to ask the owner before starting: @docs/HANDOFF-pixel-fold-and-laptop.md
 - Original requirements (still apply): @docs/ORIGINAL-BRIEF.md
@@ -9,8 +18,8 @@ Tally is a personal budgeting web app (installable PWA) that runs entirely in th
 ## Commands
 
 - `npm start`: local server on http://localhost:5173. It also prints a LAN address for the phone; that address is plain HTTP, so install and offline mode won't work there, but layouts will.
-- `npm test`: 108 unit tests with Node's built-in runner. No install needed.
-- `npm run test:browser`: 7 Playwright test files at phone and laptop sizes. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
+- `npm test`: 128 unit tests with Node's built-in runner. No install needed.
+- `npm run test:browser`: 8 Playwright test files at phone, Fold and laptop sizes. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
 - `npm run build`: rebuilds `dist/tally.html`, the single-file version.
 
 Run `npm test` and `npm run test:browser` before saying something works. If the browser tests can't run in this environment, say so plainly.
@@ -21,8 +30,12 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
 - `js/core/`: pure logic with no DOM or browser globals, all unit tested.
   - `money.js`, `dates.js`, `stats.js` (totals, budgets, balances, search, year review)
-  - `plans.js` (nest eggs, trips, surplus and projections)
+  - `plans.js` (the savings engine: pots, shares of the surplus, yield, runway, projections and the five-year table)
+  - `advisor.js` (the quarterly review as a computed checklist)
   - `recurring.js`, `csv.js`, `validate.js` (forms and backup parsing), `defaults.js`
+- `js/vault.js`: account numbers and logins, sealed with AES-GCM under a key
+  derived from a passphrase (PBKDF2, 300k rounds). Browser-only, so it lives
+  outside `core/`.
 - `js/storage.js`: IndexedDB, falling back to localStorage, then memory. Also holds drafts, which are saved synchronously.
 - `js/store.js`: the `state` object and every mutation. It writes to storage first, then updates state and calls `emit()`. BroadcastChannel keeps tabs in sync.
 - `js/ui/`:
@@ -30,7 +43,7 @@ There is no framework and no build step. Plain ES modules load directly in the b
   - `overlay.js`: sheets, confirm dialog, toasts
   - `charts.js`: hand-written SVG charts
   - `format.js`: money and date display
-- `js/views/`: one file per screen, plus `txForm.js` (add/edit transaction) and `forms.js` (everything else).
+- `js/views/`: one file per screen, plus `txForm.js` (add/edit transaction) and `forms.js` (everything else). `advisor.js` is the review screen and owns the five-year table that Plans also renders.
 - `js/app.js`: hash router, shell (sidebar and tab bar), `data-action` click delegation, keyboard shortcuts, theme, service worker registration.
 - `css/app.css`: all styles.
   - Tokens live on `:root` and are overridden in `:root[data-theme='dark']`.
@@ -54,8 +67,25 @@ There is no framework and no build step. Plain ES modules load directly in the b
 
    No default exports, dynamic imports or import cycles. Run `npm run build` after source changes; a browser test opens `dist/tally.html`.
 8. **Backups:** the format number is `BACKUP_FORMAT` in `core/defaults.js`. If the stored data shape changes, bump it, keep `parseBackup` able to read older backups, and add a test.
-9. **Privacy by default.** No analytics, no AI or LLM features, and no runtime requests to third parties; fonts and icons are self-hosted. Anything that sends data off the device must be the owner's explicit choice (see the handoff's sync question).
-10. **UI copy** is plain, active voice, and free of jargon. Error messages say what to do next.
+9. **Nothing sensitive is ever stored in the clear.** Account numbers, routing
+   numbers, usernames and passwords only exist as ciphertext in the sealed
+   `vault` blob on an account record. The passphrase is never stored, the
+   derived key lives in memory only, and the vault re-locks on a timer and
+   whenever the page is hidden. A browser test asserts that the plaintext is
+   absent from both the DOM and IndexedDB. `js/vault.js` is the only place
+   that encrypts or decrypts.
+10. **Money percentages are integers too.** A plan's share of the surplus
+   (`allocBp`) and its yield (`apyBp`) are basis points — 425 is 4.25% — for
+   the same reason amounts are cents. `allocate()` floors each share so the
+   shares can never claim more than the surplus, and reports what's left as
+   unallocated rather than losing it.
+11. **A record written today and one restored from a backup must be identical.**
+   `newAccount()` in `core/defaults.js` is the one shape for an account, used
+   by the store and by the CSV importer; `saveGoal` does the same for plans.
+   Skip it and a backup round trip silently changes the data — which is how
+   this was found, in `desktop-full.cjs`.
+12. **Privacy by default.** No analytics, no AI or LLM features, and no runtime requests to third parties; fonts and icons are self-hosted. Anything that sends data off the device must be the owner's explicit choice (see the handoff's sync question).
+13. **UI copy** is plain, active voice, and free of jargon. Error messages say what to do next.
 
 ## Design
 
@@ -104,10 +134,12 @@ language, not "clean and modern" in general.
   is rounded far harder than a laptop window. Anything nested in a rounded
   shape takes the parent's radius minus the gap (`--r-nested` on `.panel`), so
   curves run parallel. A hardcoded `border-radius` breaks this on one device.
-- **Colour is the system palette, and only ever means money.** Green in, amber
-  near a limit, red over — the darker accessible variants for text, the vivid
-  ones for fills. The interface itself uses one hue, system blue (`--accent`),
-  and nothing else is tinted. The backup reminder is deliberately *not* amber.
+- **Colour.** Money still means green in, amber near a limit, red over. Beyond
+  that the interface is multi-hue as of September 2026: each section carries
+  its own vivid hue (`--hue-*`) on its icon chip and as a wash across its
+  card, and each plan carries its own colour from `PALETTE` through its ring,
+  its tile and its slice of the allocation bar. The single-accent rule is
+  retired; don't restore it.
 - **Surfaces are a ladder, and it inverts on wide screens.** On a phone the
   page is the grouped background and cards are white. From 600px the content
   lifts onto an opaque **canvas** inset from the window with the glass rail
@@ -131,25 +163,64 @@ language, not "clean and modern" in general.
   tab bar any more — that marks the current page with tint and a lifted icon,
   the way the system does.
 - **Links need underlines**, not colour.
-- **Category colours** (`PALETTE` in `core/defaults.js`) are printer's inks for
-  chart identity only, with no strong red or green, so a swatch is never
-  mistaken for a signal.
+- **Category and plan colours** (`PALETTE` in `core/defaults.js`) are vivid
+  system-style hues, with no strong red or green, so a swatch is never
+  mistaken for a money signal.
 - **Avoid:** cream/terracotta palettes, all-caps eyebrow labels, a separate
   card per list row, arrows in button text, and middle-dot separators.
 - **A card inside a card** is the usual mistake: `.figures.compact` exists
   because that one already sits inside a `.panel`.
 
-### Plans
+### Plans — the middle of the app
 
-Nest eggs, trips and scenario planning are deliberately **one feature**, because they are one shape at different moments: a named pot with a target and a date, that you fill over time and sometimes spend down. Don't split them into separate pages.
+Every pot is one shape at a different moment, so they stay **one feature**: a
+named pot with a target, a date, a share of each month's surplus and a yield.
+`kind` is what separates them — `safety` (the runway; only one of these), `fund`
+(a nest egg), `trip` (filled, then spent down) and `invest` (money put to work,
+where the rate is an assumption rather than a promise). Don't split them into
+separate pages.
 
 - Stored under the older **`goals`** name — store, state key and mutations all still say `goals`, and renaming them would mean an IndexedDB migration for no user-visible gain. `kind` (`'fund' | 'trip'`) is what separates a nest egg from a trip.
 - **Setting money aside stays a counter (`saved`), not a transaction.** Moving money between your own accounts is neither income nor spending, and logging it as either would distort every total in the app.
 - **Spending is what carries a `planId`.** A transaction charged to a plan draws its pot down, which is how a trip shows what it actually cost — and why a flight booked six months early still counts. Income can never carry one (`validateTransactionInput` drops it), or the same money would be counted twice.
-- `js/core/plans.js` is the whole engine and is pure: `planProgress`, `monthlySurplus`, `planOrder`, `projectPlans`, `requiredMonthly`. Anything that answers "will I make it?" belongs there, with a test, not in a view.
+- `js/core/plans.js` is the whole engine and is pure: `planProgress`, `monthlySurplus`, `planOrder`, `projectPlans`, `requiredMonthly`, plus the savings-first half — `allocate` (shares of the surplus), `growMonthly`/`projectGrowth` (yield, compounded monthly and rounded every month), `milestones` (the five-year table), `runway` and `essentialMonthly`. Anything that answers "will I make it?" belongs there, with a test, not in a view.
+- **The projection deals the money out in this order each month:** every pot
+  grows by its own yield, then plans with a share take their share, then
+  whatever is left — the unallocated part, plus any share a plan didn't need —
+  pours into the plans in date order. With no shares set that pour is the
+  whole engine, which is what it was before shares existed.
+- **The runway is the headline.** `runway()` divides the safety net by a month
+  of essentials, and essentials come from the budgets when there are any
+  (they are what you decided you need) and from the median recent month when
+  there aren't. Home leads with it; `settings.runwayTarget` is what it's
+  measured against.
 - **The surplus comes from whole months only.** The current month is part-finished and would always look like a bad one. `typical` is the median, not the mean, so a single bonus month doesn't set the expectation for every month after it.
 - Plans are funded **in date order** — soonest deadline first — because that is what would really happen; an even split would flatter every projection.
 - The what-if levers (`planScenario` in `views/pages.js`) are **not persisted**: they're a question you ask, not a setting. `afterPlansMount` re-mounts only `#plan-results`, so typing doesn't rebuild the page under the cursor.
+
+### What the Fold gets that nothing else does
+
+The hinge is not a compatibility problem to survive; it is the reason this
+app looks the way it does. Each of these is real behaviour, not a layout that
+merely tolerates folding:
+
+- **Book posture is list and detail across the crease.** Plans and Accounts
+  put the list on the left leaf and the chosen item on the right, so a plan
+  and its five-year shape are readable at once with neither crossing the
+  hinge. The inline copy is hidden there, because the facing page has it.
+- **Tabletop puts the controls on the half lying flat.** Anything marked
+  `[data-tabletop-bottom]` — today, the what-if levers on Plans — is pinned
+  into the lower segment with `env(viewport-segment-height 0 1)`, results on
+  the upright half above it. The shape of a laptop, on a phone.
+- **The cover screen will not show a secret in full.** Under 520px the reveal
+  button is gone and a sealed number never gets past its last four: a 5.8"
+  screen is read in a queue. Unfolding is the gesture that asks for the rest.
+- **The vault locks when the phone is pocketed** (`visibilitychange`), as well
+  as on a timer.
+- **The capsule goes to the bottom of whichever leaf you're holding**, at any
+  width, on any touch screen — see the chrome note below.
+- **The selection survives the fold.** It's in `ui`, not in the layout, so
+  opening or closing the phone keeps you on the same plan.
 
 ### The second page
 
@@ -159,7 +230,16 @@ Nest eggs, trips and scenario planning are deliberately **one feature**, because
 - **Book posture**: the same pane, pinned to the right-hand leaf with `env(viewport-segment-*)`.
 - **Anywhere narrower**: `display: none`.
 
-It carries the month's net, in and out, what's left to spend per day, where the money actually went, and one-tap buttons to log another of whatever you buy most (`data-action="log-again"`). `renderCompanion()` in `app.js` renders it unconditionally and lets CSS decide when it's on screen — don't re-add a posture check there, or it goes blank on the laptop.
+**What it carries follows the route**, which is the point of having two pages:
+on Plans it is the chosen plan in full, on Accounts the chosen account and its
+sealed details, and everywhere else the quick-log pane (log another of what you
+buy most, set aside into a plan, today's running total, the week's shape,
+what's scheduled next). The selection lives in `ui.selectedPlan` /
+`ui.selectedAccount` in `views/components.js`, so it survives folding and
+re-rendering; on a screen with no second page the same tap opens the detail
+inline instead, and tapping again closes it. `renderCompanion()` in `app.js`
+renders it unconditionally and lets CSS decide when it's on screen — don't
+re-add a posture check there, or it goes blank on the laptop.
 
 ### Motion
 

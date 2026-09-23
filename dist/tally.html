@@ -96,6 +96,7 @@
   --hue-spending: #30b0c7;
   --hue-trend: #a2845e;
   --hue-activity: #ffcc00;
+  --hue-advisor: #30b0c7;
 
   --scrim: rgb(0 0 0 / 0.28);
 
@@ -189,6 +190,7 @@
   --hue-spending: #40c8e0;
   --hue-trend: #b59469;
   --hue-activity: #ffd60a;
+  --hue-advisor: #40c8e0;
 
   --scrim: rgb(0 0 0 / 0.5);
 
@@ -1503,6 +1505,8 @@ main {
 .hero-ring[data-state='warning'] { --ring-a: #ffb340; --ring-b: #ff8a00; --ring-glow: var(--warn); }
 .hero-ring[data-state='over'] { --ring-a: #ff6961; --ring-b: #ff2d55; --ring-glow: var(--over); }
 .hero-ring[data-state='accent'] { --ring-a: #40a2ff; --ring-b: #5e5ce6; --ring-glow: var(--accent); }
+/* A plan's ring is the plan's own colour, set inline beside it. */
+.hero-ring[data-state='plan'] { --ring-a: var(--c, var(--accent)); --ring-b: var(--c, var(--accent)); }
 .hero-ring { --ring2-a: #0a84ff; --ring2-b: #64d2ff; }
 
 .ring-fill,
@@ -4814,6 +4818,617 @@ body {
   }
 }
 
+
+/* ---------- Savings first ---------- */
+
+/* Figures that sit under a hero: a chip each, in its own colour, so three
+   numbers read apart without labels doing the work. */
+.stat-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.stat-chips > div {
+  min-width: 0;
+  padding: 9px 12px 10px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--chip, var(--ink)) 12%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--ink)) 16%, transparent);
+}
+
+.stat-chips dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+.stat-chips dd {
+  margin: 0;
+  font-size: clamp(0.9375rem, 3.6cqi, 1.25rem);
+  font-weight: 660;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-chips dd small {
+  font-size: 0.6875rem;
+  font-weight: 560;
+  color: var(--ink-3);
+}
+
+/* A plan as a tile: its ring, its name, what it costs a month. On the cover
+   screen these are a row you flick through with a thumb; from the width of
+   an opened Fold they lay out as a grid, because there is room for it. */
+.plan-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+  margin: 0 calc(var(--pad) * -1);
+  padding-inline: var(--pad);
+  scrollbar-width: none;
+}
+
+.plan-strip::-webkit-scrollbar {
+  display: none;
+}
+
+@container page (min-width: 520px) {
+  .plan-strip {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    overflow: visible;
+    margin: 0;
+    padding-inline: 0;
+  }
+}
+
+.plan-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--r-nested, var(--r-sm));
+  background: color-mix(in srgb, var(--c) 10%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 22%, transparent);
+  scroll-snap-align: start;
+  transition: transform 0.35s var(--spring), box-shadow 0.3s var(--ease);
+}
+
+.plan-tile.selected {
+  box-shadow: inset 0 0 0 2px var(--c), 0 6px 18px color-mix(in srgb, var(--c) 28%, transparent);
+}
+
+.plan-tile-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+}
+
+.ring-sm {
+  display: block;
+  flex: none;
+  width: 60px;
+}
+
+.ring-sm .hero-ring {
+  width: 100%;
+}
+
+.ring-sm .hero-ring-center strong {
+  font-size: 0.875rem;
+}
+
+.plan-tile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.plan-tile-name {
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-tile-kind {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+/* The pot and its target are two lines, not one wrapped one: at tile width
+   "$2,000.00 of $4,000.00" breaks after "of" and reads as a mistake. */
+.plan-tile-amt {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--t-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-tile-amt .muted {
+  font-size: var(--t-caption);
+}
+
+.plan-tile-share {
+  font-size: var(--t-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--c) 70%, var(--ink));
+  font-weight: 600;
+}
+
+.plan-tile-add {
+  align-self: flex-start;
+}
+
+.plan-select {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* Where the surplus goes: one bar, then the rows behind it. */
+.alloc-bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  margin: 12px 0 10px;
+  border-radius: var(--pill);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.alloc-bar i {
+  width: var(--w);
+  background: var(--c);
+  transform-origin: left center;
+  animation: fill-x 620ms var(--ease) backwards;
+}
+
+.alloc-bar i.alloc-free,
+.key.alloc-free {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 18%, transparent) 0 5px, transparent 5px 10px);
+}
+
+.alloc-rows li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: var(--t-subhead);
+}
+
+.alloc-rows li + li {
+  border-top: 1px solid var(--line);
+}
+
+/* The advisor's checklist. */
+.checklist li + li {
+  border-top: 1px solid var(--line);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  transition: background-color 0.16s var(--ease);
+}
+
+.check-row:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.check-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--warn);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.checklist li.ok .check-mark {
+  background: var(--ok);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.checklist li.soft .check-mark {
+  background: var(--ink-4);
+  box-shadow: none;
+}
+
+.check-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.check-main strong {
+  font-weight: 600;
+}
+
+.check-main small {
+  font-size: var(--t-footnote);
+  color: var(--ink-3);
+}
+
+.check-row svg {
+  flex: none;
+  color: var(--ink-4);
+}
+
+/* The five-year table. Scrolls sideways on a narrow screen rather than
+   squeezing five years of figures into a phone's width. */
+.table-scroll {
+  overflow-x: auto;
+  margin: 0 calc(var(--pad) * -1);
+  padding-inline: var(--pad);
+  scrollbar-width: thin;
+}
+
+.milestones {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-footnote);
+}
+
+.milestones th,
+.milestones td {
+  padding: 8px 10px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.milestones thead th {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-weight: 620;
+}
+
+.milestones tbody th {
+  text-align: left;
+  font-weight: 580;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.milestones tbody th small {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.milestones td {
+  font-variant-numeric: tabular-nums;
+}
+
+.milestones .total th,
+.milestones .total td {
+  border-bottom: 0;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ---------- Accounts and the vault ---------- */
+
+.acct-list {
+  display: grid;
+  gap: 12px;
+}
+
+.acct-card {
+  border-left: 3px solid var(--hue);
+}
+
+.acct-card.selected {
+  box-shadow: inset 0 0 0 2px var(--hue);
+}
+
+.acct-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.acct-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.acct-meta .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+}
+
+.acct-meta .tag.good {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
+.acct-meta .tag.bad {
+  background: color-mix(in srgb, var(--over) 15%, transparent);
+  color: var(--over);
+}
+
+.acct-meta .tag svg {
+  width: 12px;
+  height: 12px;
+}
+
+.acct-detail-head,
+.plan-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.acct-detail-head h2,
+.plan-detail-head h2 {
+  font-size: var(--t-title3);
+}
+
+.plan-detail .goal-amt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.plan-detail-head > div,
+.acct-detail-head > div {
+  min-width: 0;
+}
+
+.detail-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 14px;
+}
+
+.detail-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-subhead);
+}
+
+.detail-rows dt {
+  color: var(--ink-3);
+}
+
+.detail-rows dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-rows dd.prewrap {
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+.vault-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: var(--r-nested, var(--r-sm));
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.vault-box h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--t-footnote);
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+
+.vault-box h3 svg {
+  width: 13px;
+  height: 13px;
+}
+
+.vault-fields > div {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vault-fields dt {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+.vault-fields dd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 0;
+}
+
+.secret {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.secret-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.vault-strip.open {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.vault-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.sealed-inputs {
+  margin-top: 8px;
+}
+
+.cover-only {
+  display: none;
+}
+
+.seg-4 {
+  font-size: var(--t-footnote);
+}
+
+.row-2.tight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row-2.tight input {
+  width: 5.5em;
+}
+
+.unit {
+  color: var(--ink-3);
+  font-size: var(--t-subhead);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--t-subhead);
+}
+
+.check input {
+  margin-top: 3px;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+
+/* ---------- Fold-specific ---------- */
+
+/* On the cover screen a full account number never appears. A 5.8" screen is
+   read in a queue, on a train, over a shoulder — so the last four is all it
+   will give up, and the rest waits for the inner screen. Unfolding is the
+   gesture that asks for it. */
+@media (max-width: 519px) {
+  .vault-fields [data-action='reveal-secret'] {
+    display: none;
+  }
+
+  .cover-only {
+    display: block;
+    margin-top: 8px;
+  }
+}
+
+/* Book posture: the list stays on the left leaf and the thing you picked
+   opens on the right one, so a plan and its five-year shape are readable at
+   once without either crossing the hinge. The inline copy is dropped,
+   because the facing page is already showing it. */
+@media (horizontal-viewport-segments: 2) {
+  .acct-inline,
+  [data-inline-detail] {
+    display: none;
+  }
+
+  .companion[data-pane='detail'] {
+    padding-top: calc(var(--safe-t) + 20px);
+  }
+}
+
+/* Tabletop: the lower half is the half lying flat under your hands, so the
+   controls go there and the results stay on the upright half — the shape of
+   a laptop, on a phone. */
+@media (vertical-viewport-segments: 2) {
+  main {
+    padding-bottom: calc(var(--bottom-h) + 24px);
+  }
+
+  [data-tabletop-bottom] {
+    position: fixed;
+    z-index: 15;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--bottom-h);
+    margin: 0;
+    overflow-y: auto;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    box-shadow: 0 -8px 28px rgb(0 0 0 / 0.18);
+    animation: rise 420ms var(--spring) backwards;
+  }
+
+  /* The capsule would sit on top of the panel that now owns the lower half. */
+  .tabbar {
+    bottom: calc(var(--bottom-h) + var(--safe-b) + 12px);
+  }
+}
+
+/* Both folded postures: a leaf is phone-shaped, so the plan tiles go back to
+   a strip you flick rather than a grid that would squeeze them. */
+@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
+  .plan-strip {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(196px, 1fr);
+    overflow-x: auto;
+  }
+}
+
 </style>
   <script type="module">
 globalThis.TALLY_SINGLE_FILE = true;
@@ -5003,7 +5618,10 @@ function currentSheet() {
 
 // ---------- Confirm ----------
 
-function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, requireText = null, extra = null }) {
+// `validate(dialog)` may be async and gates the confirm: return true to
+// close with a yes, false to stay open (having shown why). `focus` is a
+// selector for the field to start in.
+function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, requireText = null, extra = null, validate = null, focus = null }) {
   return new Promise((resolve) => {
     const dialog = makeDialog('confirm');
     dialog.className = 'confirm';
@@ -5039,16 +5657,29 @@ function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = fals
     input?.addEventListener('input', () => {
       okBtn.disabled = input.value.trim().toLowerCase() !== requireText.toLowerCase();
     });
-    form.addEventListener('submit', (e) => {
+    let checking = false;
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (okBtn.disabled) return;
+      if (okBtn.disabled || checking) return;
+      if (validate) {
+        checking = true;
+        okBtn.disabled = true;
+        let ok = false;
+        try {
+          ok = await validate(dialog);
+        } finally {
+          checking = false;
+          okBtn.disabled = false;
+        }
+        if (!ok) return;
+      }
       result = true;
       dialog.close();
     });
     $('[data-cancel]', dialog).addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', finish);
     dialog.showModal();
-    (input ?? $('[data-cancel]', dialog)).focus();
+    ((focus && $(focus, dialog)) ?? input ?? $('[data-cancel]', dialog)).focus();
   });
 }
 
@@ -5474,8 +6105,11 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '3.3.0';
-const BACKUP_FORMAT = 2;
+const APP_VERSION = '4.0.0';
+// 3 added the savings-first fields: a plan's yield, share and account, and an
+// account's institution, role, rate, security and sealed vault. Older backups
+// still restore; the new fields take their defaults.
+const BACKUP_FORMAT = 3;
 
 function makeId() {
   const c = globalThis.crypto;
@@ -5551,6 +6185,12 @@ const DEFAULT_SETTINGS = {
   lastChangeAt: null,
   defaultAccountId: null,
   csvDateOrder: 'MDY',
+  // How many months of essentials the safety net should cover.
+  runwayTarget: 6,
+  // What a month costs, if you'd rather state it than have it derived.
+  essentialMonthly: null,
+  vaultSalt: null,
+  vaultCheck: null,
 };
 
 const ACCOUNT_KINDS = {
@@ -5558,12 +6198,48 @@ const ACCOUNT_KINDS = {
   savings: 'Savings',
   credit: 'Credit card',
   cash: 'Cash',
+  brokerage: 'Brokerage',
   other: 'Other',
 };
 
+// The job an account does in the system: the hub the pay lands in and the
+// bills leave from, the card you spend from day to day (kept thin, so a lost
+// card can't reach the rest), the buckets the plans live in, and the money
+// put to work. One account can only have one job — that's the point.
+const ACCOUNT_ROLES = {
+  hub: 'Core hub',
+  spending: 'Everyday spending',
+  savings: 'Savings buckets',
+  investing: 'Investing',
+  other: 'Other',
+};
+
+// The full shape of an account record. Every writer starts here, so a record
+// written today and one restored from a backup are the same object — which
+// is what keeps a backup and a restore comparable.
+function newAccount(fields = {}) {
+  const kind = fields.kind ?? 'other';
+  return {
+    kind,
+    institution: '',
+    role: roleForKind(kind),
+    apyBp: 0,
+    mfa: false,
+    reviewedAt: null,
+    notes: '',
+    vault: null,
+    openingBalance: 0,
+    ...fields,
+  };
+}
+
+function roleForKind(kind) {
+  return { checking: 'hub', credit: 'spending', cash: 'spending', savings: 'savings', brokerage: 'investing' }[kind] ?? 'other';
+}
+
 const UNCATEGORIZED = '__uncategorized__';
 
-return { APP_NAME, APP_VERSION, BACKUP_FORMAT, makeId, PALETTE, ICONS, defaultCategories, DEFAULT_SETTINGS, ACCOUNT_KINDS, UNCATEGORIZED };
+return { APP_NAME, APP_VERSION, BACKUP_FORMAT, makeId, PALETTE, ICONS, defaultCategories, DEFAULT_SETTINGS, ACCOUNT_KINDS, ACCOUNT_ROLES, newAccount, roleForKind, UNCATEGORIZED };
 })();
 
 // js/core/stats.js
@@ -6216,11 +6892,12 @@ return { FREQUENCIES, MAX_GENERATED_PER_RUN, nthOccurrence, occurrencesBetween, 
 
 // js/core/plans.js
 const __m_js_core_plans_js = (() => {
-// Plans: the nest eggs you are filling, and the trips you fill one for and
-// then spend down.
+// Plans: the pots you are filling — a safety net, nest eggs, trips you fill
+// one for and then spend down, and money put to work for the long term.
 //
-// plan = { id, name, kind: 'fund' | 'trip', target, saved, targetDate,
-//          startDate, endDate, color, createdAt }
+// plan = { id, name, kind: 'safety' | 'fund' | 'trip' | 'invest', target,
+//          saved, targetDate, startDate, endDate, color, createdAt,
+//          apyBp, allocBp, accountId }
 //
 // `saved` is money you have deliberately set aside. It stays a counter you
 // move by hand rather than a transaction, because moving money between your
@@ -6229,12 +6906,100 @@ const __m_js_core_plans_js = (() => {
 // *against* a plan, which is how a trip draws its pot down — and why a flight
 // booked six months early still counts toward the trip.
 //
+// `apyBp` is the yield the pot earns, in basis points (425 = 4.25% a year);
+// for an investment it is the return you are assuming. `allocBp` is the share
+// of each month's surplus that goes here, also in basis points, so the shares
+// across all plans add up to at most 10000. Both are integers for the same
+// reason money is: a percentage that drifts is a projection that lies.
+//
 // Everything here is pure: given plans, transactions and today's date, the
 // same numbers come out every time.
 
 const { monthKey, monthKeyAdd } = __m_js_core_dates_js;
 const { expenseAmount, totals, txsInMonth, goalProgress } = __m_js_core_stats_js;
-const PLAN_KINDS = { fund: 'Nest egg', trip: 'Trip' };
+const PLAN_KINDS = { safety: 'Safety net', fund: 'Nest egg', trip: 'Trip', invest: 'Investments' };
+const BP = 10000;
+
+function planKind(plan) {
+  return plan.kind in PLAN_KINDS ? plan.kind : 'fund';
+}
+
+// One month of growth on a balance, in whole cents. Rounded every month, so
+// a year of projections is twelve honest roundings rather than one float
+// carried to the end and rounded there.
+function growMonthly(balance, apyBp = 0) {
+  if (!(balance > 0) || !(apyBp > 0)) return 0;
+  return Math.round((balance * apyBp) / BP / 12);
+}
+
+// How a month's surplus splits across the plans by their shares. Each share
+// is floored, so the shares can never add up to more than the surplus; what
+// they don't claim is reported as unallocated rather than quietly lost.
+function allocate(plans, surplus) {
+  const byPlan = new Map();
+  let allocated = 0;
+  const pot = Math.max(0, surplus);
+  for (const plan of plans) {
+    const bp = Math.min(BP, Math.max(0, plan.allocBp ?? 0));
+    const cents = Math.floor((pot * bp) / BP);
+    byPlan.set(plan.id, cents);
+    allocated += cents;
+  }
+  return { byPlan, allocated, unallocated: Math.max(0, pot - allocated), sharedBp: plans.reduce((s, p) => s + Math.max(0, p.allocBp ?? 0), 0) };
+}
+
+// The pot's balance at the end of each of the next `months` months, given a
+// monthly contribution and its yield. Growth is applied to the balance first,
+// then the month's contribution lands, which is how a savings account posts.
+function projectGrowth(saved, monthly, apyBp, months) {
+  const out = [];
+  let balance = Math.max(0, saved);
+  for (let m = 0; m < months; m++) {
+    balance += growMonthly(balance, apyBp) + Math.max(0, monthly);
+    out.push(balance);
+  }
+  return out;
+}
+
+// Year-end balances for every plan over the next `years`, and the total —
+// the table a planner draws up to show where things stand in five years.
+function milestones(plans, surplus, { years = 5 } = {}) {
+  const { byPlan } = allocate(plans, surplus);
+  const rows = plans.map((plan) => {
+    const series = projectGrowth(plan.saved ?? 0, byPlan.get(plan.id) ?? 0, plan.apyBp ?? 0, years * 12);
+    return { plan, monthly: byPlan.get(plan.id) ?? 0, yearEnds: Array.from({ length: years }, (_, y) => series[y * 12 + 11]) };
+  });
+  const totals = Array.from({ length: years }, (_, y) => rows.reduce((s, r) => s + r.yearEnds[y], 0));
+  return { rows, totals, years };
+}
+
+// Months the safety net would cover at the given monthly essentials. Not
+// money, so it's allowed a decimal: "5.4 months" is a real answer.
+function runway(saved, essentialMonthly) {
+  if (!(essentialMonthly > 0)) return null;
+  return Math.round((Math.max(0, saved) / essentialMonthly) * 10) / 10;
+}
+
+// What a month costs to keep going. Budgets are the honest figure when they
+// exist — they are what you've decided you need — otherwise the median of
+// recent months' spending, for the same reason the surplus uses the median.
+function essentialMonthly(categories, txs, todayIso, months = 6) {
+  let budgeted = 0;
+  for (const c of categories) if (c.type === 'expense' && c.budget != null && c.budget > 0) budgeted += c.budget;
+  if (budgeted > 0) return budgeted;
+  const spent = [];
+  let key = monthKeyAdd(monthKey(todayIso), -1);
+  for (let i = 0; i < months; i++) {
+    const t = totals(txsInMonth(txs, key));
+    if (t.count > 0) spent.push(t.expenses);
+    key = monthKeyAdd(key, -1);
+  }
+  return median(spent);
+}
+
+function safetyPlan(plans) {
+  return plans.find((p) => planKind(p) === 'safety') ?? null;
+}
 
 // How far ahead a projection will look before giving up. Ten years is longer
 // than any plan anyone sensibly makes, and it stops a tiny monthly amount
@@ -6261,7 +7026,7 @@ function planProgress(plan, txs, todayIso) {
   const available = base.saved - spent;
   return {
     ...base,
-    kind: plan.kind === 'trip' ? 'trip' : 'fund',
+    kind: planKind(plan),
     toSave: base.remaining,
     spent,
     available,
@@ -6324,9 +7089,16 @@ function planOrder(plans) {
   });
 }
 
-// Pour a monthly amount into the plans in order, one month at a time, and
-// report when each one fills up. This is the whole scenario engine: change
-// `monthly` or `lumpSum` and every projected date moves with it.
+// Pour a monthly amount into the plans, one month at a time, and report when
+// each one fills up. This is the whole scenario engine: change `monthly` or
+// `lumpSum` and every projected date moves with it.
+//
+// Each month, every pot grows by its own yield first. Then the month's money
+// is dealt out: plans with a share of the surplus take their share, and
+// whatever is left — the unallocated part, plus any share a plan didn't need
+// — pours into the plans in date order, soonest first, because that is what
+// would really happen. With no shares set, that pour is the whole engine,
+// which is what it always was.
 function projectPlans(plans, txs, { monthly = 0, lumpSum = 0, todayIso, horizon = PROJECTION_HORIZON }) {
   const startKey = monthKey(todayIso);
   const rows = planOrder(plans).map((plan) => ({
@@ -6337,20 +7109,29 @@ function projectPlans(plans, txs, { monthly = 0, lumpSum = 0, todayIso, horizon 
     onTime: null,
   }));
   const left = new Map(rows.map((r) => [r.plan.id, r.progress.toSave]));
+  const balance = new Map(rows.map((r) => [r.plan.id, r.progress.saved]));
+  const shares = allocate(rows.map((r) => r.plan), monthly);
+
+  // Put money into one pot; returns what it couldn't take.
+  const put = (row, amount, key, monthsAway) => {
+    const id = row.plan.id;
+    const need = left.get(id);
+    if (need <= 0 || amount <= 0) return amount;
+    const take = Math.min(need, amount);
+    left.set(id, need - take);
+    balance.set(id, balance.get(id) + take);
+    if (need - take === 0) {
+      row.fundedKey = key;
+      row.monthsAway = monthsAway;
+    }
+    return amount - take;
+  };
 
   const pour = (amount, key, monthsAway) => {
     let pot = amount;
     for (const row of rows) {
       if (pot <= 0) break;
-      const need = left.get(row.plan.id);
-      if (need <= 0) continue;
-      const put = Math.min(need, pot);
-      left.set(row.plan.id, need - put);
-      pot -= put;
-      if (need - put === 0) {
-        row.fundedKey = key;
-        row.monthsAway = monthsAway;
-      }
+      pot = put(row, pot, key, monthsAway);
     }
     return pot;
   };
@@ -6365,7 +7146,16 @@ function projectPlans(plans, txs, { monthly = 0, lumpSum = 0, todayIso, horizon 
   let spare = pour(Math.max(0, lumpSum), startKey, 0);
   if (monthly > 0) {
     for (let i = 1; i <= horizon && rows.some((r) => !r.fundedKey); i++) {
-      spare = pour(monthly, monthKeyAdd(startKey, i), i);
+      const key = monthKeyAdd(startKey, i);
+      for (const row of rows) put(row, growMonthly(balance.get(row.plan.id), row.plan.apyBp), key, i);
+      let pot = monthly;
+      if (shares.sharedBp > 0) {
+        for (const row of rows) {
+          const share = shares.byPlan.get(row.plan.id) ?? 0;
+          pot -= share - put(row, share, key, i);
+        }
+      }
+      spare = pour(pot, key, i);
     }
   }
 
@@ -6386,7 +7176,120 @@ function projectPlans(plans, txs, { monthly = 0, lumpSum = 0, todayIso, horizon 
   };
 }
 
-return { PLAN_KINDS, PROJECTION_HORIZON, planSpend, planTransactions, planProgress, requiredMonthly, monthlySurplus, planOrder, projectPlans };
+return { PLAN_KINDS, BP, planKind, growMonthly, allocate, projectGrowth, milestones, runway, essentialMonthly, safetyPlan, PROJECTION_HORIZON, planSpend, planTransactions, planProgress, requiredMonthly, monthlySurplus, planOrder, projectPlans };
+})();
+
+// js/core/advisor.js
+const __m_js_core_advisor_js = (() => {
+// The review a planner would do once a quarter, as a checklist that can be
+// computed: is the safety net deep enough, is every login protected, are the
+// rates current, is every spare dollar told where to go, is every dated plan
+// on track, is there a backup. Pure — the views only render the result.
+
+const { daysBetween } = __m_js_core_dates_js;
+const { allocate, BP, essentialMonthly, monthlySurplus, planKind, projectPlans, runway, safetyPlan } = __m_js_core_plans_js;
+const REVIEW_EVERY_DAYS = 180;
+
+function advisorReview({ plans, accounts, categories, transactions, settings, todayIso }) {
+  const checks = [];
+  const surplus = monthlySurplus(transactions, todayIso);
+  const typical = Math.max(0, surplus.typical);
+  const essentials = settings.essentialMonthly ?? essentialMonthly(categories, transactions, todayIso);
+  const target = settings.runwayTarget ?? 6;
+  const safety = safetyPlan(plans);
+  const months = safety ? runway(safety.saved ?? 0, essentials) : null;
+
+  checks.push({
+    id: 'safety',
+    ok: Boolean(safety) && months != null && months >= target,
+    title: !safety ? 'No safety net yet' : months == null ? 'Safety net can’t be measured yet' : months >= target ? `Safety net covers ${months} months` : `Safety net covers ${months} of ${target} months`,
+    detail: !safety
+      ? 'Mark one plan as your safety net so Tally can measure how many months it would carry you.'
+      : months == null
+        ? 'Set monthly budgets, or log a few months of spending, so there’s a monthly figure to measure against.'
+        : months >= target
+          ? `Above your ${target}-month target.`
+          : `Keep feeding it: the target is ${target} months of essentials.`,
+    route: 'goals',
+  });
+
+  const noMfa = accounts.filter((a) => !a.mfa);
+  checks.push({
+    id: 'mfa',
+    ok: accounts.length > 0 && noMfa.length === 0,
+    title: !accounts.length ? 'No accounts recorded' : noMfa.length ? `${noMfa.length === 1 ? '1 account is' : `${noMfa.length} accounts are`} missing two-factor sign-in` : 'Two-factor sign-in on every account',
+    detail: !accounts.length ? 'Add your accounts so their details, rates and security live in one place.' : noMfa.length ? noMfa.map((a) => a.name).join(', ') : 'Every login has a second step.',
+    route: 'accounts',
+  });
+
+  const stale = accounts.filter((a) => !a.reviewedAt || daysBetween(a.reviewedAt, todayIso) > REVIEW_EVERY_DAYS);
+  checks.push({
+    id: 'reviewed',
+    ok: accounts.length > 0 && stale.length === 0,
+    title: !accounts.length ? 'Nothing to review yet' : stale.length ? `${stale.length === 1 ? '1 account hasn’t' : `${stale.length} accounts haven’t`} been reviewed in 6 months` : 'Every account reviewed recently',
+    detail: stale.length ? `Rates move. Check ${stale.map((a) => a.name).join(', ')} and mark ${stale.length === 1 ? 'it' : 'them'} reviewed.` : 'Rates and details checked within the last six months.',
+    route: 'accounts',
+  });
+
+  const shares = allocate(plans, typical);
+  const sharedPct = Math.round((shares.sharedBp / BP) * 100);
+  checks.push({
+    id: 'allocation',
+    ok: plans.length > 0 && shares.sharedBp === BP,
+    title: !plans.length ? 'No plans yet' : shares.sharedBp === 0 ? 'Surplus has nowhere to go' : shares.sharedBp < BP ? `${100 - sharedPct}% of each month’s surplus is unallocated` : shares.sharedBp > BP ? `Shares add up to ${sharedPct}%` : 'Every spare dollar has a job',
+    detail: !plans.length ? 'Add a plan and give it a share of what’s left each month.' : shares.sharedBp === BP ? 'The shares add up to 100%.' : shares.sharedBp > BP ? 'Bring the shares back to 100% — more than that can’t be paid.' : 'Give the rest a share so it isn’t left to drift.',
+    route: 'goals',
+  });
+
+  const projection = projectPlans(plans, transactions, { monthly: typical, todayIso });
+  const dated = projection.rows.filter((r) => r.plan.targetDate && !r.progress.done);
+  const late = projection.rows.filter((r) => r.onTime === false || (!r.fundedKey && r.plan.targetDate));
+  checks.push({
+    id: 'on-track',
+    ok: dated.length > 0 && late.length === 0,
+    title: !dated.length ? 'No dated plans' : late.length ? `${late.length === 1 ? '1 plan misses its date' : `${late.length} plans miss their dates`}` : 'Every dated plan is on track',
+    detail: !dated.length ? 'A date turns a wish into a plan; add one to see if it’s reachable.' : late.length ? `At about ${typical > 0 ? '' : 'nothing '}a month: ${late.map((r) => r.plan.name).join(', ')}.` : `At about the usual surplus, everything arrives on time.`,
+    route: 'goals',
+  });
+
+  const { lastExportAt, lastChangeAt } = settings;
+  const backedUp = Boolean(lastExportAt) && (!lastChangeAt || lastExportAt >= lastChangeAt);
+  checks.push({
+    id: 'backup',
+    ok: backedUp || !transactions.length,
+    title: backedUp ? 'Backed up since the last change' : lastExportAt ? 'Changes since the last backup' : 'No backup yet',
+    detail: backedUp ? 'A copy exists outside this device.' : 'This device holds the only copy of everything here.',
+    route: 'settings',
+  });
+
+  const invest = plans.filter((p) => planKind(p) === 'invest' && (p.allocBp ?? 0) > 0);
+  checks.push({
+    id: 'invest',
+    ok: invest.length > 0,
+    soft: true,
+    title: invest.length ? 'Something is growing long term' : 'Nothing set to grow long term',
+    detail: invest.length ? invest.map((p) => p.name).join(', ') : 'Once the safety net is funded, an investment plan with a share of the surplus is how money compounds.',
+    route: 'goals',
+  });
+
+  const income = surplus.monthsUsed ? Math.round(surplus.months.filter((m) => m.count > 0).reduce((s, m) => s + m.income, 0) / surplus.monthsUsed) : 0;
+  return {
+    checks,
+    attention: checks.filter((c) => !c.ok),
+    score: checks.filter((c) => c.ok).length,
+    surplus,
+    essentials,
+    runway: months,
+    runwayTarget: target,
+    safety,
+    allocated: shares.allocated,
+    unallocated: shares.unallocated,
+    // The share of a typical month's income that is set aside.
+    savingsRate: income > 0 ? Math.round((shares.allocated / income) * 100) : null,
+  };
+}
+
+return { REVIEW_EVERY_DAYS, advisorReview };
 })();
 
 // js/storage.js
@@ -6654,7 +7557,8 @@ return { STORES, openStorage, drafts, requestPersistence, storageEstimate, Memor
 const __m_js_core_validate_js = (() => {
 const { parseAmount, isValidCents, isValidSignedCents, isSupportedCurrency } = __m_js_core_money_js;
 const { isValidISODate } = __m_js_core_dates_js;
-const { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE } = __m_js_core_defaults_js;
+const { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE, ACCOUNT_ROLES, roleForKind } = __m_js_core_defaults_js;
+const { PLAN_KINDS } = __m_js_core_plans_js;
 const { FREQUENCIES } = __m_js_core_recurring_js;
 const NOTE_MAX = 500;
 const NAME_MAX = 60;
@@ -6791,16 +7695,36 @@ function sanitizeCategory(c, index) {
   };
 }
 
+// Basis points: an integer share or rate from 0 to 100.00%.
+function bpOk(v) {
+  return Number.isInteger(v) && v >= 0 && v <= 10000;
+}
+
+// A sealed vault blob is opaque here: it's ciphertext, and only the owner's
+// passphrase can open it. All that's checked is that it has the right shape,
+// so a corrupt one is dropped rather than kept around to fail on every open.
+function vaultOk(v) {
+  return Boolean(v) && typeof v === 'object' && v.v === 1 && typeof v.iv === 'string' && typeof v.data === 'string' && v.iv.length <= 64 && v.data.length <= 20000;
+}
+
 function sanitizeAccount(a, index) {
   if (!a || typeof a !== 'object' || !idOk(a.id)) return null;
   const name = str(a.name, NAME_MAX).trim();
   if (!name) return null;
+  const kind = typeof a.kind === 'string' ? a.kind.slice(0, 20) : 'other';
   return {
     id: a.id,
     name,
-    kind: typeof a.kind === 'string' ? a.kind.slice(0, 20) : 'other',
+    kind,
     openingBalance: isValidSignedCents(a.openingBalance) ? a.openingBalance : 0,
     order: Number.isFinite(a.order) ? a.order : index,
+    institution: str(a.institution, NAME_MAX).trim(),
+    role: a.role in ACCOUNT_ROLES ? a.role : roleForKind(kind),
+    apyBp: bpOk(a.apyBp) ? a.apyBp : 0,
+    mfa: a.mfa === true,
+    reviewedAt: isValidISODate(a.reviewedAt) ? a.reviewedAt : null,
+    notes: str(a.notes, NOTE_MAX),
+    vault: vaultOk(a.vault) ? { v: 1, iv: a.vault.iv, data: a.vault.data } : null,
   };
 }
 
@@ -6836,7 +7760,7 @@ function sanitizeGoal(g) {
   return {
     id: g.id,
     name,
-    kind: g.kind === 'trip' ? 'trip' : 'fund',
+    kind: g.kind in PLAN_KINDS ? g.kind : 'fund',
     target: g.target,
     saved: isValidSignedCents(g.saved) ? Math.max(0, g.saved) : 0,
     targetDate: isValidISODate(g.targetDate) ? g.targetDate : null,
@@ -6846,6 +7770,9 @@ function sanitizeGoal(g) {
     endDate: endDate && startDate && endDate < startDate ? null : endDate,
     color: /^#[0-9a-f]{6}$/i.test(g.color ?? '') ? g.color : PALETTE[0],
     createdAt: str(g.createdAt, 40) || null,
+    apyBp: bpOk(g.apyBp) ? g.apyBp : 0,
+    allocBp: bpOk(g.allocBp) ? g.allocBp : 0,
+    accountId: idOk(g.accountId) ? g.accountId : null,
   };
 }
 
@@ -6868,6 +7795,12 @@ function sanitizeSettings(s) {
   if (typeof s.lastChangeAt === 'string') out.lastChangeAt = s.lastChangeAt;
   if (idOk(s.defaultAccountId)) out.defaultAccountId = s.defaultAccountId;
   if (s.csvDateOrder === 'DMY') out.csvDateOrder = 'DMY';
+  if (Number.isInteger(s.runwayTarget) && s.runwayTarget >= 1 && s.runwayTarget <= 60) out.runwayTarget = s.runwayTarget;
+  if (isValidCents(s.essentialMonthly) && s.essentialMonthly > 0) out.essentialMonthly = s.essentialMonthly;
+  // The vault's salt and its check value are needed to open what the
+  // accounts carry, so they travel with a backup. Neither is a secret.
+  if (typeof s.vaultSalt === 'string' && /^[A-Za-z0-9+/=]{16,64}$/.test(s.vaultSalt)) out.vaultSalt = s.vaultSalt;
+  if (vaultOk(s.vaultCheck)) out.vaultCheck = { v: 1, iv: s.vaultCheck.iv, data: s.vaultCheck.data };
   return out;
 }
 
@@ -6948,7 +7881,7 @@ const __m_js_store_js = (() => {
 // and nothing is shown as saved that wasn't.
 
 const { openStorage, requestPersistence, STORES } = __m_js_storage_js;
-const { defaultCategories, DEFAULT_SETTINGS, makeId } = __m_js_core_defaults_js;
+const { defaultCategories, DEFAULT_SETTINGS, makeId, newAccount } = __m_js_core_defaults_js;
 const { todayISO, addDays } = __m_js_core_dates_js;
 const { processRecurring, transactionFromRule, MAX_GENERATED_PER_RUN } = __m_js_core_recurring_js;
 const { sanitizeSettings } = __m_js_core_validate_js;
@@ -7213,7 +8146,7 @@ async function saveAccount(value, id = null) {
   const existing = id ? state.accounts.find((a) => a.id === id) : null;
   const record = existing
     ? { ...existing, ...value }
-    : { id: makeId(), ...value, order: state.accounts.length ? Math.max(...state.accounts.map((a) => a.order ?? 0)) + 1 : 0 };
+    : newAccount({ id: makeId(), ...value, order: state.accounts.length ? Math.max(...state.accounts.map((a) => a.order ?? 0)) + 1 : 0 });
   await commit([put('accounts', record)]);
   state.accounts = (existing ? state.accounts.map((a) => (a.id === id ? record : a)) : [...state.accounts, record]).sort(byOrder);
   emit();
@@ -7315,7 +8248,7 @@ async function saveGoal(value, id = null) {
   // two need to match.
   const record = existing
     ? { ...existing, ...value }
-    : { id: makeId(), kind: 'fund', saved: 0, targetDate: null, startDate: null, endDate: null, ...value, createdAt: nowIso() };
+    : { id: makeId(), kind: 'fund', saved: 0, targetDate: null, startDate: null, endDate: null, apyBp: 0, allocBp: 0, accountId: null, ...value, createdAt: nowIso() };
   await commit([put('goals', record)]);
   state.goals = existing ? state.goals.map((g) => (g.id === id ? record : g)) : [...state.goals, record];
   emit();
@@ -7431,6 +8364,172 @@ function snapshot() {
 }
 
 return { state, subscribe, sortedTransactions, describeError, init, reload, checkDayChange, saveTransaction, deleteTransactions, restoreTransactions, siblingsOf, saveCategory, categoryUsageCounts, deleteCategory, moveCategory, setBudget, saveAccount, deleteAccount, runRecurring, saveRule, deleteRule, handleReminder, saveGoal, adjustGoal, deleteGoal, updateSettings, markExported, applyImport, undoImport, restoreBackup, eraseAll, snapshot };
+})();
+
+// js/vault.js
+const __m_js_vault_js = (() => {
+// The vault: account numbers and logins, sealed on the device.
+//
+// Nothing sensitive is ever written in the clear. Each account's details are
+// encrypted with AES-GCM under a key derived from a passphrase the owner
+// types (PBKDF2, 300,000 rounds of SHA-256, with a random salt kept in
+// settings). The passphrase itself is never stored anywhere, so a backup
+// file, a synced browser profile or a stolen laptop yields only ciphertext.
+// The derived key lives in memory only while the vault is open, and the
+// vault closes itself after a few minutes, or when the app leaves the
+// foreground — on a phone, that's the moment it goes in a pocket.
+//
+// This needs WebCrypto, which browsers only provide on HTTPS (and localhost).
+// Over plain HTTP on the LAN the vault simply reports itself unavailable.
+
+const { state, updateSettings } = __m_js_store_js;
+const ROUNDS = 300000;
+const CHECK_TEXT = 'tally-vault-check';
+const AUTO_LOCK_MS = 5 * 60 * 1000;
+
+let key = null;
+let lockTimer = null;
+const listeners = new Set();
+
+const b64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const unb64 = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+
+function vaultAvailable() {
+  return Boolean(globalThis.crypto?.subtle && globalThis.isSecureContext);
+}
+
+function vaultExists() {
+  return Boolean(state.settings.vaultSalt && state.settings.vaultCheck);
+}
+
+function isUnlocked() {
+  return key !== null;
+}
+
+function onVaultChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function notify() {
+  for (const fn of listeners) fn(isUnlocked());
+}
+
+function touch() {
+  clearTimeout(lockTimer);
+  lockTimer = setTimeout(lock, AUTO_LOCK_MS);
+}
+
+function lock() {
+  clearTimeout(lockTimer);
+  if (key === null) return;
+  key = null;
+  notify();
+}
+
+async function deriveKey(passphrase, saltB64) {
+  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: unb64(saltB64), iterations: ROUNDS, hash: 'SHA-256' },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function sealWith(k, value) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, new TextEncoder().encode(JSON.stringify(value)));
+  return { v: 1, iv: b64(iv), data: b64(data) };
+}
+
+async function openWith(k, blob) {
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv) }, k, unb64(blob.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+// First time: choose a passphrase. Creates the salt and a check value so a
+// wrong passphrase can be told apart from a corrupt record later.
+async function createVault(passphrase) {
+  if (!vaultAvailable()) throw new Error('vault-unavailable');
+  if (vaultExists()) throw new Error('vault-exists');
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const k = await deriveKey(passphrase, salt);
+  const check = await sealWith(k, CHECK_TEXT);
+  await updateSettings({ vaultSalt: salt, vaultCheck: check });
+  key = k;
+  touch();
+  notify();
+}
+
+// Returns true if the passphrase is right. A wrong one is the only way
+// decrypting the check value fails, so that's what the failure means.
+async function unlock(passphrase) {
+  if (!vaultAvailable()) throw new Error('vault-unavailable');
+  if (!vaultExists()) throw new Error('vault-missing');
+  const k = await deriveKey(passphrase, state.settings.vaultSalt);
+  try {
+    const text = await openWith(k, state.settings.vaultCheck);
+    if (text !== CHECK_TEXT) return false;
+  } catch {
+    return false;
+  }
+  key = k;
+  touch();
+  notify();
+  return true;
+}
+
+async function seal(value) {
+  if (!key) throw new Error('vault-locked');
+  touch();
+  return sealWith(key, value);
+}
+
+async function open(blob) {
+  if (!key) throw new Error('vault-locked');
+  if (!blob) return null;
+  touch();
+  return openWith(key, blob);
+}
+
+// Re-seal every account under a new passphrase, then switch the check value.
+// Done in memory first so a failure part way through changes nothing.
+async function changePassphrase(current, next, accounts, saveAccount) {
+  if (!(await unlock(current))) return false;
+  const opened = [];
+  for (const a of accounts) if (a.vault) opened.push([a.id, await open(a.vault)]);
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const k = await deriveKey(next, salt);
+  const check = await sealWith(k, CHECK_TEXT);
+  const sealed = [];
+  for (const [id, value] of opened) sealed.push([id, await sealWith(k, value)]);
+  await updateSettings({ vaultSalt: salt, vaultCheck: check });
+  for (const [id, vault] of sealed) await saveAccount({ vault }, id);
+  key = k;
+  touch();
+  notify();
+  return true;
+}
+
+// A pocketed phone should not be an open vault.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') lock();
+});
+
+function describeVaultError(err) {
+  switch (err?.message) {
+    case 'vault-unavailable':
+      return 'Secure details need the installed app or an https address. They aren’t available over a plain http link.';
+    case 'vault-locked':
+      return 'The vault is locked. Enter your passphrase to open it.';
+    default:
+      return null;
+  }
+}
+
+return { vaultAvailable, vaultExists, isUnlocked, onVaultChange, lock, createVault, unlock, seal, open, changePassphrase, describeVaultError };
 })();
 
 // js/ui/format.js
@@ -7550,6 +8649,11 @@ const { badge, categoryById, categoryPath, accountById, signedMoney, month } = _
 // UI state shared between views (not persisted).
 const ui = {
   month: null, // 'YYYY-MM' shown on Home and Budgets
+  // What the second page is showing when a screen has a list on one leaf and
+  // the chosen item on the other. Survives folding: the selection is state,
+  // not something the layout owns.
+  selectedPlan: null,
+  selectedAccount: null,
 };
 
 function currentMonth() {
@@ -7619,7 +8723,34 @@ function sectionHead(title, link = null) {
   return html`<div class="section-head"><h2>${title}</h2>${link ?? ''}</div>`;
 }
 
-return { ui, currentMonth, viewMonth, icons, pageHead, monthSwitcher, emptyState, txRow, sectionHead };
+// Small identity marks for sections — each gets its own vivid hue (set in
+// css/app.css) rather than the single accent colour, so the eye can tell
+// the sections apart at a glance.
+const ICON = (d) => html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const SEC_ICONS = {
+  bell: ICON(html`<path d="M6.5 8a5.5 5.5 0 0111 0c0 4 1.3 5.2 1.8 5.8a.6.6 0 01-.4 1H5.1a.6.6 0 01-.4-1C5.2 13.2 6.5 12 6.5 8z"/><path d="M9.8 17.5a2.3 2.3 0 004.4 0"/>`),
+  budgets: ICON(html`<path d="M4 18V9M10 18V5M16 18v-7M20 18H3"/>`),
+  pie: ICON(html`<circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 3"/>`),
+  trend: ICON(html`<path d="M4 16l5-5 4 4 7-8"/><path d="M15 7h5v5"/>`),
+  list: ICON(html`<path d="M5 6h14M5 12h14M5 18h9"/>`),
+  target: ICON(html`<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>`),
+  split: ICON(html`<path d="M12 4v6M12 10l-6 5M12 10l6 5M6 15v4M18 15v4"/>`),
+  shield: ICON(html`<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>`),
+  lock: ICON(html`<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>`),
+  bank: ICON(html`<path d="M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 18h18"/>`),
+  calendar: ICON(html`<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`),
+};
+
+// A heading led by a coloured icon chip instead of the plain tally stroke.
+// `dark` asks for a dark glyph, for hues too light for white to read on.
+function homeSectionHead(hue, icon, title, { link = '', id = '', dark = false } = {}) {
+  return html`<div class="section-head no-stroke">
+    <h2${id ? html` id="${id}"` : ''}><span class="sec-icon${dark ? ' on-light' : ''}" style="--hue:${hue}" aria-hidden="true">${icon}</span>${title}</h2>
+    ${link}
+  </div>`;
+}
+
+return { ui, currentMonth, viewMonth, icons, pageHead, monthSwitcher, emptyState, txRow, sectionHead, SEC_ICONS, homeSectionHead };
 })();
 
 // js/views/forms.js
@@ -7630,9 +8761,78 @@ const { state, saveCategory, deleteCategory, categoryUsageCounts, setBudget, sav
 const { validateCategoryInput, NAME_MAX, NOTE_MAX } = __m_js_core_validate_js;
 const { parseAmount, centsToInput } = __m_js_core_money_js;
 const { isValidISODate } = __m_js_core_dates_js;
-const { ICONS, PALETTE, ACCOUNT_KINDS } = __m_js_core_defaults_js;
+const { ICONS, PALETTE, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } = __m_js_core_defaults_js;
 const { FREQUENCIES, occurrencesBetween } = __m_js_core_recurring_js;
+const { PLAN_KINDS, BP } = __m_js_core_plans_js;
 const { money, plural, categoryTree, categoryOptionLabel } = __m_js_ui_format_js;
+const { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open: openSealed, changePassphrase, describeVaultError } = __m_js_vault_js;
+// A percentage typed as "4.25" becomes 425 basis points, and only that:
+// two decimals, nothing past 100.
+function parsePercent(text) {
+  const t = String(text ?? '').trim().replace(',', '.').replace('%', '');
+  if (t === '') return { ok: true, bp: 0 };
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return { ok: false, error: 'Enter a percentage like 4.25.' };
+  const bp = Math.round(Number(t) * 100);
+  if (bp > BP) return { ok: false, error: 'Can’t be more than 100%.' };
+  return { ok: true, bp };
+}
+
+const fmtPercent = (bp) => (bp ? (bp / 100).toFixed(2).replace(/\.?0+$/, '') : '');
+
+// ---------- The vault's passphrase ----------
+
+// One dialog for choosing, entering or changing the passphrase. It's a
+// confirm dialog with fields, because that's what it is: a question with a
+// yes at the bottom.
+async function passphraseDialog({ mode = 'unlock' } = {}) {
+  if (!vaultAvailable()) {
+    toast(describeVaultError(new Error('vault-unavailable')), { tone: 'error' });
+    return false;
+  }
+  const create = mode === 'create';
+  const change = mode === 'change';
+  const extra = html`<div class="stack">
+    ${change ? html`<label class="field"><span class="label">Current passphrase</span><input type="password" id="vault-current" autocomplete="current-password" /></label>` : ''}
+    <label class="field">
+      <span class="label">${create ? 'Choose a passphrase' : change ? 'New passphrase' : 'Passphrase'}</span>
+      <input type="password" id="vault-pass" autocomplete="${create || change ? 'new-password' : 'current-password'}" ${create || change ? 'minlength="8"' : ''} />
+    </label>
+    ${create || change ? html`<label class="field"><span class="label">Type it again</span><input type="password" id="vault-pass2" autocomplete="new-password" /></label>` : ''}
+    <p class="field-error" id="vault-error" role="alert" hidden></p>
+  </div>`;
+  const ok = await confirmDialog({
+    title: create ? 'Seal the vault' : change ? 'Change the passphrase' : 'Open the vault',
+    message: create
+      ? 'Account numbers and logins are encrypted on this device with a key made from this passphrase. It is never stored anywhere, so there is no way to recover it: if it’s lost, so are the sealed details.'
+      : change
+        ? 'Every sealed detail is re-sealed under the new passphrase.'
+        : 'Opens for a few minutes, then locks itself.',
+    confirmLabel: create ? 'Seal' : change ? 'Change' : 'Open',
+    extra,
+    focus: change ? '#vault-current' : '#vault-pass',
+    validate: async (dialog) => {
+      const err = $('#vault-error', dialog);
+      const show = (m) => { err.textContent = m; err.hidden = false; return false; };
+      const pass = $('#vault-pass', dialog).value;
+      if (create || change) {
+        if (pass.length < 8) return show('Use at least 8 characters.');
+        if (pass !== $('#vault-pass2', dialog).value) return show('The two don’t match.');
+      }
+      try {
+        if (create) await createVault(pass);
+        else if (change) {
+          const done = await changePassphrase($('#vault-current', dialog).value, pass, state.accounts, saveAccount);
+          if (!done) return show('That isn’t the current passphrase.');
+        } else if (!(await unlock(pass))) return show('That isn’t the passphrase.');
+      } catch (e) {
+        return show(describeVaultError(e) ?? describeError(e));
+      }
+      return true;
+    },
+  });
+  return ok;
+}
+
 const fail = (err) => toast(describeError(err), { tone: 'error' });
 
 function footerButtons({ saveLabel, deletable }) {
@@ -7855,6 +9055,7 @@ function openBudgetForm(categoryId) {
 function openAccountForm(id = null) {
   const existing = id ? state.accounts.find((a) => a.id === id) : null;
   const { locale } = state.settings;
+  const unlocked = isUnlocked();
   const body = html`<form class="stack" novalidate autocomplete="off">
     <label class="field">
       <span class="label">Name</span>
@@ -7862,25 +9063,98 @@ function openAccountForm(id = null) {
     </label>
     ${errorSlot('name')}
     <label class="field">
-      <span class="label">Kind</span>
-      <select name="kind">
-        ${Object.entries(ACCOUNT_KINDS).map(([k, label]) => html`<option value="${k}" ${(existing?.kind ?? 'checking') === k ? 'selected' : ''}>${label}</option>`)}
-      </select>
+      <span class="label">Institution <span class="opt">Optional</span></span>
+      <input name="institution" value="${existing?.institution ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Ally, Fidelity, Schwab" />
+    </label>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Kind</span>
+        <select name="kind">
+          ${Object.entries(ACCOUNT_KINDS).map(([k, label]) => html`<option value="${k}" ${(existing?.kind ?? 'checking') === k ? 'selected' : ''}>${label}</option>`)}
+        </select>
+      </label>
+      <label class="field">
+        <span class="label">Its job</span>
+        <select name="role">
+          ${Object.entries(ACCOUNT_ROLES).map(([k, label]) => html`<option value="${k}" ${(existing?.role ?? roleForKind(existing?.kind ?? 'checking')) === k ? 'selected' : ''}>${label}</option>`)}
+        </select>
+      </label>
+    </div>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Earns <span class="opt">% a year</span></span>
+        <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
+      </label>
+      <label class="field">
+        <span class="label">Last reviewed <span class="opt">Optional</span></span>
+        <input type="date" name="reviewedAt" value="${existing?.reviewedAt ?? ''}" min="1900-01-01" max="2199-12-31" />
+      </label>
+    </div>
+    ${errorSlot('apy')}
+    <label class="check">
+      <input type="checkbox" name="mfa" ${existing?.mfa ? 'checked' : ''} />
+      <span>Sign-in has a second step (an app code, a key, or a text)</span>
     </label>
     ${moneyField('openingBalance', existing ? centsToInput(existing.openingBalance ?? 0, { locale }) : '0', {
       label: 'Starting balance',
       allowNegative: true,
       hint: 'The balance before your first transaction here. Use a minus sign for money owed, like a card balance: -250.',
     })}
+    <label class="field">
+      <span class="label">Notes <span class="opt">Optional</span></span>
+      <textarea name="notes" rows="2" maxlength="${NOTE_MAX}" placeholder="Beneficiary set, card in wallet, fee-free ATMs…">${existing?.notes ?? ''}</textarea>
+    </label>
+    <fieldset class="field vault-fieldset">
+      <legend class="label">Sealed details <span class="opt">Only your passphrase can open these</span></legend>
+      <div data-sealed-fields>
+        ${!vaultAvailable()
+          ? html`<p class="hint">Needs the installed app or an https address.</p>`
+          : !vaultExists()
+            ? html`<p class="hint">Set a passphrase first.</p><button type="button" class="btn small" data-vault-setup>Set a passphrase</button>`
+            : !unlocked
+              ? html`<p class="hint">${existing?.vault ? 'Sealed. Open the vault to edit them.' : 'Open the vault to add them.'}</p><button type="button" class="btn small" data-vault-open>Open the vault</button>`
+              : sealedInputs(null)}
+      </div>
+    </fieldset>
     ${state.accounts.length ? '' : html`<p class="hint">Once you have two or more accounts, the add form lets you pick one.</p>`}
   </form>`;
   openSheet({
     title: existing ? 'Edit account' : 'New account',
     body,
     footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add account', deletable: Boolean(existing) }),
-    onMount(dialog, sheet) {
+    async onMount(dialog, sheet) {
       const form = $('form', dialog);
       if (!existing) $('input[name="name"]', form).focus();
+      // Kind suggests the job, until the job is chosen by hand.
+      let roleTouched = Boolean(existing);
+      form.addEventListener('change', (e) => {
+        if (e.target.name === 'role') roleTouched = true;
+        if (e.target.name === 'kind' && !roleTouched) $('select[name="role"]', form).value = roleForKind(e.target.value);
+      });
+      // The sealed values are filled in after the sheet is up: opening
+      // them is asynchronous, and a locked vault leaves them blank.
+      let sealedLoaded = false;
+      const loadSealed = async () => {
+        const slot = $('[data-sealed-fields]', form);
+        if (!isUnlocked()) return;
+        try {
+          const values = existing?.vault ? await openSealed(existing.vault) : null;
+          slot.replaceChildren();
+          slot.insertAdjacentHTML('beforeend', String(sealedInputs(values)));
+          sealedLoaded = true;
+        } catch (e) {
+          slot.replaceChildren();
+          slot.insertAdjacentHTML('beforeend', String(html`<p class="field-error">Couldn’t open the sealed details. ${describeVaultError(e) ?? ''}</p>`));
+        }
+      };
+      if (unlocked) await loadSealed();
+      form.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-vault-setup]')) {
+          if (await passphraseDialog({ mode: 'create' })) await loadSealed();
+        } else if (e.target.closest('[data-vault-open]')) {
+          if (await passphraseDialog({ mode: 'unlock' })) await loadSealed();
+        }
+      });
       wireSave(dialog, form, async () => {
         const data = formData(form);
         const errors = {};
@@ -7893,8 +9167,29 @@ function openAccountForm(id = null) {
           if (!parsed.ok) errors.openingBalance = parsed.error;
           else opening = parsed.negative ? -parsed.cents : parsed.cents;
         }
+        const apy = parsePercent(data.apy);
+        if (!apy.ok) errors.apy = apy.error;
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveAccount({ name, kind: data.kind, openingBalance: opening }, id);
+        const record = {
+          name,
+          kind: data.kind,
+          role: data.role in ACCOUNT_ROLES ? data.role : roleForKind(data.kind),
+          institution: data.institution.trim().slice(0, NAME_MAX),
+          apyBp: apy.bp,
+          mfa: Boolean(data.mfa),
+          reviewedAt: isValidISODate(data.reviewedAt) ? data.reviewedAt : null,
+          notes: data.notes.trim().slice(0, NOTE_MAX),
+          openingBalance: opening,
+        };
+        if (sealedLoaded && isUnlocked()) {
+          const values = {};
+          for (const k of ['accountNumber', 'routingNumber', 'username', 'password', 'vaultNotes']) {
+            const v = (data[k] ?? '').trim();
+            if (v) values[k === 'vaultNotes' ? 'notes' : k] = v.slice(0, NOTE_MAX);
+          }
+          record.vault = Object.keys(values).length ? await seal(values) : null;
+        }
+        await saveAccount(record, id);
         sheet.close({ silent: true });
         toast(existing ? 'Account saved' : `Added ${name}`);
       });
@@ -7908,8 +9203,8 @@ function openAccountForm(id = null) {
         const ok = await confirmDialog({
           title: `Delete ${existing.name}?`,
           message: count
-            ? `${plural(count, 'transaction')} ${count === 1 ? 'is' : 'are'} linked to this account. They’ll be kept${others.length ? '' : ' without an account'}.`
-            : 'No transactions use this account.',
+            ? `${plural(count, 'transaction')} ${count === 1 ? 'is' : 'are'} linked to this account. They’ll be kept${others.length ? '' : ' without an account'}.${existing.vault ? ' Its sealed details are deleted with it.' : ''}`
+            : `No transactions use this account.${existing.vault ? ' Its sealed details are deleted with it.' : ''}`,
           confirmLabel: 'Delete account',
           danger: true,
           extra,
@@ -7926,6 +9221,20 @@ function openAccountForm(id = null) {
       });
     },
   });
+}
+
+function sealedInputs(values) {
+  return html`<div class="stack sealed-inputs">
+    <div class="row-2">
+      <label class="field"><span class="label">Account number</span><input name="accountNumber" value="${values?.accountNumber ?? ''}" inputmode="numeric" autocomplete="off" /></label>
+      <label class="field"><span class="label">Routing number</span><input name="routingNumber" value="${values?.routingNumber ?? ''}" inputmode="numeric" autocomplete="off" /></label>
+    </div>
+    <div class="row-2">
+      <label class="field"><span class="label">Username</span><input name="username" value="${values?.username ?? ''}" autocomplete="off" /></label>
+      <label class="field"><span class="label">Password</span><input name="password" type="password" value="${values?.password ?? ''}" autocomplete="off" /></label>
+    </div>
+    <label class="field"><span class="label">Private notes <span class="opt">Security questions, PIN hints</span></span><textarea name="vaultNotes" rows="2" maxlength="${NOTE_MAX}">${values?.notes ?? ''}</textarea></label>
+  </div>`;
 }
 
 // ---------- Recurring ----------
@@ -8070,13 +9379,13 @@ function openRuleForm(id = null, preset = {}) {
 
 // ---------- Goals ----------
 
-function openGoalForm(id = null) {
+function openGoalForm(id = null, preset = {}) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
+  const otherShares = state.goals.filter((g) => g.id !== id).reduce((sum, g) => sum + (g.allocBp ?? 0), 0);
   const { locale } = state.settings;
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <div class="seg" role="radiogroup" aria-label="Kind of plan">
-      <label><input type="radio" name="kind" value="fund" ${(existing?.kind ?? 'fund') !== 'trip' ? 'checked' : ''} /><span>Nest egg</span></label>
-      <label><input type="radio" name="kind" value="trip" ${existing?.kind === 'trip' ? 'checked' : ''} /><span>Trip</span></label>
+    <div class="seg seg-4" role="radiogroup" aria-label="Kind of plan">
+      ${Object.entries(PLAN_KINDS).map(([k, label]) => html`<label><input type="radio" name="kind" value="${k}" ${(existing?.kind ?? preset.kind ?? 'fund') === k ? 'checked' : ''} /><span>${label}</span></label>`)}
     </div>
     <label class="field">
       <span class="label">Name</span>
@@ -8102,11 +9411,31 @@ function openGoalForm(id = null) {
       </div>
       ${errorSlot('endDate')}
     </div>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Share of the surplus <span class="opt">%</span></span>
+        <input name="alloc" inputmode="decimal" value="${fmtPercent(existing?.allocBp)}" placeholder="0" aria-describedby="err-alloc" />
+        <span class="hint">${otherShares ? `Other plans take ${fmtPercent(otherShares) || 0}%, leaving ${fmtPercent(Math.max(0, BP - otherShares)) || 0}%.` : 'What part of each month’s leftover goes here.'}</span>
+      </label>
+      <label class="field">
+        <span class="label">Earns <span class="opt">% a year</span></span>
+        <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
+        <span class="hint" data-apy-hint>${(existing?.kind ?? preset.kind) === 'invest' ? 'The return you’re assuming. 7% is a common long-run guess.' : 'The account’s APY, if it pays one.'}</span>
+      </label>
+    </div>
+    ${errorSlot('alloc')}
+    ${errorSlot('apy')}
+    ${state.accounts.length
+      ? html`<label class="field">
+          <span class="label">Kept in <span class="opt">Optional</span></span>
+          <select name="accountId"><option value="">No particular account</option>${state.accounts.map((a) => html`<option value="${a.id}" ${existing?.accountId === a.id ? 'selected' : ''}>${a.name}${a.institution ? ` · ${a.institution}` : ''}</option>`)}</select>
+        </label>`
+      : ''}
     <fieldset class="field">
       <legend class="label">Color</legend>
       <div class="swatches">${PALETTE.map((c) => html`<label class="swatch" style="--c:${c}"><input type="radio" name="color" value="${c}" ${(existing?.color ?? PALETTE[state.goals.length % PALETTE.length]) === c ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}</div>
     </fieldset>
-    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost.</p>
+    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost. Only one plan can be the safety net.</p>
   </form>`;
   openSheet({
     title: existing ? 'Edit plan' : 'New plan',
@@ -8119,13 +9448,23 @@ function openGoalForm(id = null) {
       form.addEventListener('change', (e) => {
         if (e.target.name !== 'kind') return;
         $('.trip-dates', form).hidden = e.target.value !== 'trip';
+        $('[data-apy-hint]', form).textContent = e.target.value === 'invest' ? 'The return you’re assuming. 7% is a common long-run guess.' : 'The account’s APY, if it pays one.';
       });
       wireSave(dialog, form, async () => {
         const d = formData(form);
         const errors = {};
-        const kind = d.kind === 'trip' ? 'trip' : 'fund';
+        const kind = d.kind in PLAN_KINDS ? d.kind : 'fund';
         const name = d.name.trim();
         if (!name) errors.name = 'Name your plan.';
+        if (kind === 'safety') {
+          const other = state.goals.find((g) => g.id !== id && g.kind === 'safety');
+          if (other) errors.name = `${other.name} is already the safety net. Change it to a nest egg first.`;
+        }
+        const alloc = parsePercent(d.alloc);
+        if (!alloc.ok) errors.alloc = alloc.error;
+        else if (alloc.bp + otherShares > BP) errors.alloc = `Other plans already take ${fmtPercent(otherShares)}%, so this can be at most ${fmtPercent(BP - otherShares) || 0}%.`;
+        const apy = parsePercent(d.apy);
+        if (!apy.ok) errors.apy = apy.error;
         const target = parseAmount(d.target, { locale });
         if (!target.ok) errors.target = target.error;
         else if (target.negative || target.cents === 0) errors.target = 'Enter a target greater than zero.';
@@ -8140,7 +9479,7 @@ function openGoalForm(id = null) {
         const endDate = kind === 'trip' ? d.endDate || null : null;
         if (startDate && endDate && endDate < startDate) errors.endDate = 'The return date is before the departure date.';
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0] }, id);
+        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0], allocBp: alloc.bp, apyBp: apy.bp, accountId: d.accountId || null }, id);
         sheet.close({ silent: true });
         toast(existing ? 'Plan saved' : `Added ${name}`);
       });
@@ -8193,7 +9532,7 @@ function openGoalAdjust(id) {
   });
 }
 
-return { openCategoryForm, openDeleteCategory, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust };
+return { passphraseDialog, openCategoryForm, openDeleteCategory, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust };
 })();
 
 // js/views/txForm.js
@@ -8627,34 +9966,14 @@ return { openTransactionForm };
 const __m_js_views_home_js = (() => {
 const { html } = __m_js_ui_html_js;
 const { state, sortedTransactions } = __m_js_store_js;
-const { totals, txsInMonth, budgetOverview, spendingByCategory, monthlySeries, compareBudgetRows } = __m_js_core_stats_js;
-const { daysInMonth, parseISO, monthKeyAdd, formatMonth, isInMonth } = __m_js_core_dates_js;
+const { totals, txsInMonth, budgetOverview, spendingByCategory, compareBudgetRows } = __m_js_core_stats_js;
+const { daysInMonth, parseISO, monthKeyAdd, isInMonth } = __m_js_core_dates_js;
 const { UNCATEGORIZED } = __m_js_core_defaults_js;
+const { planOrder, planProgress, allocate, planKind, PLAN_KINDS, BP } = __m_js_core_plans_js;
+const { advisorReview } = __m_js_core_advisor_js;
 const { money, month, relativeDay, categoryById, badge, percent, timeAgo, plural } = __m_js_ui_format_js;
-const { donut, progressRing, progressBar, barChart } = __m_js_ui_charts_js;
-const { ui, viewMonth, currentMonth, monthSwitcher, emptyState, txRow, icons } = __m_js_views_components_js;
-// Small identity marks for Home's sections — each one gets its own vivid hue
-// (set in css/app.css) instead of the single accent colour, so the eye can
-// tell the sections apart at a glance rather than reading five identical
-// grey headings in a row.
-const SEC_ICONS = {
-  bell: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 8a5.5 5.5 0 0111 0c0 4 1.3 5.2 1.8 5.8a.6.6 0 01-.4 1H5.1a.6.6 0 01-.4-1C5.2 13.2 6.5 12 6.5 8z"/><path d="M9.8 17.5a2.3 2.3 0 004.4 0"/></svg>`,
-  budgets: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18V9M10 18V5M16 18v-7M20 18H3"/></svg>`,
-  pie: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 3"/></svg>`,
-  trend: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l5-5 4 4 7-8"/><path d="M15 7h5v5"/></svg>`,
-  list: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>`,
-};
-
-// Replaces the plain tally-stroke heading with a coloured icon chip. `dark`
-// asks for a dark glyph instead of white, for hues (like the gold used for
-// reminders) too light for white to read against.
-function homeSectionHead(hue, icon, title, { link = '', id = '', dark = false } = {}) {
-  return html`<div class="section-head no-stroke">
-    <h2${id ? html` id="${id}"` : ''}><span class="sec-icon${dark ? ' on-light' : ''}" style="--hue:${hue}" aria-hidden="true">${icon}</span>${title}</h2>
-    ${link}
-  </div>`;
-}
-
+const { donut, progressRing, progressBar } = __m_js_ui_charts_js;
+const { ui, viewMonth, currentMonth, monthSwitcher, emptyState, txRow, icons, SEC_ICONS, homeSectionHead } = __m_js_views_components_js;
 function remindersBlock() {
   if (!state.reminders.length) return '';
   const items = state.reminders
@@ -8693,7 +10012,157 @@ function backupNudge() {
   </aside>`;
 }
 
-function hero(key, monthTx, overview) {
+// ---------- Savings first ----------
+
+function fmtMonths(m) {
+  return Number.isInteger(m) ? String(m) : m.toFixed(1);
+}
+
+// The one card that answers "am I safe?": how many months the safety net
+// would carry you, against the target. Without a safety net it falls back to
+// how far along everything is together, and with no plans at all it asks for
+// one — the first thing a planner would ask for too.
+function savingsHero(review) {
+  const { safety, runway: months, runwayTarget: target, essentials, surplus, allocated } = review;
+  const goals = state.goals;
+  const totalSaved = goals.reduce((s, g) => s + (g.saved ?? 0), 0);
+  const totalTarget = goals.reduce((s, g) => s + g.target, 0);
+  const typical = Math.max(0, surplus.typical);
+
+  let ring = '';
+  let headline;
+  let sub;
+  let stateName = 'accent';
+  if (safety && months != null) {
+    const ratio = target > 0 ? months / target : 0;
+    stateName = ratio >= 1 ? 'ok' : ratio >= 0.5 ? 'warning' : 'over';
+    ring = progressRing({
+      ratio,
+      state: stateName,
+      showDay: false,
+      centerTop: fmtMonths(months),
+      centerBottom: months === 1 ? 'month' : 'months',
+      ariaLabel: `Safety net covers ${fmtMonths(months)} of ${target} months`,
+    });
+    headline = ratio >= 1 ? `${fmtMonths(months)} months of runway. You’re covered.` : `${fmtMonths(months)} of ${target} months of runway`;
+    sub = `${safety.name} holds ${money(safety.saved ?? 0)}, and a month of essentials is about ${money(essentials)}.${ratio < 1 && typical > 0 ? ` At the usual surplus, the rest is on its way.` : ''}`;
+  } else if (goals.length) {
+    const ratio = totalTarget > 0 ? Math.min(1, totalSaved / totalTarget) : 0;
+    ring = progressRing({
+      ratio,
+      state: 'accent',
+      showDay: false,
+      centerTop: percent(ratio),
+      centerBottom: 'saved',
+      ariaLabel: `${percent(ratio)} of all plans funded`,
+    });
+    headline = `${money(totalSaved)} set aside toward ${money(totalTarget)}`;
+    sub = safety
+      ? html`To measure that in months, <a href="#/budgets">set monthly budgets</a> or log a few months of spending.`
+      : html`Mark one plan as your safety net and Tally will show how many months it would carry you. <a href="#/goals">Choose one</a>.`;
+  } else {
+    headline = 'Start with a safety net';
+    sub = 'The first plan a planner would give you: a pot that covers a few months of essentials. Then everything else.';
+  }
+
+  const chips = goals.length
+    ? html`<dl class="stat-chips">
+        <div style="--chip:var(--pos)"><dt>Set aside</dt><dd class="amt amt-in">${money(totalSaved)}</dd></div>
+        <div style="--chip:var(--accent)"><dt>Usual surplus</dt><dd class="amt">${money(typical)}<small>/mo</small></dd></div>
+        <div style="--chip:var(--hue-budgets)"><dt>Allocated</dt><dd class="amt">${typical > 0 ? percent(allocated / typical) : '—'}</dd></div>
+      </dl>`
+    : html`<div class="btn-row"><button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button></div>`;
+
+  return html`<section class="hero hero-savings${ring ? ' small' : ''}" data-state="${stateName}">
+    <div class="hero-main">
+      ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
+      <div class="hero-say">
+        <p class="hero-line">${headline}</p>
+        <p class="hero-sub">${sub}</p>
+      </div>
+    </div>
+    ${chips}
+  </section>`;
+}
+
+// Every plan as a tile with its own ring. On the cover screen the tiles are
+// a strip you flick through with a thumb; opened flat they're a grid.
+function planTile(plan, progress, share, { selected = false, compact = false } = {}) {
+  const kind = planKind(plan);
+  return html`<li class="plan-tile${selected ? ' selected' : ''}" style="--c:${plan.color}">
+    <button type="button" class="plan-tile-btn" data-action="select-plan" data-id="${plan.id}" aria-label="${plan.name}, ${percent(progress.ratio)} funded">
+      <span class="ring-sm" style="--ring-a:${plan.color};--ring-b:color-mix(in srgb, ${plan.color} 55%, white);--ring-glow:${plan.color}">
+        ${progressRing({ size: 96, stroke: 12, ratio: progress.ratio, state: 'plan', showDay: false, centerTop: percent(progress.ratio), centerBottom: '', ariaLabel: '' })}
+      </span>
+      <span class="plan-tile-main">
+        <span class="plan-tile-name">${plan.name}</span>
+        <span class="plan-tile-kind">${PLAN_KINDS[kind]}</span>
+        <span class="plan-tile-amt"><span class="amt">${money(progress.saved)}</span> <span class="muted">of ${money(plan.target)}</span></span>
+        ${share > 0 ? html`<span class="plan-tile-share">${money(share)} a month</span>` : compact ? '' : html`<span class="plan-tile-share muted">No share of the surplus yet</span>`}
+      </span>
+    </button>
+    <button type="button" class="btn small primary plan-tile-add" data-action="adjust-goal" data-id="${plan.id}">${icons.plus}<span>Set aside</span></button>
+  </li>`;
+}
+
+function plansSection(review) {
+  const typical = Math.max(0, review.surplus.typical);
+  const ordered = planOrder(state.goals);
+  const shares = allocate(ordered, typical);
+  return html`<section class="panel tinted plans-home" style="--hue:var(--hue-budgets)" aria-labelledby="plans-title">
+    ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.target, html`<span id="plans-title">Plans</span>`, { link: html`<a class="link" href="#/goals">All plans</a>` })}
+    ${ordered.length
+      ? html`<ul class="plain-list plan-strip">${ordered.map((g) => planTile(g, planProgress(g, state.transactions, state.today), shares.byPlan.get(g.id) ?? 0, { selected: ui.selectedPlan === g.id }))}</ul>`
+      : html`<p class="muted">Nothing to save toward yet.</p>
+        <div class="btn-row"><button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button><button type="button" class="btn" data-action="new-goal">Add a plan</button></div>`}
+  </section>`;
+}
+
+// How each month's surplus is dealt out, as one bar and the rows behind it.
+function allocationSection(review) {
+  const typical = Math.max(0, review.surplus.typical);
+  const ordered = planOrder(state.goals);
+  if (!ordered.length) return '';
+  const shares = allocate(ordered, typical);
+  const segs = ordered.filter((g) => (g.allocBp ?? 0) > 0);
+  const unBp = Math.max(0, BP - shares.sharedBp);
+  return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="alloc-title">
+    ${homeSectionHead('var(--hue-spending)', SEC_ICONS.split, html`<span id="alloc-title">Where the surplus goes</span>`, { link: html`<a class="link" href="#/goals">Change</a>` })}
+    ${typical > 0
+      ? html`<p class="muted small">About ${money(typical)} is left over in a typical month. ${shares.unallocated > 0 ? `${money(shares.unallocated)} of it has no home yet.` : 'All of it has a job.'}</p>`
+      : html`<p class="muted small">Once a few months are logged, Tally knows what’s usually left over and can split it by these shares.</p>`}
+    <div class="alloc-bar" role="img" aria-label="Shares of the monthly surplus">
+      ${segs.map((g) => html`<i style="--w:${((Math.min(BP, g.allocBp) / BP) * 100).toFixed(2)}%;--c:${g.color}" title="${g.name}: ${percent(g.allocBp / BP)}"></i>`)}
+      ${unBp > 0 ? html`<i class="alloc-free" style="--w:${((unBp / BP) * 100).toFixed(2)}%" title="Unallocated: ${percent(unBp / BP)}"></i>` : ''}
+    </div>
+    <ul class="plain-list alloc-rows">
+      ${segs.map((g) => html`<li><i class="key" style="background:${g.color}"></i><span class="legend-name">${g.name}</span><span class="legend-pct">${percent(g.allocBp / BP)}</span><span class="amt">${money(shares.byPlan.get(g.id) ?? 0)}</span></li>`)}
+      ${unBp > 0 ? html`<li class="muted"><i class="key alloc-free"></i><span class="legend-name">Unallocated</span><span class="legend-pct">${percent(unBp / BP)}</span><span class="amt">${money(shares.unallocated)}</span></li>` : ''}
+    </ul>
+  </section>`;
+}
+
+function advisorSection(review, { limit = 3 } = {}) {
+  const items = review.attention.slice(0, limit);
+  return html`<section class="panel tinted" style="--hue:var(--hue-advisor)" aria-labelledby="adv-title">
+    ${homeSectionHead('var(--hue-advisor)', SEC_ICONS.shield, html`<span id="adv-title">Advisor</span>`, { link: html`<a class="link" href="#/advisor">${review.score} of ${review.checks.length} clear</a>` })}
+    ${items.length
+      ? html`<ul class="plain-list checklist">
+          ${items.map((c) => html`<li class="${c.soft ? 'soft' : ''}">
+            <a class="check-row" href="#/${c.route}">
+              <i class="check-mark" aria-hidden="true"></i>
+              <span class="check-main"><strong>${c.title}</strong><small>${c.detail}</small></span>
+              ${icons.chevron}
+            </a>
+          </li>`)}
+        </ul>`
+      : html`<p class="muted">Everything a planner would check is in order.</p>`}
+  </section>`;
+}
+
+// ---------- This month's spending ----------
+
+function spendingHero(key, monthTx, overview) {
   const isCurrent = key === currentMonth();
   const isPast = key < currentMonth();
   const [y, m] = key.split('-').map(Number);
@@ -8704,7 +10173,7 @@ function hero(key, monthTx, overview) {
   const t = totals(monthTx);
 
   if (!monthTx.length && !isCurrent) {
-    return html`<section class="hero">
+    return html`<section class="hero hero-spend small">
       <p class="hero-line">${isPast ? `Nothing was recorded in ${name}` : `${name} hasn’t started yet`}</p>
       ${overview.hasBudgets ? html`<p class="hero-sub">Your monthly budgets add up to ${money(overview.limit)}.</p>` : ''}
     </section>`;
@@ -8714,20 +10183,11 @@ function hero(key, monthTx, overview) {
     const headline = t.expenses > 0
       ? isCurrent ? `You’ve spent ${money(t.expenses)} so far this month` : `You spent ${money(t.expenses)} in ${name}`
       : isCurrent ? 'Nothing spent yet this month' : isPast ? `No spending recorded in ${name}` : `${name} hasn’t started yet`;
-    // No budget to measure against, so the ring can't show a money state —
-    // it stands in as a plain, accent-coloured sense of where the month is.
     const dayFraction = dayOfMonth / days;
     const ring = isCurrent
-      ? progressRing({
-          ratio: dayFraction,
-          state: 'accent',
-          showDay: false,
-          centerTop: percent(dayFraction),
-          centerBottom: 'of month',
-          ariaLabel: `${percent(dayFraction)} of ${name} gone`,
-        })
+      ? progressRing({ ratio: dayFraction, state: 'accent', showDay: false, centerTop: percent(dayFraction), centerBottom: 'of month', ariaLabel: `${percent(dayFraction)} of ${name} gone` })
       : '';
-    return html`<section class="hero${ring ? ' small' : ''}" data-state="accent">
+    return html`<section class="hero hero-spend small" data-state="accent">
       <div class="hero-main">
         ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
         <div class="hero-say">
@@ -8760,7 +10220,7 @@ function hero(key, monthTx, overview) {
 
   const ratio = limit > 0 ? spent / limit : spent > 0 ? 2 : 0;
   const showRing = isCurrent || isPast;
-  return html`<section class="hero${showRing ? ' small' : ''}" data-state="${status.state}">
+  return html`<section class="hero hero-spend small" data-state="${status.state}">
     <div class="hero-main">
       ${showRing
         ? html`<div class="hero-ring-row">${progressRing({
@@ -8782,9 +10242,6 @@ function hero(key, monthTx, overview) {
   </section>`;
 }
 
-// Already inside the hero card, so this is the .compact figures dl rather
-// than a card of its own — merging Home's headline numbers into one focal
-// card instead of three stacked ones.
 function figures(t) {
   return html`<dl class="figures compact hero-figures">
     <div style="--chip:var(--pos)"><dt>Income</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
@@ -8801,9 +10258,9 @@ function budgetSnapshot(overview) {
   }
   if (!rows.length) return '';
   rows.sort(compareBudgetRows);
-  const shown = rows.slice(0, 5);
-  return html`<section class="panel tinted" style="--hue:var(--hue-budgets)" aria-labelledby="bud-title">
-    ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.budgets, html`<span id="bud-title">Budgets</span>`, { link: html`<a class="link" href="#/budgets">${rows.length > shown.length ? `All ${rows.length}` : 'Details'}</a>` })}
+  const shown = rows.slice(0, 4);
+  return html`<section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="bud-title">
+    ${homeSectionHead('var(--hue-trend)', SEC_ICONS.budgets, html`<span id="bud-title">Budgets</span>`, { link: html`<a class="link" href="#/budgets">${rows.length > shown.length ? `All ${rows.length}` : 'Details'}</a>` })}
     <ul class="plain-list budget-mini">
       ${shown.map((r) => html`<li>
         <div class="bm-top">
@@ -8819,27 +10276,18 @@ function budgetSnapshot(overview) {
 function categoryBreakdown(monthTx) {
   const rows = spendingByCategory(monthTx, state.categories).filter((r) => r.amount > 0);
   const total = rows.reduce((s, r) => s + r.amount, 0);
-  if (!total) {
-    return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
-      ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
-      <p class="muted">No spending this month yet. Categories will appear here as you log expenses.</p>
-    </section>`;
-  }
-  const top = rows.slice(0, 6);
-  const rest = rows.slice(6).reduce((s, r) => s + r.amount, 0);
+  if (!total) return '';
+  const top = rows.slice(0, 5);
+  const rest = rows.slice(5).reduce((s, r) => s + r.amount, 0);
   const segments = top.map((r) => {
     const c = r.categoryId === UNCATEGORIZED ? categoryById(null) : categoryById(r.categoryId);
     return { value: r.amount, color: c.color, label: `${c.name}: ${money(r.amount)}`, cat: c, amount: r.amount };
   });
   if (rest > 0) segments.push({ value: rest, color: 'var(--ink-4)', label: `Everything else: ${money(rest)}`, cat: { name: 'Everything else', icon: '…', color: 'var(--ink-4)' }, amount: rest });
   return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
-    ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
+    ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`, { link: html`<a class="link" href="#/activity">All activity</a>` })}
     <div class="breakdown">
-      ${donut(segments, {
-        centerTop: money(total, { compact: total >= 1000000 }),
-        centerBottom: 'spent',
-        ariaLabel: `Spending by category: ${segments.map((s) => s.label).join(', ')}`,
-      })}
+      ${donut(segments, { size: 132, stroke: 20, centerTop: money(total, { compact: total >= 1000000 }), centerBottom: 'spent', ariaLabel: `Spending by category: ${segments.map((s) => s.label).join(', ')}` })}
       <ul class="legend">
         ${segments.map((s) => html`<li>
           <i class="key" style="background:${s.color}"></i>
@@ -8852,80 +10300,56 @@ function categoryBreakdown(monthTx) {
   </section>`;
 }
 
-function trend(key) {
-  const series = monthlySeries(state.transactions, key, 6);
-  const locale = state.settings.locale;
-  return html`<section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="trend-title">
-    ${homeSectionHead('var(--hue-trend)', SEC_ICONS.trend, html`<span id="trend-title">Last 6 months</span>`)}
-    ${barChart(
-      series.map((s) => ({
-        key: s.key,
-        label: formatMonth(s.key, locale, { month: 'short' }),
-        fullLabel: formatMonth(s.key, locale),
-        values: { income: s.income, expenses: Math.max(0, s.expenses) },
-      })),
-      {
-        fields: [
-          { field: 'income', name: 'Income', cls: 'bar-in' },
-          { field: 'expenses', name: 'Spending', cls: 'bar-out' },
-        ],
-        height: 190,
-        highlightKey: key,
-        fmtAxis: (v) => money(v, { compact: true }),
-        fmtValue: (v) => money(v),
-        ariaLabel: `Income and spending, ${formatMonth(series[0].key, locale)} to ${formatMonth(key, locale)}`,
-      }
-    )}
-    <p class="muted small">Net over these months: ${money(series.reduce((s, m) => s + m.net, 0), { sign: true })}</p>
-  </section>`;
-}
-
-function recent(key, monthTx) {
-  const list = sortedTransactions().filter((t) => isInMonth(t.date, key)).slice(0, 6);
+function recent(key) {
+  const list = sortedTransactions().filter((t) => isInMonth(t.date, key)).slice(0, 4);
+  if (!list.length) return '';
   return html`<section class="panel tinted" style="--hue:var(--hue-activity)" aria-labelledby="recent-title">
-    ${homeSectionHead('var(--hue-activity)', SEC_ICONS.list, html`<span id="recent-title">Latest in ${month(key, { month: 'long' })}</span>`, { link: html`<a class="link" href="#/activity">All activity</a>`, dark: true })}
-    ${list.length
-      ? html`<ul class="tx-list">${list.map(txRow)}</ul>`
-      : html`<p class="muted">Nothing logged for this month.</p>`}
+    ${homeSectionHead('var(--hue-activity)', SEC_ICONS.list, html`<span id="recent-title">Latest</span>`, { link: html`<a class="link" href="#/activity">All activity</a>`, dark: true })}
+    <ul class="tx-list">${list.map(txRow)}</ul>
   </section>`;
 }
 
 function welcome() {
   return emptyState({
-    title: 'Start with one transaction',
-    body: 'Log what you spent today, and your month will take shape here. You can also bring in history from a spreadsheet or bank export.',
-    actions: html`<button type="button" class="btn primary" data-action="new-tx">${icons.plus}Add a transaction</button>
+    title: 'Start with a safety net',
+    body: 'Tally is built around what you’re saving toward. Add the pot that would carry you for a few months, then log what you spend and it works out what’s left over to feed it.',
+    actions: html`<button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button>
+      <button type="button" class="btn" data-action="new-tx">Log a transaction</button>
       <button type="button" class="btn" data-action="import-csv">Import a CSV file</button>`,
   });
 }
 
 function renderHome() {
   const key = viewMonth();
-  if (!state.transactions.length && !state.reminders.length) {
+  if (!state.transactions.length && !state.reminders.length && !state.goals.length) {
     return html`${monthSwitcher(key)}${welcome()}
       <section class="panel tips">
         <h2>Good to know</h2>
         <ul>
           <li>Everything stays on this device. There’s no account and no server.</li>
-          <li>Add Tally to your home screen to open it like an app, even offline.</li>
+          <li>Account numbers and logins go in a vault that only your passphrase can open.</li>
           <li>Set up rent, salary and subscriptions once under <a href="#/recurring">Repeating</a>.</li>
         </ul>
       </section>`;
   }
   const monthTx = txsInMonth(state.transactions, key);
   const overview = budgetOverview(state.transactions, state.categories, key, state.settings.warnPercent);
+  const review = advisorReview({ plans: state.goals, accounts: state.accounts, categories: state.categories, transactions: state.transactions, settings: state.settings, todayIso: state.today });
   return html`${monthSwitcher(key)}
     ${key === currentMonth() ? remindersBlock() : ''}
     ${backupNudge()}
-    ${hero(key, monthTx, overview)}
+    ${savingsHero(review)}
+    ${plansSection(review)}
     <div class="dash-grid">
       <div class="dash-col">
-        ${budgetSnapshot(overview)}
-        ${recent(key, monthTx)}
+        ${allocationSection(review)}
+        ${advisorSection(review)}
       </div>
       <div class="dash-col">
+        ${spendingHero(key, monthTx, overview)}
+        ${budgetSnapshot(overview)}
         ${categoryBreakdown(monthTx)}
-        ${trend(key)}
+        ${recent(key)}
       </div>
     </div>`;
 }
@@ -8935,7 +10359,7 @@ function shiftMonth(step) {
   if (ui.month === currentMonth()) ui.month = null;
 }
 
-return { remindersBlock, backupNudge, renderHome, shiftMonth };
+return { remindersBlock, backupNudge, planTile, advisorSection, renderHome, shiftMonth };
 })();
 
 // js/views/activity.js
@@ -9253,28 +10677,182 @@ function pick(r) {
 return { renderBudgets };
 })();
 
+// js/views/advisor.js
+const __m_js_views_advisor_js = (() => {
+const { html } = __m_js_ui_html_js;
+const { state } = __m_js_store_js;
+const { advisorReview } = __m_js_core_advisor_js;
+const { milestones, planOrder } = __m_js_core_plans_js;
+const { money, percent, plural } = __m_js_ui_format_js;
+const { progressRing } = __m_js_ui_charts_js;
+const { centsToInput, parseAmount } = __m_js_core_money_js;
+const { updateSettings, describeError } = __m_js_store_js;
+const { toast } = __m_js_ui_overlay_js;
+const { $, formData, showErrors, errorSlot } = __m_js_ui_html_js;
+const { pageHead, homeSectionHead, SEC_ICONS, icons } = __m_js_views_components_js;
+function fmtMonths(m) {
+  return Number.isInteger(m) ? String(m) : m.toFixed(1);
+}
+
+// The five-year table a planner draws up: every pot's year-end balance at
+// its own yield and its share of the usual surplus, and the total.
+function milestoneTable(plans, surplus, { years = 5 } = {}) {
+  const ordered = planOrder(plans);
+  if (!ordered.length) return '';
+  const m = milestones(ordered, surplus, { years });
+  const thisYear = Number(state.today.slice(0, 4));
+  return html`<div class="table-scroll">
+    <table class="milestones">
+      <thead><tr><th scope="col">Plan</th>${m.rows[0].yearEnds.map((_, y) => html`<th scope="col">${thisYear + y + 1}</th>`)}</tr></thead>
+      <tbody>
+        ${m.rows.map((r) => html`<tr>
+          <th scope="row"><i class="key" style="background:${r.plan.color}"></i>${r.plan.name}<small>${r.plan.apyBp ? `${(r.plan.apyBp / 100).toFixed(2)}%` : 'no yield'}${r.monthly ? ` · ${money(r.monthly)}/mo` : ''}</small></th>
+          ${r.yearEnds.map((v) => html`<td class="amt">${money(v, { compact: v >= 10000000 })}</td>`)}
+        </tr>`)}
+        <tr class="total"><th scope="row">Total</th>${m.totals.map((v) => html`<td class="amt">${money(v, { compact: v >= 10000000 })}</td>`)}</tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function checklist(review) {
+  return html`<ul class="plain-list checklist full">
+    ${review.checks.map((c) => html`<li class="${c.ok ? 'ok' : ''} ${c.soft ? 'soft' : ''}">
+      <a class="check-row" href="#/${c.route}">
+        <i class="check-mark" aria-hidden="true">${c.ok ? html`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>` : ''}</i>
+        <span class="check-main"><strong>${c.title}</strong><small>${c.detail}</small></span>
+        ${icons.chevron}
+      </a>
+    </li>`)}
+  </ul>`;
+}
+
+function renderAdvisor() {
+  const review = advisorReview({ plans: state.goals, accounts: state.accounts, categories: state.categories, transactions: state.transactions, settings: state.settings, todayIso: state.today });
+  const typical = Math.max(0, review.surplus.typical);
+  const { runway, runwayTarget, essentials, safety } = review;
+  const stateName = runway == null ? 'accent' : runway >= runwayTarget ? 'ok' : runway >= runwayTarget / 2 ? 'warning' : 'over';
+
+  return html`${pageHead('Advisor')}
+    <section class="hero small hero-advisor" data-state="${stateName}">
+      <div class="hero-main">
+        <div class="hero-ring-row">${progressRing({
+          ratio: review.score / review.checks.length,
+          state: review.score === review.checks.length ? 'ok' : review.attention.some((c) => !c.soft) ? 'warning' : 'ok',
+          showDay: false,
+          centerTop: `${review.score}/${review.checks.length}`,
+          centerBottom: 'clear',
+          ariaLabel: `${review.score} of ${review.checks.length} checks clear`,
+        })}</div>
+        <div class="hero-say">
+          <p class="hero-line">${review.attention.length ? `${plural(review.attention.filter((c) => !c.soft).length, 'thing')} to look at` : 'Everything is in order'}</p>
+          <p class="hero-sub">The review a planner would do each quarter, done every time you open this. ${review.savingsRate != null ? `You set aside about ${review.savingsRate}% of what comes in.` : ''}</p>
+        </div>
+      </div>
+      <dl class="stat-chips">
+        <div style="--chip:var(--${stateName === 'accent' ? 'accent' : stateName === 'ok' ? 'pos' : stateName === 'warning' ? 'warn' : 'over'})"><dt>Runway</dt><dd class="amt">${runway == null ? '—' : html`${fmtMonths(runway)}<small> mo</small>`}</dd></div>
+        <div style="--chip:var(--accent)"><dt>Essentials</dt><dd class="amt">${essentials > 0 ? money(essentials) : '—'}<small>/mo</small></dd></div>
+        <div style="--chip:var(--hue-budgets)"><dt>Allocated</dt><dd class="amt">${typical > 0 ? percent(review.allocated / typical) : '—'}</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel tinted" style="--hue:var(--hue-advisor)" aria-labelledby="checks-title">
+      ${homeSectionHead('var(--hue-advisor)', SEC_ICONS.shield, html`<span id="checks-title">Checklist</span>`)}
+      ${checklist(review)}
+    </section>
+
+    <div class="dash-grid">
+      <div class="dash-col">
+        <section class="panel tinted" style="--hue:var(--hue-budgets)" aria-labelledby="runway-title">
+          ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.target, html`<span id="runway-title">Targets</span>`)}
+          <form class="stack targets" data-targets novalidate autocomplete="off">
+            <label class="field">
+              <span class="label">Safety net should cover</span>
+              <span class="row-2 tight">
+                <input type="number" name="runwayTarget" min="1" max="60" step="1" value="${runwayTarget}" aria-describedby="runway-hint" />
+                <span class="unit">months of essentials</span>
+              </span>
+              <span class="hint" id="runway-hint">Three to six months is the usual advice; a year or two if your income is uneven.</span>
+            </label>
+            ${errorSlot('runwayTarget')}
+            <label class="field">
+              <span class="label">A month of essentials costs <span class="opt">Optional</span></span>
+              <input type="text" inputmode="decimal" name="essentialMonthly" value="${state.settings.essentialMonthly != null ? centsToInput(state.settings.essentialMonthly, { locale: state.settings.locale }) : ''}" placeholder="${essentials > 0 ? centsToInput(essentials, { locale: state.settings.locale }) : '0'}" />
+              <span class="hint">Leave blank to use your budgets, or the usual month’s spending if you haven’t set any.</span>
+            </label>
+            ${errorSlot('essentialMonthly')}
+            <div class="btn-row"><button type="submit" class="btn primary small">Save targets</button></div>
+          </form>
+          ${safety ? html`<p class="muted small">${safety.name} is your safety net. ${runway != null ? `It would carry you ${fmtMonths(runway)} ${runway === 1 ? 'month' : 'months'}.` : ''}</p>` : html`<p class="muted small">No plan is marked as the safety net yet — edit one under <a href="#/goals">Plans</a> and choose “Safety net”.</p>`}
+        </section>
+      </div>
+      <div class="dash-col">
+        <section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="ms-title">
+          ${homeSectionHead('var(--hue-trend)', SEC_ICONS.calendar, html`<span id="ms-title">Five years out</span>`, { link: html`<a class="link" href="#/goals">Plans</a>` })}
+          ${state.goals.length
+            ? html`<p class="muted small">If the usual ${money(typical)} a month keeps arriving and is dealt out by the shares you’ve set, this is where each pot stands at the end of each year, yield included.</p>
+              ${milestoneTable(state.goals, typical)}`
+            : html`<p class="muted">Add a plan and this becomes a five-year table.</p>`}
+        </section>
+      </div>
+    </div>`;
+}
+
+function afterAdvisorMount(root) {
+  const form = $('[data-targets]', root);
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = formData(form);
+    const errors = {};
+    const months = Number(d.runwayTarget);
+    if (!Number.isInteger(months) || months < 1 || months > 60) errors.runwayTarget = 'Enter a whole number of months from 1 to 60.';
+    let essential = null;
+    if (d.essentialMonthly.trim()) {
+      const parsed = parseAmount(d.essentialMonthly, { locale: state.settings.locale });
+      if (!parsed.ok) errors.essentialMonthly = parsed.error;
+      else if (parsed.negative || parsed.cents === 0) errors.essentialMonthly = 'Enter an amount greater than zero, or leave it blank.';
+      else essential = parsed.cents;
+    }
+    if (Object.keys(errors).length) return showErrors(form, errors);
+    try {
+      await updateSettings({ runwayTarget: months, essentialMonthly: essential });
+      toast('Targets saved');
+    } catch (err) {
+      toast(describeError(err), { tone: 'error' });
+    }
+  });
+}
+
+return { milestoneTable, checklist, renderAdvisor, afterAdvisorMount };
+})();
+
 // js/views/pages.js
 const __m_js_views_pages_js = (() => {
 const { html, mount, $ } = __m_js_ui_html_js;
 const { state } = __m_js_store_js;
 const { accountBalances, yearReview, yearsWithData, sortTransactions } = __m_js_core_stats_js;
-const { planProgress, monthlySurplus, projectPlans, requiredMonthly, planTransactions, PLAN_KINDS } = __m_js_core_plans_js;
+const { planProgress, monthlySurplus, projectPlans, requiredMonthly, planTransactions, PLAN_KINDS, planKind, allocate, BP, projectGrowth } = __m_js_core_plans_js;
+const { REVIEW_EVERY_DAYS } = __m_js_core_advisor_js;
 const { FREQUENCIES, nextDue, monthlyEquivalent, isFinished } = __m_js_core_recurring_js;
-const { ACCOUNT_KINDS } = __m_js_core_defaults_js;
-const { formatMonth } = __m_js_core_dates_js;
+const { ACCOUNT_KINDS, ACCOUNT_ROLES } = __m_js_core_defaults_js;
+const { formatMonth, daysBetween } = __m_js_core_dates_js;
 const { centsToInput, parseAmount } = __m_js_core_money_js;
 const { money, badge, categoryById, date, plural, percent, timeAgo, month, relativeDay } = __m_js_ui_format_js;
-const { progressBar, barChart } = __m_js_ui_charts_js;
-const { pageHead, emptyState, icons } = __m_js_views_components_js;
+const { progressBar, barChart, progressRing } = __m_js_ui_charts_js;
+const { pageHead, emptyState, icons, ui, homeSectionHead, SEC_ICONS } = __m_js_views_components_js;
 const { remindersBlock } = __m_js_views_home_js;
+const { milestoneTable } = __m_js_views_advisor_js;
+const { vaultAvailable, vaultExists, isUnlocked } = __m_js_vault_js;
 // ---------- More (phone menu) ----------
 
 const MORE_LINKS = [
+  { route: 'advisor', label: 'Advisor', desc: 'Runway, checklist and five years out' },
+  { route: 'activity', label: 'Activity', desc: 'Every transaction, searchable' },
+  { route: 'budgets', label: 'Budgets', desc: 'Monthly limits by category' },
   { route: 'recurring', label: 'Repeating', desc: 'Rent, salary, subscriptions' },
-  { route: 'categories', label: 'Categories', desc: 'Names, colors, icons and order' },
-  { route: 'accounts', label: 'Accounts', desc: 'Checking, cards, cash and balances' },
-  { route: 'goals', label: 'Plans', desc: 'Nest eggs, trips and what-ifs' },
   { route: 'review', label: 'Year in review', desc: 'How the year added up' },
+  { route: 'categories', label: 'Categories', desc: 'Names, colors, icons and order' },
   { route: 'settings', label: 'Settings and backup', desc: 'Currency, theme, export and import' },
 ];
 
@@ -9378,36 +10956,150 @@ function renderCategories() {
     </section>`;
 }
 
-// ---------- Accounts ----------
+// ---------- Accounts and the vault ----------
+
+// Every account with its job, its rate, whether the login has a second
+// step, and — sealed — the numbers and the login itself. The sealed part is
+// rendered as an empty slot and filled after the page mounts, because
+// opening it is asynchronous and only possible while the vault is unlocked.
+
+const ROLE_HUE = { hub: 'var(--accent)', spending: 'var(--hue-activity)', savings: 'var(--hue-spending)', investing: 'var(--hue-budgets)', other: 'var(--ink-3)' };
+
+function vaultStrip() {
+  if (!vaultAvailable()) {
+    return html`<aside class="nudge vault-strip" role="note"><p><strong>Vault unavailable here.</strong> Account numbers and logins need the installed app or an https address.</p></aside>`;
+  }
+  if (!vaultExists()) {
+    return html`<aside class="nudge vault-strip" role="note">
+      <p><strong>No vault yet.</strong> Choose a passphrase and account numbers and logins can live here, sealed.</p>
+      <button type="button" class="btn small primary" data-action="vault-create">Set a passphrase</button>
+    </aside>`;
+  }
+  return isUnlocked()
+    ? html`<aside class="nudge vault-strip open" role="note"><p><strong>Vault open.</strong> It locks itself in a few minutes, or when the app leaves the screen.</p><button type="button" class="btn small" data-action="vault-lock">Lock now</button></aside>`
+    : html`<aside class="nudge vault-strip" role="note"><p><strong>Vault locked.</strong> Account numbers and logins are sealed until you open it.</p><button type="button" class="btn small primary" data-action="vault-unlock">Unlock</button></aside>`;
+}
+
+function reviewedLabel(a) {
+  if (!a.reviewedAt) return { text: 'Never reviewed', stale: true };
+  const days = daysBetween(a.reviewedAt, state.today);
+  return { text: `Reviewed ${relativeDay(a.reviewedAt)}`, stale: days > REVIEW_EVERY_DAYS };
+}
+
+function accountCard(a, balance, selected) {
+  const rev = reviewedLabel(a);
+  const held = state.goals.filter((g) => g.accountId === a.id);
+  return html`<li class="panel acct-card${selected ? ' selected' : ''}" style="--hue:${ROLE_HUE[a.role] ?? ROLE_HUE.other}">
+    <button type="button" class="acct-head" data-action="select-account" data-id="${a.id}">
+      <span class="badge acct" aria-hidden="true">${(a.institution || a.name).slice(0, 1).toUpperCase()}</span>
+      <span class="tx-main">
+        <span class="tx-title">${a.name}</span>
+        <span class="tx-sub"><span>${a.institution || ACCOUNT_KINDS[a.kind] || 'Account'}</span><span>${ACCOUNT_ROLES[a.role] ?? 'Other'}</span></span>
+      </span>
+      <span class="amt ${balance < 0 ? 'amt-neg' : ''}">${money(balance)}</span>
+    </button>
+    <ul class="plain-list acct-meta">
+      ${a.apyBp ? html`<li class="tag good">${(a.apyBp / 100).toFixed(2)}% APY</li>` : html`<li class="tag">No yield</li>`}
+      <li class="tag ${a.mfa ? 'good' : 'bad'}">${a.mfa ? '2-step on' : 'No 2-step'}</li>
+      <li class="tag ${rev.stale ? 'bad' : ''}">${rev.text}</li>
+      ${held.length ? html`<li class="tag">${held.length === 1 ? `Holds ${held[0].name}` : `Holds ${held.length} plans`}</li>` : ''}
+      ${a.vault ? html`<li class="tag">${SEC_ICONS.lock}Sealed details</li>` : ''}
+    </ul>
+  </li>`;
+}
+
+// The masked, sealed fields. Filled in by fillVaultFields() once the vault
+// is open; until then the slot says why it's empty.
+function accountDetail(a) {
+  const rev = reviewedLabel(a);
+  const held = state.goals.filter((g) => g.accountId === a.id);
+  return html`<div class="acct-detail" data-account-detail="${a.id}">
+    <div class="acct-detail-head">
+      <span class="badge acct" aria-hidden="true" style="--hue:${ROLE_HUE[a.role] ?? ROLE_HUE.other}">${(a.institution || a.name).slice(0, 1).toUpperCase()}</span>
+      <div>
+        <h2>${a.name}</h2>
+        <p class="muted small">${[a.institution, ACCOUNT_KINDS[a.kind], ACCOUNT_ROLES[a.role]].filter(Boolean).join(' · ')}</p>
+      </div>
+    </div>
+    <dl class="detail-rows">
+      <div><dt>Yield</dt><dd>${a.apyBp ? `${(a.apyBp / 100).toFixed(2)}% a year` : 'None recorded'}</dd></div>
+      <div><dt>Sign-in</dt><dd class="${a.mfa ? 's-ok' : 's-over'}">${a.mfa ? 'Two-step on' : 'No second step'}</dd></div>
+      <div><dt>Last review</dt><dd class="${rev.stale ? 's-warning' : ''}">${rev.text}${rev.stale ? ' — rates move' : ''}</dd></div>
+      ${held.length ? html`<div><dt>Holds</dt><dd>${held.map((g) => g.name).join(', ')}</dd></div>` : ''}
+      ${a.notes ? html`<div><dt>Notes</dt><dd class="prewrap">${a.notes}</dd></div>` : ''}
+    </dl>
+    <div class="btn-row">
+      <button type="button" class="btn small" data-action="mark-reviewed" data-id="${a.id}">Mark reviewed today</button>
+      <button type="button" class="btn small ghost" data-action="edit-account" data-id="${a.id}">Edit</button>
+    </div>
+    <section class="vault-box" aria-label="Sealed details">
+      <h3>${SEC_ICONS.lock}Sealed details</h3>
+      <div data-vault-fields="${a.id}">${vaultSlotMessage(a)}</div>
+    </section>
+  </div>`;
+}
+
+function vaultSlotMessage(a) {
+  if (!vaultAvailable()) return html`<p class="muted small">Needs the installed app or an https address.</p>`;
+  if (!vaultExists()) return html`<p class="muted small">Set a passphrase to keep the account number and login here.</p><button type="button" class="btn small primary" data-action="vault-create">Set a passphrase</button>`;
+  if (!isUnlocked()) return html`<p class="muted small">${a.vault ? 'Sealed. Unlock the vault to see them.' : 'Nothing sealed for this account yet.'}</p><button type="button" class="btn small primary" data-action="vault-unlock">Unlock</button>`;
+  if (!a.vault) return html`<p class="muted small">Nothing sealed for this account yet.</p><button type="button" class="btn small" data-action="edit-account" data-id="${a.id}">Add the details</button>`;
+  return html`<p class="muted small">Opening…</p>`;
+}
+
+const VAULT_FIELDS = [
+  ['accountNumber', 'Account number'],
+  ['routingNumber', 'Routing number'],
+  ['username', 'Username'],
+  ['password', 'Password'],
+  ['notes', 'Private notes'],
+];
+
+// A secret shows its last four and nothing else until asked. On the cover
+// screen it never shows more than that: a screen this small is read in a
+// queue or on a table, and the full number waits for the inner screen.
+function vaultFieldsMarkup(values) {
+  const rows = VAULT_FIELDS.filter(([k]) => values?.[k]);
+  if (!rows.length) return html`<p class="muted small">Nothing sealed for this account yet.</p>`;
+  return html`<dl class="vault-fields">
+    ${rows.map(([k, label]) => {
+      const v = String(values[k]);
+      const last = k === 'notes' ? '' : v.slice(-4);
+      return html`<div>
+        <dt>${label}</dt>
+        <dd>
+          <span class="secret" data-secret="${v}" data-masked="${k === 'notes' ? '••••••' : `•••• ${last}`}">${k === 'notes' ? '••••••' : `•••• ${last}`}</span>
+          <span class="secret-actions">
+            <button type="button" class="btn small ghost" data-action="reveal-secret">Show</button>
+            <button type="button" class="btn small ghost" data-action="copy-secret" aria-label="Copy ${label}">Copy</button>
+          </span>
+        </dd>
+      </div>`;
+    })}
+    <p class="muted small cover-only">Unfold to see a full number.</p>
+  </dl>`;
+}
 
 function renderAccounts() {
   const head = pageHead('Accounts', html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Add</button>`);
   if (!state.accounts.length) {
-    return html`${head}${emptyState({
-      title: 'Accounts are optional',
-      body: 'Add checking, credit cards or cash to see a balance for each. With two or more, the add form asks which one you used.',
+    return html`${head}${vaultStrip()}${emptyState({
+      title: 'Your accounts, in one place',
+      body: 'Which institution, what each account is for, what it earns, whether the login has a second step — and, sealed with a passphrase, the account number and login themselves.',
       actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Add an account</button>`,
     })}`;
   }
   const { balances, unassigned, total } = accountBalances(state.accounts, state.transactions);
+  const selected = ui.selectedAccount && state.accounts.find((a) => a.id === ui.selectedAccount) ? ui.selectedAccount : null;
   return html`${head}
+    ${vaultStrip()}
     <section class="hero small">
       <p class="hero-line ${total < 0 ? 's-over' : ''}">${money(total)} across ${plural(state.accounts.length, 'account')}</p>
       ${unassigned !== 0 ? html`<p class="hero-sub">Transactions without an account add up to ${money(unassigned, { sign: true })} and aren’t included.</p>` : ''}
     </section>
-    <ul class="plain-list card-list">
-      ${state.accounts.map((a) => {
-        const bal = balances.get(a.id) ?? 0;
-        const count = state.transactions.filter((t) => t.accountId === a.id).length;
-        return html`<li><button type="button" class="list-btn" data-action="edit-account" data-id="${a.id}">
-          <span class="badge acct" aria-hidden="true">${a.name.slice(0, 1).toUpperCase()}</span>
-          <span class="tx-main">
-            <span class="tx-title">${a.name}</span>
-            <span class="tx-sub"><span>${ACCOUNT_KINDS[a.kind] ?? 'Other'}</span><span>${plural(count, 'transaction')}</span></span>
-          </span>
-          <span class="amt ${bal < 0 ? 'amt-neg' : ''}">${money(bal)}</span>
-        </button></li>`;
-      })}
+    <ul class="plain-list acct-list">
+      ${state.accounts.map((a) => html`${accountCard(a, balances.get(a.id) ?? 0, a.id === selected)}
+        ${a.id === selected ? html`<li class="panel acct-inline" data-inline-detail>${accountDetail(a)}</li>` : ''}`)}
     </ul>
     <p class="muted small footnote">Balance is the starting balance plus income and refunds, minus spending. Transfers between accounts aren’t tracked, so log a card payment as an expense from checking only if you don’t also log the card purchases.</p>`;
 }
@@ -9453,7 +11145,7 @@ function chargedList(plan) {
     </ul>`;
 }
 
-function planCard(row, locale) {
+function planCard(row, locale, share, selected) {
   const { plan: g, progress: p } = row;
   const trip = p.kind === 'trip';
   const when = whenLabel(row.fundedKey, locale);
@@ -9470,12 +11162,18 @@ function planCard(row, locale) {
   else if (row.onTime === false) verdict = html`<p class="plan-verdict late">Misses ${date(g.targetDate)} — not ready until ${when}</p>`;
   else if (!row.fundedKey && g.targetDate) verdict = html`<p class="plan-verdict late">Nothing going in, so ${date(g.targetDate)} isn’t reachable</p>`;
 
-  return html`<li class="panel plan" style="--c:${g.color}">
+  const account = g.accountId ? state.accounts.find((a) => a.id === g.accountId) : null;
+  return html`<li class="panel plan${selected ? ' selected' : ''}" style="--c:${g.color}">
     <div class="plan-top">
-      <h2>${g.name}</h2>
-      <span class="plan-kind">${trip ? PLAN_KINDS.trip : PLAN_KINDS.fund}</span>
+      <h2><button type="button" class="plan-select" data-action="select-plan" data-id="${g.id}">${g.name}</button></h2>
+      <span class="plan-kind">${PLAN_KINDS[p.kind]}</span>
     </div>
     <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(g.target)}</span> <span class="goal-pct">${percent(p.ratio)}</span></p>
+    <ul class="plain-list acct-meta">
+      ${g.allocBp ? html`<li class="tag good">${percent(g.allocBp / BP)} of surplus${share ? ` · ${money(share)}/mo` : ''}</li>` : html`<li class="tag">No share yet</li>`}
+      ${g.apyBp ? html`<li class="tag">${(g.apyBp / 100).toFixed(2)}% ${p.kind === 'invest' ? 'assumed' : 'APY'}</li>` : ''}
+      ${account ? html`<li class="tag">In ${account.name}</li>` : ''}
+    </ul>
     ${progressBar(p.ratio, p.done ? 'done' : 'goal', `${g.name}: ${money(p.saved)} of ${money(g.target)}`)}
     ${trip && p.spent !== 0
       ? html`<p class="plan-spend"><span>Spent on this trip</span> <span class="amt">${money(p.spent)}</span></p>
@@ -9518,8 +11216,56 @@ function planResults() {
       ? html`<p class="plan-note">Hitting every date needs ${money(needed)} a month, which this covers.</p>`
       : '';
 
+  const shares = allocate(projection.rows.map((r) => r.plan), monthly);
+  const selected = ui.selectedPlan && state.goals.find((g) => g.id === ui.selectedPlan) ? ui.selectedPlan : null;
   return html`${headline}${gap}
-    <ul class="plain-list goal-list">${projection.rows.map((row) => planCard(row, locale))}</ul>`;
+    ${shares.sharedBp > 0 && shares.sharedBp < BP ? html`<p class="plan-note">${percent((BP - shares.sharedBp) / BP)} of the surplus has no share; it goes to whichever plan is due soonest.</p>` : ''}
+    ${shares.sharedBp > BP ? html`<p class="plan-note late">The shares add up to ${percent(shares.sharedBp / BP)}. Bring them back to 100%.</p>` : ''}
+    <ul class="plain-list goal-list">${projection.rows.map((row) => planCard(row, locale, shares.byPlan.get(row.plan.id) ?? 0, row.plan.id === selected))}</ul>
+    <section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="ms-title">
+      ${homeSectionHead('var(--hue-trend)', SEC_ICONS.calendar, html`<span id="ms-title">Five years out</span>`)}
+      <p class="muted small">Year-end balances at ${money(monthly)} a month, dealt out by the shares, each pot at its own yield.</p>
+      ${milestoneTable(state.goals, monthly)}
+    </section>`;
+}
+
+// One plan in full: the second page's view of it when a plan is chosen on
+// the other leaf, and the inline view on a screen without a second page.
+function planDetail(plan) {
+  const { locale } = state.settings;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const monthly = scenarioMonthly(surplus);
+  const projection = projectPlans(state.goals, state.transactions, { monthly, lumpSum: planScenario.lumpSum, todayIso: state.today });
+  const row = projection.rows.find((r) => r.plan.id === plan.id);
+  const p = row.progress;
+  const share = allocate(state.goals, monthly).byPlan.get(plan.id) ?? 0;
+  const years = projectGrowth(p.saved, share, plan.apyBp ?? 0, 60);
+  const account = plan.accountId ? state.accounts.find((a) => a.id === plan.accountId) : null;
+  const when = whenLabel(row.fundedKey, locale);
+  return html`<div class="plan-detail" style="--c:${plan.color}">
+    <div class="plan-detail-head">
+      <span class="ring-sm" style="--ring-a:${plan.color};--ring-b:color-mix(in srgb, ${plan.color} 55%, white);--ring-glow:${plan.color}">
+        ${progressRing({ size: 96, stroke: 12, ratio: p.ratio, state: 'plan', showDay: false, centerTop: percent(p.ratio), centerBottom: '', ariaLabel: `${plan.name}: ${percent(p.ratio)} funded` })}
+      </span>
+      <div>
+        <h2>${plan.name}</h2>
+        <p class="muted small">${PLAN_KINDS[planKind(plan)]}${account ? ` · in ${account.name}` : ''}</p>
+        <p class="goal-amt"><span class="amt">${money(p.saved)}</span> <span class="muted">of ${money(plan.target)}</span></p>
+      </div>
+    </div>
+    <dl class="detail-rows">
+      <div><dt>Share of surplus</dt><dd>${plan.allocBp ? `${percent(plan.allocBp / BP)} — ${money(share)} a month` : 'None yet'}</dd></div>
+      <div><dt>Yield</dt><dd>${plan.apyBp ? `${(plan.apyBp / 100).toFixed(2)}% a year` : 'None'}</dd></div>
+      ${plan.targetDate ? html`<div><dt>Wanted by</dt><dd class="${row.onTime === false ? 's-over' : row.onTime ? 's-ok' : ''}">${date(plan.targetDate)}${when ? ` — ready ${when}` : ''}</dd></div>` : when ? html`<div><dt>Funded by</dt><dd>${when}</dd></div>` : ''}
+      <div><dt>In a year</dt><dd>${money(years[11])}</dd></div>
+      <div><dt>In five years</dt><dd>${money(years[59])}</dd></div>
+    </dl>
+    ${p.kind === 'trip' && p.spent ? html`<p class="plan-spend"><span>Spent on this trip</span> <span class="amt">${money(p.spent)}</span></p>${chargedList(plan)}` : ''}
+    <div class="btn-row">
+      <button type="button" class="btn small primary" data-action="adjust-goal" data-id="${plan.id}">${icons.plus}Set aside</button>
+      <button type="button" class="btn small ghost" data-action="edit-goal" data-id="${plan.id}">Edit</button>
+    </div>
+  </div>`;
 }
 
 function renderGoals() {
@@ -9527,8 +11273,8 @@ function renderGoals() {
   if (!state.goals.length) {
     return html`${head}${emptyState({
       title: 'Save toward something',
-      body: 'A nest egg you’re filling, or a trip you’ll spend down. Set a target and a date, and Tally works out what it costs a month and whether you’ll make it.',
-      actions: html`<button type="button" class="btn primary" data-action="new-goal">${icons.plus}Add a plan</button>`,
+      body: 'A safety net that covers a few months, nest eggs you fill, trips you spend down, money put to work. Give each a target, a share of what’s left over each month, and what it earns — Tally works out when it arrives.',
+      actions: html`<button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button><button type="button" class="btn" data-action="new-goal">Add a plan</button>`,
     })}`;
   }
 
@@ -9540,7 +11286,7 @@ function renderGoals() {
     : html`<p class="muted small">Once there are a few months of history here, Tally can tell you what you usually have spare.</p>`;
 
   return html`${head}
-    <section class="panel plan-whatif">
+    <section class="panel plan-whatif" data-tabletop-bottom>
       <h2>What if</h2>
       <form class="plan-levers" data-plan-levers novalidate autocomplete="off">
         <label class="field">
@@ -9659,14 +11405,14 @@ function renderReview() {
     </div>`;
 }
 
-return { MORE_LINKS, renderMore, renderRecurring, renderCategories, renderAccounts, planScenario, resetPlanScenario, renderGoals, afterPlansMount, reviewState, renderReview };
+return { MORE_LINKS, renderMore, renderRecurring, renderCategories, accountDetail, vaultFieldsMarkup, renderAccounts, planScenario, resetPlanScenario, planDetail, renderGoals, afterPlansMount, reviewState, renderReview };
 })();
 
 // js/core/csv.js
 const __m_js_core_csv_js = (() => {
 const { parseAmount, centsToDecimalString } = __m_js_core_money_js;
 const { parseFlexibleDate, isValidISODate } = __m_js_core_dates_js;
-const { PALETTE } = __m_js_core_defaults_js;
+const { PALETTE, newAccount } = __m_js_core_defaults_js;
 // ---------- Low-level CSV ----------
 
 function detectDelimiter(text) {
@@ -9892,7 +11638,7 @@ function prepareImport(rows, existing, options) {
     if (!name) return defaultAccountId && accounts.some((a) => a.id === defaultAccountId) ? defaultAccountId : null;
     const found = accounts.find((a) => a.name.toLowerCase() === name.toLowerCase());
     if (found) return found.id;
-    const acct = { id: makeId(), name: name.slice(0, 60), kind: 'other', openingBalance: 0, order: accounts.length };
+    const acct = newAccount({ id: makeId(), name: name.slice(0, 60), kind: 'other', order: accounts.length });
     accounts.push(acct);
     result.newAccounts.push(acct);
     return acct.id;
@@ -10460,15 +12206,18 @@ const { watchPosture } = __m_js_ui_posture_js;
 const { sortTransactions } = __m_js_core_stats_js;
 const { monthKey, addDays } = __m_js_core_dates_js;
 const { isFinished, nextDue } = __m_js_core_recurring_js;
-const { planOrder, planProgress } = __m_js_core_plans_js;
-const { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, describeError } = __m_js_store_js;
+const { planOrder, planProgress, allocate, monthlySurplus, PLAN_KINDS, planKind } = __m_js_core_plans_js;
+const { advisorReview } = __m_js_core_advisor_js;
+const { isUnlocked, lock: lockVault, onVaultChange, open: openSealed, describeVaultError } = __m_js_vault_js;
+const { state, init, subscribe, checkDayChange, reload, moveCategory, handleReminder, saveRule, saveAccount, describeError } = __m_js_store_js;
 const { ui, viewMonth } = __m_js_views_components_js;
 const { openTransactionForm } = __m_js_views_txForm_js;
-const { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust } = __m_js_views_forms_js;
+const { openCategoryForm, openBudgetForm, openAccountForm, openRuleForm, openGoalForm, openGoalAdjust, passphraseDialog } = __m_js_views_forms_js;
 const { renderHome, shiftMonth } = __m_js_views_home_js;
 const { renderActivity, afterActivityMount, resetFilters, showMore } = __m_js_views_activity_js;
 const { renderBudgets } = __m_js_views_budgets_js;
-const { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS } = __m_js_views_pages_js;
+const { renderMore, renderRecurring, renderCategories, renderAccounts, renderGoals, afterPlansMount, resetPlanScenario, renderReview, reviewState, MORE_LINKS, planDetail, accountDetail, vaultFieldsMarkup } = __m_js_views_pages_js;
+const { renderAdvisor, afterAdvisorMount } = __m_js_views_advisor_js;
 const { renderSettings, afterSettingsMount, exportJSON, exportCSV, startImportCSV, startRestore } = __m_js_views_settings_js;
 const { money, month: monthLabel, badge, relativeDay, date: dayLabel } = __m_js_ui_format_js;
 const I = (d) => html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -10480,9 +12229,11 @@ const NAV_ICONS = {
   categories: I(html`<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`),
   accounts: I(html`<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>`),
   goals: I(html`<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6" fill="currentColor"/>`),
+  vault: I(html`<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M12 5v2M12 17v2"/>`),
   review: I(html`<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`),
   settings: I(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>`),
   more: I(html`<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>`),
+  advisor: I(html`<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>`),
   plus: html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
 };
 
@@ -10494,11 +12245,12 @@ const BRAND_MARK = html`<svg class="brand-mark" viewBox="0 0 28 28" aria-hidden=
 
 const ROUTES = {
   home: { title: 'Home', render: renderHome },
+  advisor: { title: 'Advisor', render: renderAdvisor, after: afterAdvisorMount },
   activity: { title: 'Activity', render: renderActivity, after: afterActivityMount },
   budgets: { title: 'Budgets', render: renderBudgets },
   recurring: { title: 'Repeating', render: renderRecurring },
   categories: { title: 'Categories', render: renderCategories },
-  accounts: { title: 'Accounts', render: renderAccounts },
+  accounts: { title: 'Accounts', render: renderAccounts, after: afterAccountsMount },
   goals: { title: 'Plans', render: renderGoals, after: afterPlansMount },
   review: { title: 'Year in review', render: renderReview },
   settings: { title: 'Settings', render: renderSettings, after: afterSettingsMount },
@@ -10506,9 +12258,9 @@ const ROUTES = {
 };
 const SECONDARY = new Set(MORE_LINKS.map((l) => l.route).concat('more'));
 const SIDEBAR = [
-  ['home', 'Home'], ['activity', 'Activity'], ['budgets', 'Budgets'],
+  ['home', 'Home'], ['goals', 'Plans'], ['advisor', 'Advisor'], ['accounts', 'Accounts'],
   null,
-  ['recurring', 'Repeating'], ['goals', 'Plans'], ['accounts', 'Accounts'], ['review', 'Review'],
+  ['activity', 'Activity'], ['budgets', 'Budgets'], ['recurring', 'Repeating'], ['review', 'Review'],
   null,
   ['categories', 'Categories'], ['settings', 'Settings'],
 ];
@@ -10544,9 +12296,9 @@ function renderShell() {
       <span class="topbar-title" data-topbar-title></span>
       <nav class="tabbar" aria-label="Main">
         <a href="#/" data-route="home">${NAV_ICONS.home}<span>Home</span></a>
-        <a href="#/activity" data-route="activity">${NAV_ICONS.activity}<span>Activity</span></a>
+        <a href="#/goals" data-route="goals">${NAV_ICONS.goals}<span>Plans</span></a>
         <button type="button" class="fab" data-action="new-tx" aria-label="New transaction">${NAV_ICONS.plus}</button>
-        <a href="#/budgets" data-route="budgets">${NAV_ICONS.budgets}<span>Budgets</span></a>
+        <a href="#/advisor" data-route="advisor">${NAV_ICONS.advisor}<span>Advisor</span></a>
         <a href="#/more" data-route="more">${NAV_ICONS.more}<span>More</span></a>
       </nav>
       <span class="topbar-side"><button type="button" class="icon-btn topbar-add" data-action="new-tx" aria-label="New transaction" title="New transaction (N)">${NAV_ICONS.plus}</button></span>
@@ -10561,25 +12313,46 @@ function renderShell() {
 // right-hand leaf; on a wide laptop window it's a third column. CSS decides
 // when there's room for it.
 //
-// It used to open with the month's net, in and out, and the top spending
-// categories — every one of which the hero and the "Where it went" donut are
-// already showing two inches to the left. The same figure twice on one screen
-// is noise, so this page now carries only what the main column doesn't: the
-// things you can *do* (log another of what you buy most, within reach of the
-// hand holding that side of the phone) and what is *coming* (the next
-// scheduled items, the nearest plan).
+// What it carries follows the screen you are on, which is the whole point of
+// having two pages: a list on one leaf and the thing you picked on the
+// other. Plans puts the chosen plan here, Accounts the chosen account and
+// its sealed details, and everywhere else it is the quick-log pane. It never
+// repeats a figure the main column is already showing.
 function renderCompanion() {
   const el = $('[data-companion]');
   if (!el) return;
+  const route = currentRoute();
+  el.dataset.pane = route === 'goals' || route === 'accounts' ? 'detail' : 'actions';
+
+  if (route === 'goals') {
+    const plan = ui.selectedPlan ? state.goals.find((g) => g.id === ui.selectedPlan) : null;
+    mount(el, plan
+      ? planDetail(plan)
+      : html`<p class="companion-label">Plans</p>
+          <p class="companion-empty">${state.goals.length ? 'Choose a plan to see what it costs a month, when it lands, and where it’s kept.' : 'Add a plan and it opens here.'}</p>`);
+    return;
+  }
+
+  if (route === 'accounts') {
+    const account = ui.selectedAccount ? state.accounts.find((a) => a.id === ui.selectedAccount) : null;
+    mount(el, account
+      ? accountDetail(account)
+      : html`<p class="companion-label">Accounts</p>
+          <p class="companion-empty">${state.accounts.length ? 'Choose an account to see its rate, its security and its sealed details.' : 'Add an account and it opens here.'}</p>`);
+    if (account) fillVaultFields(el);
+    return;
+  }
+
   const key = viewMonth();
   const catOf = (id) => state.categories.find((c) => c.id === id) ?? null;
+  const surplus = monthlySurplus(state.transactions, state.today);
+  const typical = Math.max(0, surplus.typical);
+  const shares = allocate(planOrder(state.goals), typical);
 
   // The plan with the nearest date, and what it costs a month to make it.
   const nextPlan = planOrder(state.goals).find((g) => planProgress(g, state.transactions, state.today).toSave > 0) ?? null;
   const nextProgress = nextPlan ? planProgress(nextPlan, state.transactions, state.today) : null;
 
-  // What the calendar is about to bring: the next date each repeating item
-  // falls due, soonest first. Nothing else on Home looks ahead.
   const upcoming = state.recurring
     .filter((r) => !isFinished(r, state.today))
     .map((r) => ({ rule: r, date: nextDue(r) }))
@@ -10587,14 +12360,9 @@ function renderCompanion() {
     .sort((a, b) => (a.date < b.date ? -1 : 1))
     .slice(0, 3);
 
-  // Everything else on Home is scoped to the month. Today is the one window
-  // it never shows, and it's the one you want while you're still adding to
-  // it — so this page keeps the running total for the day.
   const todayTx = key === monthKey(state.today) ? state.transactions.filter((tx) => tx.date === state.today) : [];
   const todaySpent = todayTx.reduce((sum, tx) => sum + (tx.type === 'expense' && !tx.refund ? tx.amount : 0), 0);
 
-  // The last seven days, one bar each. Home's trend is six months wide and
-  // its donut is by category, so the shape of the week is nowhere else.
   const week = [];
   for (let i = 6; i >= 0; i--) {
     const iso = addDays(state.today, -i);
@@ -10604,7 +12372,6 @@ function renderCompanion() {
   const weekPeak = Math.max(...week.map((d) => d.spent), 1);
   const weekTotal = week.reduce((s, d) => s + d.spent, 0);
 
-  // The categories you've used most recently, for logging another one.
   const again = [];
   const seen = new Set();
   for (const tx of sortTransactions(state.transactions)) {
@@ -10619,7 +12386,7 @@ function renderCompanion() {
   mount(
     el,
     html`<p class="companion-label">${monthLabel(key)}</p>
-      ${state.transactions.length
+      ${state.transactions.length || state.goals.length
         ? html`<div class="companion-block">
               <h2>Log it now</h2>
               <button type="button" class="btn primary companion-new" data-action="new-tx">${NAV_ICONS.plus}New transaction</button>
@@ -10632,6 +12399,16 @@ function renderCompanion() {
                   </div>`
                 : ''}
             </div>
+            ${state.goals.length
+              ? html`<div class="companion-block">
+                  <h2>Set aside</h2>
+                  <div class="companion-again">
+                    ${planOrder(state.goals).slice(0, 3).map((g) => html`<button type="button" class="btn companion-again-btn" data-action="adjust-goal" data-id="${g.id}">
+                      <i class="key" style="background:${g.color}"></i><span>${g.name}</span>${(shares.byPlan.get(g.id) ?? 0) > 0 ? html`<small class="amt">${money(shares.byPlan.get(g.id))}</small>` : ''}
+                    </button>`)}
+                  </div>
+                </div>`
+              : ''}
             ${key === monthKey(state.today)
               ? html`<div class="companion-block">
                   <h2>Today</h2>
@@ -10676,8 +12453,27 @@ function renderCompanion() {
                   </a>
                 </div>`
               : ''}`
-        : html`<p class="companion-empty">Add your first transaction and this page keeps what's next within reach.</p>`}`
+        : html`<p class="companion-empty">Add your first plan and this page keeps what's next within reach.</p>`}`
   );
+}
+
+// Sealed details are opened after the markup is on screen: decryption is
+// asynchronous, and a locked vault simply leaves the slot as it was.
+async function fillVaultFields(root = document) {
+  if (!isUnlocked()) return;
+  for (const slot of root.querySelectorAll('[data-vault-fields]')) {
+    const account = state.accounts.find((a) => a.id === slot.dataset.vaultFields);
+    if (!account?.vault) continue;
+    try {
+      mount(slot, vaultFieldsMarkup(await openSealed(account.vault)));
+    } catch (err) {
+      mount(slot, html`<p class="field-error">Couldn’t open these. ${describeVaultError(err) ?? ''}</p>`);
+    }
+  }
+}
+
+function afterAccountsMount(root) {
+  fillVaultFields(root);
 }
 
 function updateChrome(route) {
@@ -10747,7 +12543,7 @@ function watchPageTitle(fallback) {
 }
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const ROUTE_ORDER = ['home', 'activity', 'budgets', 'recurring', 'goals', 'accounts', 'review', 'categories', 'settings', 'more'];
+const ROUTE_ORDER = ['home', 'goals', 'advisor', 'accounts', 'activity', 'budgets', 'recurring', 'review', 'categories', 'settings', 'more'];
 
 let lastRoute = null;
 let enterTimer;
@@ -10872,9 +12668,72 @@ const actions = {
     resetPlanScenario();
     render({ keepScroll: true });
   },
-  'new-goal': () => openGoalForm(),
+  'new-goal': (el) => openGoalForm(null, el.dataset.kind ? { kind: el.dataset.kind } : {}),
   'edit-goal': (el) => openGoalForm(el.dataset.id),
   'adjust-goal': (el) => openGoalAdjust(el.dataset.id),
+  // Picking something on one leaf fills the other. On a screen with no
+  // second page the same tap opens it inline, and tapping it again closes
+  // it — so the gesture means the same thing at every size.
+  'select-plan': (el) => {
+    ui.selectedPlan = ui.selectedPlan === el.dataset.id ? null : el.dataset.id;
+    render({ keepScroll: true });
+  },
+  'select-account': (el) => {
+    ui.selectedAccount = ui.selectedAccount === el.dataset.id ? null : el.dataset.id;
+    render({ keepScroll: true });
+  },
+  'vault-create': async () => {
+    if (await passphraseDialog({ mode: 'create' })) toast('Vault sealed. It opens with your passphrase.');
+  },
+  'vault-unlock': async () => {
+    if (await passphraseDialog({ mode: 'unlock' })) toast('Vault open');
+  },
+  'vault-change': async () => {
+    if (await passphraseDialog({ mode: 'change' })) toast('Passphrase changed');
+  },
+  'vault-lock': () => {
+    lockVault();
+    toast('Vault locked');
+  },
+  'mark-reviewed': async (el) => {
+    try {
+      await saveAccount({ reviewedAt: state.today }, el.dataset.id);
+      toast('Marked reviewed today');
+    } catch (err) {
+      fail(err);
+    }
+  },
+  // A secret shows itself where it was hidden, and hides again after a
+  // while: long enough to read a number off the screen, short enough that
+  // it isn't still there when the phone is handed to someone.
+  'reveal-secret': (el) => {
+    const field = el.closest('dd');
+    const secret = field?.querySelector('.secret');
+    if (!secret) return;
+    const showing = secret.dataset.showing === '1';
+    secret.textContent = showing ? secret.dataset.masked : secret.dataset.secret;
+    secret.dataset.showing = showing ? '0' : '1';
+    el.textContent = showing ? 'Show' : 'Hide';
+    clearTimeout(secret._hide);
+    if (!showing) {
+      secret._hide = setTimeout(() => {
+        secret.textContent = secret.dataset.masked;
+        secret.dataset.showing = '0';
+        el.textContent = 'Show';
+      }, 20000);
+    }
+  },
+  'copy-secret': async (el) => {
+    const secret = el.closest('dd')?.querySelector('.secret');
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret.dataset.secret);
+      toast('Copied. The clipboard clears in 30 seconds.');
+      setTimeout(() => navigator.clipboard.writeText('').catch(() => {}), 30000);
+    } catch {
+      toast('This browser wouldn’t let Tally use the clipboard.', { tone: 'error' });
+    }
+  },
   'export-json': () => exportJSON(),
   'export-csv': () => exportCSV(),
   'import-csv': () => startImportCSV(),
@@ -10937,13 +12796,20 @@ document.addEventListener('keydown', (e) => {
       go('#/');
       break;
     case '2':
-      go('#/activity');
+      go('#/goals');
       break;
     case '3':
-      go('#/budgets');
+      go('#/advisor');
       break;
     case '4':
-      go('#/recurring');
+      go('#/accounts');
+      break;
+    case '5':
+      go('#/activity');
+      break;
+    case 'l':
+    case 'L':
+      lockVault();
       break;
     case '[':
     case ']':
@@ -10977,6 +12843,9 @@ async function boot() {
     return;
   }
   applyTheme();
+  // Opening or locking the vault changes what is on screen, and the lock can
+  // happen on a timer or when the app is backgrounded — so it redraws.
+  onVaultChange(() => render({ keepScroll: true }));
   subscribe((reason) => {
     if (reason === 'blocked') {
       toast('Tally was updated in another tab. Reload to keep going.', { duration: 60000, action: { label: 'Reload', onClick: () => location.reload() } });

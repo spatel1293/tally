@@ -1,8 +1,34 @@
 # Tally
 
-A personal budgeting app that runs entirely in your browser. Log spending and income, set monthly budgets, schedule repeating bills, and see where your money goes. It works on phones and laptops, keeps working offline, and has no accounts, no server, no tracking and no AI.
+A personal savings and financial-records app that runs entirely in your
+browser. It tracks what you're saving toward, how many months of runway that
+buys you, and the records a financial planner would keep — which institution
+holds what, at what rate, with which login (sealed behind a passphrase). It
+also tracks spending, budgets and repeating transactions, in service of
+working out what's left over each month.
+
+No backend, no accounts, no AI. Everything stays on the device unless you
+export it.
 
 > Continuing this project with Claude in VS Code? Open `START-HERE.md`.
+
+## What's in it
+
+- **Plans** — a safety net, nest eggs, trips and investments. Each has a
+  target, an optional date, a share of each month's surplus and a yield, and
+  Tally works out when it lands and what it's worth in five years.
+- **Advisor** — the review a planner would do each quarter, as a checklist:
+  is the runway deep enough, does every login have a second step, has every
+  account been looked at in the last six months, does every spare dollar have
+  a job, is every dated plan on track, is there a backup.
+- **Accounts** — institution, what the account is *for*, its rate, its
+  security, when you last reviewed it, and the account number and login
+  **sealed with a passphrase** (AES-GCM, PBKDF2). The passphrase is never
+  stored; lose it and the sealed details are gone. The vault locks itself
+  after a few minutes and whenever the app leaves the screen, and the cover
+  screen never shows a full number.
+- **Spending** — transactions, budgets, categories, repeating items, CSV
+  import and export, and a year in review, all as before.
 
 ## Run it
 

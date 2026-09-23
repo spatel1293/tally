@@ -71,6 +71,7 @@
   --hue-spending: #30b0c7;
   --hue-trend: #a2845e;
   --hue-activity: #ffcc00;
+  --hue-advisor: #30b0c7;
 
   --scrim: rgb(0 0 0 / 0.28);
 
@@ -164,6 +165,7 @@
   --hue-spending: #40c8e0;
   --hue-trend: #b59469;
   --hue-activity: #ffd60a;
+  --hue-advisor: #40c8e0;
 
   --scrim: rgb(0 0 0 / 0.5);
 
@@ -1478,6 +1480,8 @@ main {
 .hero-ring[data-state='warning'] { --ring-a: #ffb340; --ring-b: #ff8a00; --ring-glow: var(--warn); }
 .hero-ring[data-state='over'] { --ring-a: #ff6961; --ring-b: #ff2d55; --ring-glow: var(--over); }
 .hero-ring[data-state='accent'] { --ring-a: #40a2ff; --ring-b: #5e5ce6; --ring-glow: var(--accent); }
+/* A plan's ring is the plan's own colour, set inline beside it. */
+.hero-ring[data-state='plan'] { --ring-a: var(--c, var(--accent)); --ring-b: var(--c, var(--accent)); }
 .hero-ring { --ring2-a: #0a84ff; --ring2-b: #64d2ff; }
 
 .ring-fill,
@@ -4786,5 +4790,616 @@ body {
   .icon-btn.sm::after {
     width: max(100%, 44px);
     height: max(100%, 44px);
+  }
+}
+
+
+/* ---------- Savings first ---------- */
+
+/* Figures that sit under a hero: a chip each, in its own colour, so three
+   numbers read apart without labels doing the work. */
+.stat-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.stat-chips > div {
+  min-width: 0;
+  padding: 9px 12px 10px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--chip, var(--ink)) 12%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--ink)) 16%, transparent);
+}
+
+.stat-chips dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+.stat-chips dd {
+  margin: 0;
+  font-size: clamp(0.9375rem, 3.6cqi, 1.25rem);
+  font-weight: 660;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-chips dd small {
+  font-size: 0.6875rem;
+  font-weight: 560;
+  color: var(--ink-3);
+}
+
+/* A plan as a tile: its ring, its name, what it costs a month. On the cover
+   screen these are a row you flick through with a thumb; from the width of
+   an opened Fold they lay out as a grid, because there is room for it. */
+.plan-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+  margin: 0 calc(var(--pad) * -1);
+  padding-inline: var(--pad);
+  scrollbar-width: none;
+}
+
+.plan-strip::-webkit-scrollbar {
+  display: none;
+}
+
+@container page (min-width: 520px) {
+  .plan-strip {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    overflow: visible;
+    margin: 0;
+    padding-inline: 0;
+  }
+}
+
+.plan-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--r-nested, var(--r-sm));
+  background: color-mix(in srgb, var(--c) 10%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 22%, transparent);
+  scroll-snap-align: start;
+  transition: transform 0.35s var(--spring), box-shadow 0.3s var(--ease);
+}
+
+.plan-tile.selected {
+  box-shadow: inset 0 0 0 2px var(--c), 0 6px 18px color-mix(in srgb, var(--c) 28%, transparent);
+}
+
+.plan-tile-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+}
+
+.ring-sm {
+  display: block;
+  flex: none;
+  width: 60px;
+}
+
+.ring-sm .hero-ring {
+  width: 100%;
+}
+
+.ring-sm .hero-ring-center strong {
+  font-size: 0.875rem;
+}
+
+.plan-tile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.plan-tile-name {
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-tile-kind {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+/* The pot and its target are two lines, not one wrapped one: at tile width
+   "$2,000.00 of $4,000.00" breaks after "of" and reads as a mistake. */
+.plan-tile-amt {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--t-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-tile-amt .muted {
+  font-size: var(--t-caption);
+}
+
+.plan-tile-share {
+  font-size: var(--t-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--c) 70%, var(--ink));
+  font-weight: 600;
+}
+
+.plan-tile-add {
+  align-self: flex-start;
+}
+
+.plan-select {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* Where the surplus goes: one bar, then the rows behind it. */
+.alloc-bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  margin: 12px 0 10px;
+  border-radius: var(--pill);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.alloc-bar i {
+  width: var(--w);
+  background: var(--c);
+  transform-origin: left center;
+  animation: fill-x 620ms var(--ease) backwards;
+}
+
+.alloc-bar i.alloc-free,
+.key.alloc-free {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 18%, transparent) 0 5px, transparent 5px 10px);
+}
+
+.alloc-rows li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: var(--t-subhead);
+}
+
+.alloc-rows li + li {
+  border-top: 1px solid var(--line);
+}
+
+/* The advisor's checklist. */
+.checklist li + li {
+  border-top: 1px solid var(--line);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  transition: background-color 0.16s var(--ease);
+}
+
+.check-row:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.check-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--warn);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.checklist li.ok .check-mark {
+  background: var(--ok);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.checklist li.soft .check-mark {
+  background: var(--ink-4);
+  box-shadow: none;
+}
+
+.check-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.check-main strong {
+  font-weight: 600;
+}
+
+.check-main small {
+  font-size: var(--t-footnote);
+  color: var(--ink-3);
+}
+
+.check-row svg {
+  flex: none;
+  color: var(--ink-4);
+}
+
+/* The five-year table. Scrolls sideways on a narrow screen rather than
+   squeezing five years of figures into a phone's width. */
+.table-scroll {
+  overflow-x: auto;
+  margin: 0 calc(var(--pad) * -1);
+  padding-inline: var(--pad);
+  scrollbar-width: thin;
+}
+
+.milestones {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-footnote);
+}
+
+.milestones th,
+.milestones td {
+  padding: 8px 10px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.milestones thead th {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-weight: 620;
+}
+
+.milestones tbody th {
+  text-align: left;
+  font-weight: 580;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.milestones tbody th small {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.milestones td {
+  font-variant-numeric: tabular-nums;
+}
+
+.milestones .total th,
+.milestones .total td {
+  border-bottom: 0;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ---------- Accounts and the vault ---------- */
+
+.acct-list {
+  display: grid;
+  gap: 12px;
+}
+
+.acct-card {
+  border-left: 3px solid var(--hue);
+}
+
+.acct-card.selected {
+  box-shadow: inset 0 0 0 2px var(--hue);
+}
+
+.acct-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.acct-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.acct-meta .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+}
+
+.acct-meta .tag.good {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
+.acct-meta .tag.bad {
+  background: color-mix(in srgb, var(--over) 15%, transparent);
+  color: var(--over);
+}
+
+.acct-meta .tag svg {
+  width: 12px;
+  height: 12px;
+}
+
+.acct-detail-head,
+.plan-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.acct-detail-head h2,
+.plan-detail-head h2 {
+  font-size: var(--t-title3);
+}
+
+.plan-detail .goal-amt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.plan-detail-head > div,
+.acct-detail-head > div {
+  min-width: 0;
+}
+
+.detail-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 14px;
+}
+
+.detail-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-subhead);
+}
+
+.detail-rows dt {
+  color: var(--ink-3);
+}
+
+.detail-rows dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-rows dd.prewrap {
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+.vault-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: var(--r-nested, var(--r-sm));
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.vault-box h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--t-footnote);
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+
+.vault-box h3 svg {
+  width: 13px;
+  height: 13px;
+}
+
+.vault-fields > div {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vault-fields dt {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+.vault-fields dd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 0;
+}
+
+.secret {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.secret-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.vault-strip.open {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.vault-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.sealed-inputs {
+  margin-top: 8px;
+}
+
+.cover-only {
+  display: none;
+}
+
+.seg-4 {
+  font-size: var(--t-footnote);
+}
+
+.row-2.tight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row-2.tight input {
+  width: 5.5em;
+}
+
+.unit {
+  color: var(--ink-3);
+  font-size: var(--t-subhead);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--t-subhead);
+}
+
+.check input {
+  margin-top: 3px;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+
+/* ---------- Fold-specific ---------- */
+
+/* On the cover screen a full account number never appears. A 5.8" screen is
+   read in a queue, on a train, over a shoulder — so the last four is all it
+   will give up, and the rest waits for the inner screen. Unfolding is the
+   gesture that asks for it. */
+@media (max-width: 519px) {
+  .vault-fields [data-action='reveal-secret'] {
+    display: none;
+  }
+
+  .cover-only {
+    display: block;
+    margin-top: 8px;
+  }
+}
+
+/* Book posture: the list stays on the left leaf and the thing you picked
+   opens on the right one, so a plan and its five-year shape are readable at
+   once without either crossing the hinge. The inline copy is dropped,
+   because the facing page is already showing it. */
+@media (horizontal-viewport-segments: 2) {
+  .acct-inline,
+  [data-inline-detail] {
+    display: none;
+  }
+
+  .companion[data-pane='detail'] {
+    padding-top: calc(var(--safe-t) + 20px);
+  }
+}
+
+/* Tabletop: the lower half is the half lying flat under your hands, so the
+   controls go there and the results stay on the upright half — the shape of
+   a laptop, on a phone. */
+@media (vertical-viewport-segments: 2) {
+  main {
+    padding-bottom: calc(var(--bottom-h) + 24px);
+  }
+
+  [data-tabletop-bottom] {
+    position: fixed;
+    z-index: 15;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--bottom-h);
+    margin: 0;
+    overflow-y: auto;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    box-shadow: 0 -8px 28px rgb(0 0 0 / 0.18);
+    animation: rise 420ms var(--spring) backwards;
+  }
+
+  /* The capsule would sit on top of the panel that now owns the lower half. */
+  .tabbar {
+    bottom: calc(var(--bottom-h) + var(--safe-b) + 12px);
+  }
+}
+
+/* Both folded postures: a leaf is phone-shaped, so the plan tiles go back to
+   a strip you flick rather than a grid that would squeeze them. */
+@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
+  .plan-strip {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(196px, 1fr);
+    overflow-x: auto;
   }
 }

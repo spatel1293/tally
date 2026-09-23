@@ -1,6 +1,7 @@
 import { parseAmount, isValidCents, isValidSignedCents, isSupportedCurrency } from './money.js';
 import { isValidISODate } from './dates.js';
-import { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE } from './defaults.js';
+import { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE, ACCOUNT_ROLES, roleForKind } from './defaults.js';
+import { PLAN_KINDS } from './plans.js';
 import { FREQUENCIES } from './recurring.js';
 
 export const NOTE_MAX = 500;
@@ -138,16 +139,36 @@ export function sanitizeCategory(c, index) {
   };
 }
 
+// Basis points: an integer share or rate from 0 to 100.00%.
+function bpOk(v) {
+  return Number.isInteger(v) && v >= 0 && v <= 10000;
+}
+
+// A sealed vault blob is opaque here: it's ciphertext, and only the owner's
+// passphrase can open it. All that's checked is that it has the right shape,
+// so a corrupt one is dropped rather than kept around to fail on every open.
+function vaultOk(v) {
+  return Boolean(v) && typeof v === 'object' && v.v === 1 && typeof v.iv === 'string' && typeof v.data === 'string' && v.iv.length <= 64 && v.data.length <= 20000;
+}
+
 export function sanitizeAccount(a, index) {
   if (!a || typeof a !== 'object' || !idOk(a.id)) return null;
   const name = str(a.name, NAME_MAX).trim();
   if (!name) return null;
+  const kind = typeof a.kind === 'string' ? a.kind.slice(0, 20) : 'other';
   return {
     id: a.id,
     name,
-    kind: typeof a.kind === 'string' ? a.kind.slice(0, 20) : 'other',
+    kind,
     openingBalance: isValidSignedCents(a.openingBalance) ? a.openingBalance : 0,
     order: Number.isFinite(a.order) ? a.order : index,
+    institution: str(a.institution, NAME_MAX).trim(),
+    role: a.role in ACCOUNT_ROLES ? a.role : roleForKind(kind),
+    apyBp: bpOk(a.apyBp) ? a.apyBp : 0,
+    mfa: a.mfa === true,
+    reviewedAt: isValidISODate(a.reviewedAt) ? a.reviewedAt : null,
+    notes: str(a.notes, NOTE_MAX),
+    vault: vaultOk(a.vault) ? { v: 1, iv: a.vault.iv, data: a.vault.data } : null,
   };
 }
 
@@ -183,7 +204,7 @@ export function sanitizeGoal(g) {
   return {
     id: g.id,
     name,
-    kind: g.kind === 'trip' ? 'trip' : 'fund',
+    kind: g.kind in PLAN_KINDS ? g.kind : 'fund',
     target: g.target,
     saved: isValidSignedCents(g.saved) ? Math.max(0, g.saved) : 0,
     targetDate: isValidISODate(g.targetDate) ? g.targetDate : null,
@@ -193,6 +214,9 @@ export function sanitizeGoal(g) {
     endDate: endDate && startDate && endDate < startDate ? null : endDate,
     color: /^#[0-9a-f]{6}$/i.test(g.color ?? '') ? g.color : PALETTE[0],
     createdAt: str(g.createdAt, 40) || null,
+    apyBp: bpOk(g.apyBp) ? g.apyBp : 0,
+    allocBp: bpOk(g.allocBp) ? g.allocBp : 0,
+    accountId: idOk(g.accountId) ? g.accountId : null,
   };
 }
 
@@ -215,6 +239,12 @@ export function sanitizeSettings(s) {
   if (typeof s.lastChangeAt === 'string') out.lastChangeAt = s.lastChangeAt;
   if (idOk(s.defaultAccountId)) out.defaultAccountId = s.defaultAccountId;
   if (s.csvDateOrder === 'DMY') out.csvDateOrder = 'DMY';
+  if (Number.isInteger(s.runwayTarget) && s.runwayTarget >= 1 && s.runwayTarget <= 60) out.runwayTarget = s.runwayTarget;
+  if (isValidCents(s.essentialMonthly) && s.essentialMonthly > 0) out.essentialMonthly = s.essentialMonthly;
+  // The vault's salt and its check value are needed to open what the
+  // accounts carry, so they travel with a backup. Neither is a secret.
+  if (typeof s.vaultSalt === 'string' && /^[A-Za-z0-9+/=]{16,64}$/.test(s.vaultSalt)) out.vaultSalt = s.vaultSalt;
+  if (vaultOk(s.vaultCheck)) out.vaultCheck = { v: 1, iv: s.vaultCheck.iv, data: s.vaultCheck.data };
   return out;
 }
 

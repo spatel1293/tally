@@ -73,7 +73,7 @@ const INNER = { width: 841, height: 701 };
   // Saving still works after all that.
   await page.click('[data-save]');
   await page.waitForSelector('dialog#sheet[open]', { state: 'detached' });
-  step('hero after save: ' + (await page.textContent('.hero-line')).trim());
+  step('hero after save: ' + (await page.textContent('.hero-spend .hero-line')).trim());
 
   // Sweep every width from cover to inner for horizontal overflow on Home,
   // Activity and Budgets, since the rail/two-column switches happen in here.

@@ -1,8 +1,11 @@
 export const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-export const APP_VERSION = '3.3.0';
-export const BACKUP_FORMAT = 2;
+export const APP_VERSION = '4.0.0';
+// 3 added the savings-first fields: a plan's yield, share and account, and an
+// account's institution, role, rate, security and sealed vault. Older backups
+// still restore; the new fields take their defaults.
+export const BACKUP_FORMAT = 3;
 
 export function makeId() {
   const c = globalThis.crypto;
@@ -78,6 +81,12 @@ export const DEFAULT_SETTINGS = {
   lastChangeAt: null,
   defaultAccountId: null,
   csvDateOrder: 'MDY',
+  // How many months of essentials the safety net should cover.
+  runwayTarget: 6,
+  // What a month costs, if you'd rather state it than have it derived.
+  essentialMonthly: null,
+  vaultSalt: null,
+  vaultCheck: null,
 };
 
 export const ACCOUNT_KINDS = {
@@ -85,7 +94,43 @@ export const ACCOUNT_KINDS = {
   savings: 'Savings',
   credit: 'Credit card',
   cash: 'Cash',
+  brokerage: 'Brokerage',
   other: 'Other',
 };
+
+// The job an account does in the system: the hub the pay lands in and the
+// bills leave from, the card you spend from day to day (kept thin, so a lost
+// card can't reach the rest), the buckets the plans live in, and the money
+// put to work. One account can only have one job — that's the point.
+export const ACCOUNT_ROLES = {
+  hub: 'Core hub',
+  spending: 'Everyday spending',
+  savings: 'Savings buckets',
+  investing: 'Investing',
+  other: 'Other',
+};
+
+// The full shape of an account record. Every writer starts here, so a record
+// written today and one restored from a backup are the same object — which
+// is what keeps a backup and a restore comparable.
+export function newAccount(fields = {}) {
+  const kind = fields.kind ?? 'other';
+  return {
+    kind,
+    institution: '',
+    role: roleForKind(kind),
+    apyBp: 0,
+    mfa: false,
+    reviewedAt: null,
+    notes: '',
+    vault: null,
+    openingBalance: 0,
+    ...fields,
+  };
+}
+
+export function roleForKind(kind) {
+  return { checking: 'hub', credit: 'spending', cash: 'spending', savings: 'savings', brokerage: 'investing' }[kind] ?? 'other';
+}
 
 export const UNCATEGORIZED = '__uncategorized__';

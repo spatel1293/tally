@@ -92,7 +92,10 @@ export function currentSheet() {
 
 // ---------- Confirm ----------
 
-export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, requireText = null, extra = null }) {
+// `validate(dialog)` may be async and gates the confirm: return true to
+// close with a yes, false to stay open (having shown why). `focus` is a
+// selector for the field to start in.
+export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, requireText = null, extra = null, validate = null, focus = null }) {
   return new Promise((resolve) => {
     const dialog = makeDialog('confirm');
     dialog.className = 'confirm';
@@ -128,16 +131,29 @@ export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger
     input?.addEventListener('input', () => {
       okBtn.disabled = input.value.trim().toLowerCase() !== requireText.toLowerCase();
     });
-    form.addEventListener('submit', (e) => {
+    let checking = false;
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (okBtn.disabled) return;
+      if (okBtn.disabled || checking) return;
+      if (validate) {
+        checking = true;
+        okBtn.disabled = true;
+        let ok = false;
+        try {
+          ok = await validate(dialog);
+        } finally {
+          checking = false;
+          okBtn.disabled = false;
+        }
+        if (!ok) return;
+      }
       result = true;
       dialog.close();
     });
     $('[data-cancel]', dialog).addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', finish);
     dialog.showModal();
-    (input ?? $('[data-cancel]', dialog)).focus();
+    ((focus && $(focus, dialog)) ?? input ?? $('[data-cancel]', dialog)).focus();
   });
 }
 

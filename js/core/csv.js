@@ -1,6 +1,6 @@
 import { parseAmount, centsToDecimalString } from './money.js';
 import { parseFlexibleDate, isValidISODate } from './dates.js';
-import { PALETTE } from './defaults.js';
+import { PALETTE, newAccount } from './defaults.js';
 
 // ---------- Low-level CSV ----------
 
@@ -227,7 +227,7 @@ export function prepareImport(rows, existing, options) {
     if (!name) return defaultAccountId && accounts.some((a) => a.id === defaultAccountId) ? defaultAccountId : null;
     const found = accounts.find((a) => a.name.toLowerCase() === name.toLowerCase());
     if (found) return found.id;
-    const acct = { id: makeId(), name: name.slice(0, 60), kind: 'other', openingBalance: 0, order: accounts.length };
+    const acct = newAccount({ id: makeId(), name: name.slice(0, 60), kind: 'other', order: accounts.length });
     accounts.push(acct);
     result.newAccounts.push(acct);
     return acct.id;

@@ -7,9 +7,78 @@ import {
 import { validateCategoryInput, NAME_MAX, NOTE_MAX } from '../core/validate.js';
 import { parseAmount, centsToInput } from '../core/money.js';
 import { isValidISODate } from '../core/dates.js';
-import { ICONS, PALETTE, ACCOUNT_KINDS } from '../core/defaults.js';
+import { ICONS, PALETTE, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } from '../core/defaults.js';
 import { FREQUENCIES, occurrencesBetween } from '../core/recurring.js';
+import { PLAN_KINDS, BP } from '../core/plans.js';
 import { money, plural, categoryTree, categoryOptionLabel } from '../ui/format.js';
+import { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open as openSealed, changePassphrase, describeVaultError } from '../vault.js';
+
+// A percentage typed as "4.25" becomes 425 basis points, and only that:
+// two decimals, nothing past 100.
+function parsePercent(text) {
+  const t = String(text ?? '').trim().replace(',', '.').replace('%', '');
+  if (t === '') return { ok: true, bp: 0 };
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return { ok: false, error: 'Enter a percentage like 4.25.' };
+  const bp = Math.round(Number(t) * 100);
+  if (bp > BP) return { ok: false, error: 'Can’t be more than 100%.' };
+  return { ok: true, bp };
+}
+
+const fmtPercent = (bp) => (bp ? (bp / 100).toFixed(2).replace(/\.?0+$/, '') : '');
+
+// ---------- The vault's passphrase ----------
+
+// One dialog for choosing, entering or changing the passphrase. It's a
+// confirm dialog with fields, because that's what it is: a question with a
+// yes at the bottom.
+export async function passphraseDialog({ mode = 'unlock' } = {}) {
+  if (!vaultAvailable()) {
+    toast(describeVaultError(new Error('vault-unavailable')), { tone: 'error' });
+    return false;
+  }
+  const create = mode === 'create';
+  const change = mode === 'change';
+  const extra = html`<div class="stack">
+    ${change ? html`<label class="field"><span class="label">Current passphrase</span><input type="password" id="vault-current" autocomplete="current-password" /></label>` : ''}
+    <label class="field">
+      <span class="label">${create ? 'Choose a passphrase' : change ? 'New passphrase' : 'Passphrase'}</span>
+      <input type="password" id="vault-pass" autocomplete="${create || change ? 'new-password' : 'current-password'}" ${create || change ? 'minlength="8"' : ''} />
+    </label>
+    ${create || change ? html`<label class="field"><span class="label">Type it again</span><input type="password" id="vault-pass2" autocomplete="new-password" /></label>` : ''}
+    <p class="field-error" id="vault-error" role="alert" hidden></p>
+  </div>`;
+  const ok = await confirmDialog({
+    title: create ? 'Seal the vault' : change ? 'Change the passphrase' : 'Open the vault',
+    message: create
+      ? 'Account numbers and logins are encrypted on this device with a key made from this passphrase. It is never stored anywhere, so there is no way to recover it: if it’s lost, so are the sealed details.'
+      : change
+        ? 'Every sealed detail is re-sealed under the new passphrase.'
+        : 'Opens for a few minutes, then locks itself.',
+    confirmLabel: create ? 'Seal' : change ? 'Change' : 'Open',
+    extra,
+    focus: change ? '#vault-current' : '#vault-pass',
+    validate: async (dialog) => {
+      const err = $('#vault-error', dialog);
+      const show = (m) => { err.textContent = m; err.hidden = false; return false; };
+      const pass = $('#vault-pass', dialog).value;
+      if (create || change) {
+        if (pass.length < 8) return show('Use at least 8 characters.');
+        if (pass !== $('#vault-pass2', dialog).value) return show('The two don’t match.');
+      }
+      try {
+        if (create) await createVault(pass);
+        else if (change) {
+          const done = await changePassphrase($('#vault-current', dialog).value, pass, state.accounts, saveAccount);
+          if (!done) return show('That isn’t the current passphrase.');
+        } else if (!(await unlock(pass))) return show('That isn’t the passphrase.');
+      } catch (e) {
+        return show(describeVaultError(e) ?? describeError(e));
+      }
+      return true;
+    },
+  });
+  return ok;
+}
 
 const fail = (err) => toast(describeError(err), { tone: 'error' });
 
@@ -233,6 +302,7 @@ export function openBudgetForm(categoryId) {
 export function openAccountForm(id = null) {
   const existing = id ? state.accounts.find((a) => a.id === id) : null;
   const { locale } = state.settings;
+  const unlocked = isUnlocked();
   const body = html`<form class="stack" novalidate autocomplete="off">
     <label class="field">
       <span class="label">Name</span>
@@ -240,25 +310,98 @@ export function openAccountForm(id = null) {
     </label>
     ${errorSlot('name')}
     <label class="field">
-      <span class="label">Kind</span>
-      <select name="kind">
-        ${Object.entries(ACCOUNT_KINDS).map(([k, label]) => html`<option value="${k}" ${(existing?.kind ?? 'checking') === k ? 'selected' : ''}>${label}</option>`)}
-      </select>
+      <span class="label">Institution <span class="opt">Optional</span></span>
+      <input name="institution" value="${existing?.institution ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Ally, Fidelity, Schwab" />
+    </label>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Kind</span>
+        <select name="kind">
+          ${Object.entries(ACCOUNT_KINDS).map(([k, label]) => html`<option value="${k}" ${(existing?.kind ?? 'checking') === k ? 'selected' : ''}>${label}</option>`)}
+        </select>
+      </label>
+      <label class="field">
+        <span class="label">Its job</span>
+        <select name="role">
+          ${Object.entries(ACCOUNT_ROLES).map(([k, label]) => html`<option value="${k}" ${(existing?.role ?? roleForKind(existing?.kind ?? 'checking')) === k ? 'selected' : ''}>${label}</option>`)}
+        </select>
+      </label>
+    </div>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Earns <span class="opt">% a year</span></span>
+        <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
+      </label>
+      <label class="field">
+        <span class="label">Last reviewed <span class="opt">Optional</span></span>
+        <input type="date" name="reviewedAt" value="${existing?.reviewedAt ?? ''}" min="1900-01-01" max="2199-12-31" />
+      </label>
+    </div>
+    ${errorSlot('apy')}
+    <label class="check">
+      <input type="checkbox" name="mfa" ${existing?.mfa ? 'checked' : ''} />
+      <span>Sign-in has a second step (an app code, a key, or a text)</span>
     </label>
     ${moneyField('openingBalance', existing ? centsToInput(existing.openingBalance ?? 0, { locale }) : '0', {
       label: 'Starting balance',
       allowNegative: true,
       hint: 'The balance before your first transaction here. Use a minus sign for money owed, like a card balance: -250.',
     })}
+    <label class="field">
+      <span class="label">Notes <span class="opt">Optional</span></span>
+      <textarea name="notes" rows="2" maxlength="${NOTE_MAX}" placeholder="Beneficiary set, card in wallet, fee-free ATMs…">${existing?.notes ?? ''}</textarea>
+    </label>
+    <fieldset class="field vault-fieldset">
+      <legend class="label">Sealed details <span class="opt">Only your passphrase can open these</span></legend>
+      <div data-sealed-fields>
+        ${!vaultAvailable()
+          ? html`<p class="hint">Needs the installed app or an https address.</p>`
+          : !vaultExists()
+            ? html`<p class="hint">Set a passphrase first.</p><button type="button" class="btn small" data-vault-setup>Set a passphrase</button>`
+            : !unlocked
+              ? html`<p class="hint">${existing?.vault ? 'Sealed. Open the vault to edit them.' : 'Open the vault to add them.'}</p><button type="button" class="btn small" data-vault-open>Open the vault</button>`
+              : sealedInputs(null)}
+      </div>
+    </fieldset>
     ${state.accounts.length ? '' : html`<p class="hint">Once you have two or more accounts, the add form lets you pick one.</p>`}
   </form>`;
   openSheet({
     title: existing ? 'Edit account' : 'New account',
     body,
     footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add account', deletable: Boolean(existing) }),
-    onMount(dialog, sheet) {
+    async onMount(dialog, sheet) {
       const form = $('form', dialog);
       if (!existing) $('input[name="name"]', form).focus();
+      // Kind suggests the job, until the job is chosen by hand.
+      let roleTouched = Boolean(existing);
+      form.addEventListener('change', (e) => {
+        if (e.target.name === 'role') roleTouched = true;
+        if (e.target.name === 'kind' && !roleTouched) $('select[name="role"]', form).value = roleForKind(e.target.value);
+      });
+      // The sealed values are filled in after the sheet is up: opening
+      // them is asynchronous, and a locked vault leaves them blank.
+      let sealedLoaded = false;
+      const loadSealed = async () => {
+        const slot = $('[data-sealed-fields]', form);
+        if (!isUnlocked()) return;
+        try {
+          const values = existing?.vault ? await openSealed(existing.vault) : null;
+          slot.replaceChildren();
+          slot.insertAdjacentHTML('beforeend', String(sealedInputs(values)));
+          sealedLoaded = true;
+        } catch (e) {
+          slot.replaceChildren();
+          slot.insertAdjacentHTML('beforeend', String(html`<p class="field-error">Couldn’t open the sealed details. ${describeVaultError(e) ?? ''}</p>`));
+        }
+      };
+      if (unlocked) await loadSealed();
+      form.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-vault-setup]')) {
+          if (await passphraseDialog({ mode: 'create' })) await loadSealed();
+        } else if (e.target.closest('[data-vault-open]')) {
+          if (await passphraseDialog({ mode: 'unlock' })) await loadSealed();
+        }
+      });
       wireSave(dialog, form, async () => {
         const data = formData(form);
         const errors = {};
@@ -271,8 +414,29 @@ export function openAccountForm(id = null) {
           if (!parsed.ok) errors.openingBalance = parsed.error;
           else opening = parsed.negative ? -parsed.cents : parsed.cents;
         }
+        const apy = parsePercent(data.apy);
+        if (!apy.ok) errors.apy = apy.error;
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveAccount({ name, kind: data.kind, openingBalance: opening }, id);
+        const record = {
+          name,
+          kind: data.kind,
+          role: data.role in ACCOUNT_ROLES ? data.role : roleForKind(data.kind),
+          institution: data.institution.trim().slice(0, NAME_MAX),
+          apyBp: apy.bp,
+          mfa: Boolean(data.mfa),
+          reviewedAt: isValidISODate(data.reviewedAt) ? data.reviewedAt : null,
+          notes: data.notes.trim().slice(0, NOTE_MAX),
+          openingBalance: opening,
+        };
+        if (sealedLoaded && isUnlocked()) {
+          const values = {};
+          for (const k of ['accountNumber', 'routingNumber', 'username', 'password', 'vaultNotes']) {
+            const v = (data[k] ?? '').trim();
+            if (v) values[k === 'vaultNotes' ? 'notes' : k] = v.slice(0, NOTE_MAX);
+          }
+          record.vault = Object.keys(values).length ? await seal(values) : null;
+        }
+        await saveAccount(record, id);
         sheet.close({ silent: true });
         toast(existing ? 'Account saved' : `Added ${name}`);
       });
@@ -286,8 +450,8 @@ export function openAccountForm(id = null) {
         const ok = await confirmDialog({
           title: `Delete ${existing.name}?`,
           message: count
-            ? `${plural(count, 'transaction')} ${count === 1 ? 'is' : 'are'} linked to this account. They’ll be kept${others.length ? '' : ' without an account'}.`
-            : 'No transactions use this account.',
+            ? `${plural(count, 'transaction')} ${count === 1 ? 'is' : 'are'} linked to this account. They’ll be kept${others.length ? '' : ' without an account'}.${existing.vault ? ' Its sealed details are deleted with it.' : ''}`
+            : `No transactions use this account.${existing.vault ? ' Its sealed details are deleted with it.' : ''}`,
           confirmLabel: 'Delete account',
           danger: true,
           extra,
@@ -304,6 +468,20 @@ export function openAccountForm(id = null) {
       });
     },
   });
+}
+
+function sealedInputs(values) {
+  return html`<div class="stack sealed-inputs">
+    <div class="row-2">
+      <label class="field"><span class="label">Account number</span><input name="accountNumber" value="${values?.accountNumber ?? ''}" inputmode="numeric" autocomplete="off" /></label>
+      <label class="field"><span class="label">Routing number</span><input name="routingNumber" value="${values?.routingNumber ?? ''}" inputmode="numeric" autocomplete="off" /></label>
+    </div>
+    <div class="row-2">
+      <label class="field"><span class="label">Username</span><input name="username" value="${values?.username ?? ''}" autocomplete="off" /></label>
+      <label class="field"><span class="label">Password</span><input name="password" type="password" value="${values?.password ?? ''}" autocomplete="off" /></label>
+    </div>
+    <label class="field"><span class="label">Private notes <span class="opt">Security questions, PIN hints</span></span><textarea name="vaultNotes" rows="2" maxlength="${NOTE_MAX}">${values?.notes ?? ''}</textarea></label>
+  </div>`;
 }
 
 // ---------- Recurring ----------
@@ -448,13 +626,13 @@ export function openRuleForm(id = null, preset = {}) {
 
 // ---------- Goals ----------
 
-export function openGoalForm(id = null) {
+export function openGoalForm(id = null, preset = {}) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
+  const otherShares = state.goals.filter((g) => g.id !== id).reduce((sum, g) => sum + (g.allocBp ?? 0), 0);
   const { locale } = state.settings;
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <div class="seg" role="radiogroup" aria-label="Kind of plan">
-      <label><input type="radio" name="kind" value="fund" ${(existing?.kind ?? 'fund') !== 'trip' ? 'checked' : ''} /><span>Nest egg</span></label>
-      <label><input type="radio" name="kind" value="trip" ${existing?.kind === 'trip' ? 'checked' : ''} /><span>Trip</span></label>
+    <div class="seg seg-4" role="radiogroup" aria-label="Kind of plan">
+      ${Object.entries(PLAN_KINDS).map(([k, label]) => html`<label><input type="radio" name="kind" value="${k}" ${(existing?.kind ?? preset.kind ?? 'fund') === k ? 'checked' : ''} /><span>${label}</span></label>`)}
     </div>
     <label class="field">
       <span class="label">Name</span>
@@ -480,11 +658,31 @@ export function openGoalForm(id = null) {
       </div>
       ${errorSlot('endDate')}
     </div>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Share of the surplus <span class="opt">%</span></span>
+        <input name="alloc" inputmode="decimal" value="${fmtPercent(existing?.allocBp)}" placeholder="0" aria-describedby="err-alloc" />
+        <span class="hint">${otherShares ? `Other plans take ${fmtPercent(otherShares) || 0}%, leaving ${fmtPercent(Math.max(0, BP - otherShares)) || 0}%.` : 'What part of each month’s leftover goes here.'}</span>
+      </label>
+      <label class="field">
+        <span class="label">Earns <span class="opt">% a year</span></span>
+        <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
+        <span class="hint" data-apy-hint>${(existing?.kind ?? preset.kind) === 'invest' ? 'The return you’re assuming. 7% is a common long-run guess.' : 'The account’s APY, if it pays one.'}</span>
+      </label>
+    </div>
+    ${errorSlot('alloc')}
+    ${errorSlot('apy')}
+    ${state.accounts.length
+      ? html`<label class="field">
+          <span class="label">Kept in <span class="opt">Optional</span></span>
+          <select name="accountId"><option value="">No particular account</option>${state.accounts.map((a) => html`<option value="${a.id}" ${existing?.accountId === a.id ? 'selected' : ''}>${a.name}${a.institution ? ` · ${a.institution}` : ''}</option>`)}</select>
+        </label>`
+      : ''}
     <fieldset class="field">
       <legend class="label">Color</legend>
       <div class="swatches">${PALETTE.map((c) => html`<label class="swatch" style="--c:${c}"><input type="radio" name="color" value="${c}" ${(existing?.color ?? PALETTE[state.goals.length % PALETTE.length]) === c ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}</div>
     </fieldset>
-    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost.</p>
+    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost. Only one plan can be the safety net.</p>
   </form>`;
   openSheet({
     title: existing ? 'Edit plan' : 'New plan',
@@ -497,13 +695,23 @@ export function openGoalForm(id = null) {
       form.addEventListener('change', (e) => {
         if (e.target.name !== 'kind') return;
         $('.trip-dates', form).hidden = e.target.value !== 'trip';
+        $('[data-apy-hint]', form).textContent = e.target.value === 'invest' ? 'The return you’re assuming. 7% is a common long-run guess.' : 'The account’s APY, if it pays one.';
       });
       wireSave(dialog, form, async () => {
         const d = formData(form);
         const errors = {};
-        const kind = d.kind === 'trip' ? 'trip' : 'fund';
+        const kind = d.kind in PLAN_KINDS ? d.kind : 'fund';
         const name = d.name.trim();
         if (!name) errors.name = 'Name your plan.';
+        if (kind === 'safety') {
+          const other = state.goals.find((g) => g.id !== id && g.kind === 'safety');
+          if (other) errors.name = `${other.name} is already the safety net. Change it to a nest egg first.`;
+        }
+        const alloc = parsePercent(d.alloc);
+        if (!alloc.ok) errors.alloc = alloc.error;
+        else if (alloc.bp + otherShares > BP) errors.alloc = `Other plans already take ${fmtPercent(otherShares)}%, so this can be at most ${fmtPercent(BP - otherShares) || 0}%.`;
+        const apy = parsePercent(d.apy);
+        if (!apy.ok) errors.apy = apy.error;
         const target = parseAmount(d.target, { locale });
         if (!target.ok) errors.target = target.error;
         else if (target.negative || target.cents === 0) errors.target = 'Enter a target greater than zero.';
@@ -518,7 +726,7 @@ export function openGoalForm(id = null) {
         const endDate = kind === 'trip' ? d.endDate || null : null;
         if (startDate && endDate && endDate < startDate) errors.endDate = 'The return date is before the departure date.';
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0] }, id);
+        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0], allocBp: alloc.bp, apyBp: apy.bp, accountId: d.accountId || null }, id);
         sheet.close({ silent: true });
         toast(existing ? 'Plan saved' : `Added ${name}`);
       });

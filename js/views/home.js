@@ -1,33 +1,13 @@
 import { html } from '../ui/html.js';
 import { state, sortedTransactions } from '../store.js';
-import { totals, txsInMonth, budgetOverview, spendingByCategory, monthlySeries, compareBudgetRows } from '../core/stats.js';
-import { daysInMonth, parseISO, monthKeyAdd, formatMonth, isInMonth } from '../core/dates.js';
+import { totals, txsInMonth, budgetOverview, spendingByCategory, compareBudgetRows } from '../core/stats.js';
+import { daysInMonth, parseISO, monthKeyAdd, isInMonth } from '../core/dates.js';
 import { UNCATEGORIZED } from '../core/defaults.js';
+import { planOrder, planProgress, allocate, planKind, PLAN_KINDS, BP } from '../core/plans.js';
+import { advisorReview } from '../core/advisor.js';
 import { money, month, relativeDay, categoryById, badge, percent, timeAgo, plural } from '../ui/format.js';
-import { donut, progressRing, progressBar, barChart } from '../ui/charts.js';
-import { ui, viewMonth, currentMonth, monthSwitcher, emptyState, txRow, icons } from './components.js';
-
-// Small identity marks for Home's sections — each one gets its own vivid hue
-// (set in css/app.css) instead of the single accent colour, so the eye can
-// tell the sections apart at a glance rather than reading five identical
-// grey headings in a row.
-const SEC_ICONS = {
-  bell: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 8a5.5 5.5 0 0111 0c0 4 1.3 5.2 1.8 5.8a.6.6 0 01-.4 1H5.1a.6.6 0 01-.4-1C5.2 13.2 6.5 12 6.5 8z"/><path d="M9.8 17.5a2.3 2.3 0 004.4 0"/></svg>`,
-  budgets: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18V9M10 18V5M16 18v-7M20 18H3"/></svg>`,
-  pie: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 3"/></svg>`,
-  trend: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l5-5 4 4 7-8"/><path d="M15 7h5v5"/></svg>`,
-  list: html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>`,
-};
-
-// Replaces the plain tally-stroke heading with a coloured icon chip. `dark`
-// asks for a dark glyph instead of white, for hues (like the gold used for
-// reminders) too light for white to read against.
-function homeSectionHead(hue, icon, title, { link = '', id = '', dark = false } = {}) {
-  return html`<div class="section-head no-stroke">
-    <h2${id ? html` id="${id}"` : ''}><span class="sec-icon${dark ? ' on-light' : ''}" style="--hue:${hue}" aria-hidden="true">${icon}</span>${title}</h2>
-    ${link}
-  </div>`;
-}
+import { donut, progressRing, progressBar } from '../ui/charts.js';
+import { ui, viewMonth, currentMonth, monthSwitcher, emptyState, txRow, icons, SEC_ICONS, homeSectionHead } from './components.js';
 
 export function remindersBlock() {
   if (!state.reminders.length) return '';
@@ -67,7 +47,157 @@ export function backupNudge() {
   </aside>`;
 }
 
-function hero(key, monthTx, overview) {
+// ---------- Savings first ----------
+
+function fmtMonths(m) {
+  return Number.isInteger(m) ? String(m) : m.toFixed(1);
+}
+
+// The one card that answers "am I safe?": how many months the safety net
+// would carry you, against the target. Without a safety net it falls back to
+// how far along everything is together, and with no plans at all it asks for
+// one — the first thing a planner would ask for too.
+function savingsHero(review) {
+  const { safety, runway: months, runwayTarget: target, essentials, surplus, allocated } = review;
+  const goals = state.goals;
+  const totalSaved = goals.reduce((s, g) => s + (g.saved ?? 0), 0);
+  const totalTarget = goals.reduce((s, g) => s + g.target, 0);
+  const typical = Math.max(0, surplus.typical);
+
+  let ring = '';
+  let headline;
+  let sub;
+  let stateName = 'accent';
+  if (safety && months != null) {
+    const ratio = target > 0 ? months / target : 0;
+    stateName = ratio >= 1 ? 'ok' : ratio >= 0.5 ? 'warning' : 'over';
+    ring = progressRing({
+      ratio,
+      state: stateName,
+      showDay: false,
+      centerTop: fmtMonths(months),
+      centerBottom: months === 1 ? 'month' : 'months',
+      ariaLabel: `Safety net covers ${fmtMonths(months)} of ${target} months`,
+    });
+    headline = ratio >= 1 ? `${fmtMonths(months)} months of runway. You’re covered.` : `${fmtMonths(months)} of ${target} months of runway`;
+    sub = `${safety.name} holds ${money(safety.saved ?? 0)}, and a month of essentials is about ${money(essentials)}.${ratio < 1 && typical > 0 ? ` At the usual surplus, the rest is on its way.` : ''}`;
+  } else if (goals.length) {
+    const ratio = totalTarget > 0 ? Math.min(1, totalSaved / totalTarget) : 0;
+    ring = progressRing({
+      ratio,
+      state: 'accent',
+      showDay: false,
+      centerTop: percent(ratio),
+      centerBottom: 'saved',
+      ariaLabel: `${percent(ratio)} of all plans funded`,
+    });
+    headline = `${money(totalSaved)} set aside toward ${money(totalTarget)}`;
+    sub = safety
+      ? html`To measure that in months, <a href="#/budgets">set monthly budgets</a> or log a few months of spending.`
+      : html`Mark one plan as your safety net and Tally will show how many months it would carry you. <a href="#/goals">Choose one</a>.`;
+  } else {
+    headline = 'Start with a safety net';
+    sub = 'The first plan a planner would give you: a pot that covers a few months of essentials. Then everything else.';
+  }
+
+  const chips = goals.length
+    ? html`<dl class="stat-chips">
+        <div style="--chip:var(--pos)"><dt>Set aside</dt><dd class="amt amt-in">${money(totalSaved)}</dd></div>
+        <div style="--chip:var(--accent)"><dt>Usual surplus</dt><dd class="amt">${money(typical)}<small>/mo</small></dd></div>
+        <div style="--chip:var(--hue-budgets)"><dt>Allocated</dt><dd class="amt">${typical > 0 ? percent(allocated / typical) : '—'}</dd></div>
+      </dl>`
+    : html`<div class="btn-row"><button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button></div>`;
+
+  return html`<section class="hero hero-savings${ring ? ' small' : ''}" data-state="${stateName}">
+    <div class="hero-main">
+      ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
+      <div class="hero-say">
+        <p class="hero-line">${headline}</p>
+        <p class="hero-sub">${sub}</p>
+      </div>
+    </div>
+    ${chips}
+  </section>`;
+}
+
+// Every plan as a tile with its own ring. On the cover screen the tiles are
+// a strip you flick through with a thumb; opened flat they're a grid.
+export function planTile(plan, progress, share, { selected = false, compact = false } = {}) {
+  const kind = planKind(plan);
+  return html`<li class="plan-tile${selected ? ' selected' : ''}" style="--c:${plan.color}">
+    <button type="button" class="plan-tile-btn" data-action="select-plan" data-id="${plan.id}" aria-label="${plan.name}, ${percent(progress.ratio)} funded">
+      <span class="ring-sm" style="--ring-a:${plan.color};--ring-b:color-mix(in srgb, ${plan.color} 55%, white);--ring-glow:${plan.color}">
+        ${progressRing({ size: 96, stroke: 12, ratio: progress.ratio, state: 'plan', showDay: false, centerTop: percent(progress.ratio), centerBottom: '', ariaLabel: '' })}
+      </span>
+      <span class="plan-tile-main">
+        <span class="plan-tile-name">${plan.name}</span>
+        <span class="plan-tile-kind">${PLAN_KINDS[kind]}</span>
+        <span class="plan-tile-amt"><span class="amt">${money(progress.saved)}</span> <span class="muted">of ${money(plan.target)}</span></span>
+        ${share > 0 ? html`<span class="plan-tile-share">${money(share)} a month</span>` : compact ? '' : html`<span class="plan-tile-share muted">No share of the surplus yet</span>`}
+      </span>
+    </button>
+    <button type="button" class="btn small primary plan-tile-add" data-action="adjust-goal" data-id="${plan.id}">${icons.plus}<span>Set aside</span></button>
+  </li>`;
+}
+
+function plansSection(review) {
+  const typical = Math.max(0, review.surplus.typical);
+  const ordered = planOrder(state.goals);
+  const shares = allocate(ordered, typical);
+  return html`<section class="panel tinted plans-home" style="--hue:var(--hue-budgets)" aria-labelledby="plans-title">
+    ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.target, html`<span id="plans-title">Plans</span>`, { link: html`<a class="link" href="#/goals">All plans</a>` })}
+    ${ordered.length
+      ? html`<ul class="plain-list plan-strip">${ordered.map((g) => planTile(g, planProgress(g, state.transactions, state.today), shares.byPlan.get(g.id) ?? 0, { selected: ui.selectedPlan === g.id }))}</ul>`
+      : html`<p class="muted">Nothing to save toward yet.</p>
+        <div class="btn-row"><button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button><button type="button" class="btn" data-action="new-goal">Add a plan</button></div>`}
+  </section>`;
+}
+
+// How each month's surplus is dealt out, as one bar and the rows behind it.
+function allocationSection(review) {
+  const typical = Math.max(0, review.surplus.typical);
+  const ordered = planOrder(state.goals);
+  if (!ordered.length) return '';
+  const shares = allocate(ordered, typical);
+  const segs = ordered.filter((g) => (g.allocBp ?? 0) > 0);
+  const unBp = Math.max(0, BP - shares.sharedBp);
+  return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="alloc-title">
+    ${homeSectionHead('var(--hue-spending)', SEC_ICONS.split, html`<span id="alloc-title">Where the surplus goes</span>`, { link: html`<a class="link" href="#/goals">Change</a>` })}
+    ${typical > 0
+      ? html`<p class="muted small">About ${money(typical)} is left over in a typical month. ${shares.unallocated > 0 ? `${money(shares.unallocated)} of it has no home yet.` : 'All of it has a job.'}</p>`
+      : html`<p class="muted small">Once a few months are logged, Tally knows what’s usually left over and can split it by these shares.</p>`}
+    <div class="alloc-bar" role="img" aria-label="Shares of the monthly surplus">
+      ${segs.map((g) => html`<i style="--w:${((Math.min(BP, g.allocBp) / BP) * 100).toFixed(2)}%;--c:${g.color}" title="${g.name}: ${percent(g.allocBp / BP)}"></i>`)}
+      ${unBp > 0 ? html`<i class="alloc-free" style="--w:${((unBp / BP) * 100).toFixed(2)}%" title="Unallocated: ${percent(unBp / BP)}"></i>` : ''}
+    </div>
+    <ul class="plain-list alloc-rows">
+      ${segs.map((g) => html`<li><i class="key" style="background:${g.color}"></i><span class="legend-name">${g.name}</span><span class="legend-pct">${percent(g.allocBp / BP)}</span><span class="amt">${money(shares.byPlan.get(g.id) ?? 0)}</span></li>`)}
+      ${unBp > 0 ? html`<li class="muted"><i class="key alloc-free"></i><span class="legend-name">Unallocated</span><span class="legend-pct">${percent(unBp / BP)}</span><span class="amt">${money(shares.unallocated)}</span></li>` : ''}
+    </ul>
+  </section>`;
+}
+
+export function advisorSection(review, { limit = 3 } = {}) {
+  const items = review.attention.slice(0, limit);
+  return html`<section class="panel tinted" style="--hue:var(--hue-advisor)" aria-labelledby="adv-title">
+    ${homeSectionHead('var(--hue-advisor)', SEC_ICONS.shield, html`<span id="adv-title">Advisor</span>`, { link: html`<a class="link" href="#/advisor">${review.score} of ${review.checks.length} clear</a>` })}
+    ${items.length
+      ? html`<ul class="plain-list checklist">
+          ${items.map((c) => html`<li class="${c.soft ? 'soft' : ''}">
+            <a class="check-row" href="#/${c.route}">
+              <i class="check-mark" aria-hidden="true"></i>
+              <span class="check-main"><strong>${c.title}</strong><small>${c.detail}</small></span>
+              ${icons.chevron}
+            </a>
+          </li>`)}
+        </ul>`
+      : html`<p class="muted">Everything a planner would check is in order.</p>`}
+  </section>`;
+}
+
+// ---------- This month's spending ----------
+
+function spendingHero(key, monthTx, overview) {
   const isCurrent = key === currentMonth();
   const isPast = key < currentMonth();
   const [y, m] = key.split('-').map(Number);
@@ -78,7 +208,7 @@ function hero(key, monthTx, overview) {
   const t = totals(monthTx);
 
   if (!monthTx.length && !isCurrent) {
-    return html`<section class="hero">
+    return html`<section class="hero hero-spend small">
       <p class="hero-line">${isPast ? `Nothing was recorded in ${name}` : `${name} hasn’t started yet`}</p>
       ${overview.hasBudgets ? html`<p class="hero-sub">Your monthly budgets add up to ${money(overview.limit)}.</p>` : ''}
     </section>`;
@@ -88,20 +218,11 @@ function hero(key, monthTx, overview) {
     const headline = t.expenses > 0
       ? isCurrent ? `You’ve spent ${money(t.expenses)} so far this month` : `You spent ${money(t.expenses)} in ${name}`
       : isCurrent ? 'Nothing spent yet this month' : isPast ? `No spending recorded in ${name}` : `${name} hasn’t started yet`;
-    // No budget to measure against, so the ring can't show a money state —
-    // it stands in as a plain, accent-coloured sense of where the month is.
     const dayFraction = dayOfMonth / days;
     const ring = isCurrent
-      ? progressRing({
-          ratio: dayFraction,
-          state: 'accent',
-          showDay: false,
-          centerTop: percent(dayFraction),
-          centerBottom: 'of month',
-          ariaLabel: `${percent(dayFraction)} of ${name} gone`,
-        })
+      ? progressRing({ ratio: dayFraction, state: 'accent', showDay: false, centerTop: percent(dayFraction), centerBottom: 'of month', ariaLabel: `${percent(dayFraction)} of ${name} gone` })
       : '';
-    return html`<section class="hero${ring ? ' small' : ''}" data-state="accent">
+    return html`<section class="hero hero-spend small" data-state="accent">
       <div class="hero-main">
         ${ring ? html`<div class="hero-ring-row">${ring}</div>` : ''}
         <div class="hero-say">
@@ -134,7 +255,7 @@ function hero(key, monthTx, overview) {
 
   const ratio = limit > 0 ? spent / limit : spent > 0 ? 2 : 0;
   const showRing = isCurrent || isPast;
-  return html`<section class="hero${showRing ? ' small' : ''}" data-state="${status.state}">
+  return html`<section class="hero hero-spend small" data-state="${status.state}">
     <div class="hero-main">
       ${showRing
         ? html`<div class="hero-ring-row">${progressRing({
@@ -156,9 +277,6 @@ function hero(key, monthTx, overview) {
   </section>`;
 }
 
-// Already inside the hero card, so this is the .compact figures dl rather
-// than a card of its own — merging Home's headline numbers into one focal
-// card instead of three stacked ones.
 function figures(t) {
   return html`<dl class="figures compact hero-figures">
     <div style="--chip:var(--pos)"><dt>Income</dt><dd class="amt amt-in">${money(t.income)}</dd></div>
@@ -175,9 +293,9 @@ function budgetSnapshot(overview) {
   }
   if (!rows.length) return '';
   rows.sort(compareBudgetRows);
-  const shown = rows.slice(0, 5);
-  return html`<section class="panel tinted" style="--hue:var(--hue-budgets)" aria-labelledby="bud-title">
-    ${homeSectionHead('var(--hue-budgets)', SEC_ICONS.budgets, html`<span id="bud-title">Budgets</span>`, { link: html`<a class="link" href="#/budgets">${rows.length > shown.length ? `All ${rows.length}` : 'Details'}</a>` })}
+  const shown = rows.slice(0, 4);
+  return html`<section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="bud-title">
+    ${homeSectionHead('var(--hue-trend)', SEC_ICONS.budgets, html`<span id="bud-title">Budgets</span>`, { link: html`<a class="link" href="#/budgets">${rows.length > shown.length ? `All ${rows.length}` : 'Details'}</a>` })}
     <ul class="plain-list budget-mini">
       ${shown.map((r) => html`<li>
         <div class="bm-top">
@@ -193,27 +311,18 @@ function budgetSnapshot(overview) {
 function categoryBreakdown(monthTx) {
   const rows = spendingByCategory(monthTx, state.categories).filter((r) => r.amount > 0);
   const total = rows.reduce((s, r) => s + r.amount, 0);
-  if (!total) {
-    return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
-      ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
-      <p class="muted">No spending this month yet. Categories will appear here as you log expenses.</p>
-    </section>`;
-  }
-  const top = rows.slice(0, 6);
-  const rest = rows.slice(6).reduce((s, r) => s + r.amount, 0);
+  if (!total) return '';
+  const top = rows.slice(0, 5);
+  const rest = rows.slice(5).reduce((s, r) => s + r.amount, 0);
   const segments = top.map((r) => {
     const c = r.categoryId === UNCATEGORIZED ? categoryById(null) : categoryById(r.categoryId);
     return { value: r.amount, color: c.color, label: `${c.name}: ${money(r.amount)}`, cat: c, amount: r.amount };
   });
   if (rest > 0) segments.push({ value: rest, color: 'var(--ink-4)', label: `Everything else: ${money(rest)}`, cat: { name: 'Everything else', icon: '…', color: 'var(--ink-4)' }, amount: rest });
   return html`<section class="panel tinted" style="--hue:var(--hue-spending)" aria-labelledby="cat-title">
-    ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`)}
+    ${homeSectionHead('var(--hue-spending)', SEC_ICONS.pie, html`<span id="cat-title">Where it went</span>`, { link: html`<a class="link" href="#/activity">All activity</a>` })}
     <div class="breakdown">
-      ${donut(segments, {
-        centerTop: money(total, { compact: total >= 1000000 }),
-        centerBottom: 'spent',
-        ariaLabel: `Spending by category: ${segments.map((s) => s.label).join(', ')}`,
-      })}
+      ${donut(segments, { size: 132, stroke: 20, centerTop: money(total, { compact: total >= 1000000 }), centerBottom: 'spent', ariaLabel: `Spending by category: ${segments.map((s) => s.label).join(', ')}` })}
       <ul class="legend">
         ${segments.map((s) => html`<li>
           <i class="key" style="background:${s.color}"></i>
@@ -226,80 +335,56 @@ function categoryBreakdown(monthTx) {
   </section>`;
 }
 
-function trend(key) {
-  const series = monthlySeries(state.transactions, key, 6);
-  const locale = state.settings.locale;
-  return html`<section class="panel tinted" style="--hue:var(--hue-trend)" aria-labelledby="trend-title">
-    ${homeSectionHead('var(--hue-trend)', SEC_ICONS.trend, html`<span id="trend-title">Last 6 months</span>`)}
-    ${barChart(
-      series.map((s) => ({
-        key: s.key,
-        label: formatMonth(s.key, locale, { month: 'short' }),
-        fullLabel: formatMonth(s.key, locale),
-        values: { income: s.income, expenses: Math.max(0, s.expenses) },
-      })),
-      {
-        fields: [
-          { field: 'income', name: 'Income', cls: 'bar-in' },
-          { field: 'expenses', name: 'Spending', cls: 'bar-out' },
-        ],
-        height: 190,
-        highlightKey: key,
-        fmtAxis: (v) => money(v, { compact: true }),
-        fmtValue: (v) => money(v),
-        ariaLabel: `Income and spending, ${formatMonth(series[0].key, locale)} to ${formatMonth(key, locale)}`,
-      }
-    )}
-    <p class="muted small">Net over these months: ${money(series.reduce((s, m) => s + m.net, 0), { sign: true })}</p>
-  </section>`;
-}
-
-function recent(key, monthTx) {
-  const list = sortedTransactions().filter((t) => isInMonth(t.date, key)).slice(0, 6);
+function recent(key) {
+  const list = sortedTransactions().filter((t) => isInMonth(t.date, key)).slice(0, 4);
+  if (!list.length) return '';
   return html`<section class="panel tinted" style="--hue:var(--hue-activity)" aria-labelledby="recent-title">
-    ${homeSectionHead('var(--hue-activity)', SEC_ICONS.list, html`<span id="recent-title">Latest in ${month(key, { month: 'long' })}</span>`, { link: html`<a class="link" href="#/activity">All activity</a>`, dark: true })}
-    ${list.length
-      ? html`<ul class="tx-list">${list.map(txRow)}</ul>`
-      : html`<p class="muted">Nothing logged for this month.</p>`}
+    ${homeSectionHead('var(--hue-activity)', SEC_ICONS.list, html`<span id="recent-title">Latest</span>`, { link: html`<a class="link" href="#/activity">All activity</a>`, dark: true })}
+    <ul class="tx-list">${list.map(txRow)}</ul>
   </section>`;
 }
 
 function welcome() {
   return emptyState({
-    title: 'Start with one transaction',
-    body: 'Log what you spent today, and your month will take shape here. You can also bring in history from a spreadsheet or bank export.',
-    actions: html`<button type="button" class="btn primary" data-action="new-tx">${icons.plus}Add a transaction</button>
+    title: 'Start with a safety net',
+    body: 'Tally is built around what you’re saving toward. Add the pot that would carry you for a few months, then log what you spend and it works out what’s left over to feed it.',
+    actions: html`<button type="button" class="btn primary" data-action="new-goal" data-kind="safety">${icons.plus}Add a safety net</button>
+      <button type="button" class="btn" data-action="new-tx">Log a transaction</button>
       <button type="button" class="btn" data-action="import-csv">Import a CSV file</button>`,
   });
 }
 
 export function renderHome() {
   const key = viewMonth();
-  if (!state.transactions.length && !state.reminders.length) {
+  if (!state.transactions.length && !state.reminders.length && !state.goals.length) {
     return html`${monthSwitcher(key)}${welcome()}
       <section class="panel tips">
         <h2>Good to know</h2>
         <ul>
           <li>Everything stays on this device. There’s no account and no server.</li>
-          <li>Add Tally to your home screen to open it like an app, even offline.</li>
+          <li>Account numbers and logins go in a vault that only your passphrase can open.</li>
           <li>Set up rent, salary and subscriptions once under <a href="#/recurring">Repeating</a>.</li>
         </ul>
       </section>`;
   }
   const monthTx = txsInMonth(state.transactions, key);
   const overview = budgetOverview(state.transactions, state.categories, key, state.settings.warnPercent);
+  const review = advisorReview({ plans: state.goals, accounts: state.accounts, categories: state.categories, transactions: state.transactions, settings: state.settings, todayIso: state.today });
   return html`${monthSwitcher(key)}
     ${key === currentMonth() ? remindersBlock() : ''}
     ${backupNudge()}
-    ${hero(key, monthTx, overview)}
+    ${savingsHero(review)}
+    ${plansSection(review)}
     <div class="dash-grid">
       <div class="dash-col">
-        ${budgetSnapshot(overview)}
-        ${recent(key, monthTx)}
+        ${allocationSection(review)}
+        ${advisorSection(review)}
       </div>
       <div class="dash-col">
+        ${spendingHero(key, monthTx, overview)}
+        ${budgetSnapshot(overview)}
         ${categoryBreakdown(monthTx)}
-        ${trend(key)}
+        ${recent(key)}
       </div>
     </div>`;
 }

@@ -8,10 +8,8 @@ import {
   occurrencesBetween, processRecurring, nextDue, monthlyEquivalent, nthOccurrence, MAX_GENERATED_PER_RUN,
 } from '../js/core/recurring.js';
 import { parseCSV, toCSV, transactionsToCSV, prepareImport, mapHeaders } from '../js/core/csv.js';
-import {
-  validateTransactionInput, validateCategoryInput, parseBackup, buildBackup, sanitizeTransaction,
-} from '../js/core/validate.js';
-import { defaultCategories, DEFAULT_SETTINGS, UNCATEGORIZED } from '../js/core/defaults.js';
+import { validateTransactionInput, validateCategoryInput, parseBackup, buildBackup, sanitizeTransaction, sanitizeAccount } from '../js/core/validate.js';
+import { defaultCategories, DEFAULT_SETTINGS, UNCATEGORIZED, newAccount } from '../js/core/defaults.js';
 
 let seq = 0;
 const nextId = () => `id-${String(++seq).padStart(6, '0')}`;
@@ -582,10 +580,14 @@ describe('backups', () => {
   const data = {
     settings: { ...DEFAULT_SETTINGS, currency: 'EUR', locale: 'de-DE', theme: 'dark' },
     categories: defaultCategories(nextId),
-    accounts: [{ id: 'acc-000001', name: 'Checking', kind: 'checking', openingBalance: -500, order: 0 }],
+    accounts: [{
+      id: 'acc-000001', name: 'Checking', kind: 'checking', openingBalance: -500, order: 0,
+      institution: 'Ally', role: 'hub', apyBp: 425, mfa: true, reviewedAt: '2025-06-01', notes: 'Pay lands here',
+      vault: { v: 1, iv: 'AAAAAAAAAAAAAAAA', data: 'c2VhbGVk' },
+    }],
     transactions: june,
     recurring: [{ id: 'rule-000001', type: 'expense', amount: 100, categoryId: 'groc', accountId: null, note: '', frequency: 'monthly', startDate: '2024-01-01', endDate: null, mode: 'remind', paused: false, generatedThrough: null }],
-    goals: [{ id: 'goal-000001', name: 'Trip', kind: 'fund', target: 50000, saved: 1000, targetDate: null, startDate: null, endDate: null, color: '#3D8B5A', createdAt: NOW }],
+    goals: [{ id: 'goal-000001', name: 'Trip', kind: 'fund', target: 50000, saved: 1000, targetDate: null, startDate: null, endDate: null, color: '#3D8B5A', createdAt: NOW, apyBp: 400, allocBp: 2500, accountId: 'acc-000001' }],
   };
 
   test('round trip is lossless', () => {
@@ -595,6 +597,31 @@ describe('backups', () => {
     assert.equal(r.dropped, 0);
     assert.equal(r.exportedAt, NOW);
     assert.deepEqual(r.data, data);
+  });
+
+  test('a format-2 backup restores with the savings-first fields defaulted', () => {
+    const old = {
+      ...buildBackup(data, NOW),
+      format: 2,
+      settings: { currency: 'USD', locale: 'en-US', theme: 'system' },
+      accounts: [{ id: 'acc-000001', name: 'Checking', kind: 'savings', openingBalance: 0, order: 0 }],
+      goals: [{ id: 'goal-000001', name: 'Trip', kind: 'fund', target: 50000, saved: 1000, targetDate: null, startDate: null, endDate: null, color: '#3D8B5A', createdAt: NOW }],
+    };
+    const r = parseBackup(JSON.stringify(old));
+    assert.equal(r.ok, true);
+    assert.equal(r.dropped, 0);
+    const acc = r.data.accounts[0];
+    assert.deepEqual([acc.institution, acc.role, acc.apyBp, acc.mfa, acc.reviewedAt, acc.vault], ['', 'savings', 0, false, null, null]);
+    const goal = r.data.goals[0];
+    assert.deepEqual([goal.kind, goal.apyBp, goal.allocBp, goal.accountId], ['fund', 0, 0, null]);
+    assert.equal(r.data.settings.runwayTarget, 6);
+    assert.equal(r.data.settings.vaultSalt, null);
+    // A corrupt vault blob is dropped rather than kept to fail on every open;
+    // a bad share is clamped to nothing rather than to garbage.
+    const bad = parseBackup(JSON.stringify({ ...old, accounts: [{ ...old.accounts[0], vault: { v: 1, iv: 5 } }], goals: [{ ...old.goals[0], kind: 'lottery', allocBp: 12000 }] }));
+    assert.equal(bad.data.accounts[0].vault, null);
+    assert.equal(bad.data.goals[0].kind, 'fund');
+    assert.equal(bad.data.goals[0].allocBp, 0);
   });
 
   test('rejects files that are not backups', () => {
@@ -629,5 +656,20 @@ describe('backups', () => {
   test('sanitizeTransaction strips unknown fields', () => {
     const clean = sanitizeTransaction({ ...june[1], evil: '<script>' });
     assert.equal('evil' in clean, false);
+  });
+});
+
+describe('record shapes', () => {
+  test('an account made by the importer has the same shape as one restored from a backup', () => {
+    // A record written today and one that has been through a backup have to
+    // be the same object, or a restore quietly changes the data.
+    const made = newAccount({ id: 'acc-000009', name: 'Imported', order: 3 });
+    assert.deepEqual(sanitizeAccount(made, 3), made);
+  });
+
+  test('the defaults are the safe ones', () => {
+    const a = newAccount({ id: 'a', name: 'X' });
+    assert.deepEqual([a.mfa, a.apyBp, a.vault, a.reviewedAt, a.role], [false, 0, null, null, 'other']);
+    assert.equal(newAccount({ id: 'a', name: 'X', kind: 'savings' }).role, 'savings');
   });
 });
