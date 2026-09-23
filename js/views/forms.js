@@ -1,86 +1,15 @@
 import { html, formData, showErrors, errorSlot, $, $$ } from '../ui/html.js';
 import { openSheet, toast, confirmDialog } from '../ui/overlay.js';
-import {
-  state, saveCategory, deleteCategory, categoryUsageCounts, setBudget, saveAccount, deleteAccount,
-  saveRule, deleteRule, saveGoal, deleteGoal, adjustGoal, describeError,
-} from '../store.js';
-import { validateCategoryInput, NAME_MAX, NOTE_MAX } from '../core/validate.js';
+import { state, saveAccount, deleteAccount, recordBalance, saveGoal, deleteGoal, adjustGoal, describeError } from '../store.js';
+import { NAME_MAX, NOTE_MAX } from '../core/validate.js';
 import { parseAmount, centsToInput } from '../core/money.js';
 import { isValidISODate } from '../core/dates.js';
-import { ICONS, PALETTE, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } from '../core/defaults.js';
-import { FREQUENCIES, occurrencesBetween } from '../core/recurring.js';
+import { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } from '../core/defaults.js';
 import { PLAN_KINDS, BP } from '../core/plans.js';
-import { money, plural, categoryTree, categoryOptionLabel } from '../ui/format.js';
+import { money, plural } from '../ui/format.js';
 import { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open as openSealed, changePassphrase, describeVaultError } from '../vault.js';
 
-// A percentage typed as "4.25" becomes 425 basis points, and only that:
-// two decimals, nothing past 100.
-function parsePercent(text) {
-  const t = String(text ?? '').trim().replace(',', '.').replace('%', '');
-  if (t === '') return { ok: true, bp: 0 };
-  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return { ok: false, error: 'Enter a percentage like 4.25.' };
-  const bp = Math.round(Number(t) * 100);
-  if (bp > BP) return { ok: false, error: 'Can’t be more than 100%.' };
-  return { ok: true, bp };
-}
-
-const fmtPercent = (bp) => (bp ? (bp / 100).toFixed(2).replace(/\.?0+$/, '') : '');
-
-// ---------- The vault's passphrase ----------
-
-// One dialog for choosing, entering or changing the passphrase. It's a
-// confirm dialog with fields, because that's what it is: a question with a
-// yes at the bottom.
-export async function passphraseDialog({ mode = 'unlock' } = {}) {
-  if (!vaultAvailable()) {
-    toast(describeVaultError(new Error('vault-unavailable')), { tone: 'error' });
-    return false;
-  }
-  const create = mode === 'create';
-  const change = mode === 'change';
-  const extra = html`<div class="stack">
-    ${change ? html`<label class="field"><span class="label">Current passphrase</span><input type="password" id="vault-current" autocomplete="current-password" /></label>` : ''}
-    <label class="field">
-      <span class="label">${create ? 'Choose a passphrase' : change ? 'New passphrase' : 'Passphrase'}</span>
-      <input type="password" id="vault-pass" autocomplete="${create || change ? 'new-password' : 'current-password'}" ${create || change ? 'minlength="8"' : ''} />
-    </label>
-    ${create || change ? html`<label class="field"><span class="label">Type it again</span><input type="password" id="vault-pass2" autocomplete="new-password" /></label>` : ''}
-    <p class="field-error" id="vault-error" role="alert" hidden></p>
-  </div>`;
-  const ok = await confirmDialog({
-    title: create ? 'Seal the vault' : change ? 'Change the passphrase' : 'Open the vault',
-    message: create
-      ? 'Account numbers and logins are encrypted on this device with a key made from this passphrase. It is never stored anywhere, so there is no way to recover it: if it’s lost, so are the sealed details.'
-      : change
-        ? 'Every sealed detail is re-sealed under the new passphrase.'
-        : 'Opens for a few minutes, then locks itself.',
-    confirmLabel: create ? 'Seal' : change ? 'Change' : 'Open',
-    extra,
-    focus: change ? '#vault-current' : '#vault-pass',
-    validate: async (dialog) => {
-      const err = $('#vault-error', dialog);
-      const show = (m) => { err.textContent = m; err.hidden = false; return false; };
-      const pass = $('#vault-pass', dialog).value;
-      if (create || change) {
-        if (pass.length < 8) return show('Use at least 8 characters.');
-        if (pass !== $('#vault-pass2', dialog).value) return show('The two don’t match.');
-      }
-      try {
-        if (create) await createVault(pass);
-        else if (change) {
-          const done = await changePassphrase($('#vault-current', dialog).value, pass, state.accounts, saveAccount);
-          if (!done) return show('That isn’t the current passphrase.');
-        } else if (!(await unlock(pass))) return show('That isn’t the passphrase.');
-      } catch (e) {
-        return show(describeVaultError(e) ?? describeError(e));
-      }
-      return true;
-    },
-  });
-  return ok;
-}
-
-const fail = (err) => toast(describeError(err), { tone: 'error' });
+const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
 function footerButtons({ saveLabel, deletable }) {
   return html`${deletable ? html`<button type="button" class="btn ghost danger-text" data-delete>Delete</button>` : ''}
@@ -115,360 +44,83 @@ function wireSave(dialog, form, handler) {
   $('[data-save]', dialog).addEventListener('click', run);
 }
 
-function moneyField(name, value, { label, hint = '', optional = false, allowNegative = false } = {}) {
+function moneyField(name, value, { label, hint = '', optional = false } = {}) {
   return html`<label class="field">
-      <span class="label">${label}${optional ? html` <span class="opt">Optional</span>` : ''}</span>
-      <input name="${name}" inputmode="${allowNegative ? 'text' : 'decimal'}" value="${value}" aria-describedby="err-${name}" autocomplete="off" />
+      <span class="label">${label}${optional ? html` <span class="opt">optional</span>` : ''}</span>
+      <input name="${name}" inputmode="decimal" value="${value}" aria-describedby="err-${name}" autocomplete="off" />
       ${hint ? html`<span class="hint">${hint}</span>` : ''}
     </label>
     ${errorSlot(name)}`;
 }
 
-// ---------- Categories ----------
-
-export function openCategoryForm({ id = null, preset = {}, onDone = null } = {}) {
-  const existing = id ? state.categories.find((c) => c.id === id) : null;
-  const { locale } = state.settings;
-  const v = existing
-    ? { ...existing, budget: existing.budget == null ? '' : centsToInput(existing.budget, { locale }) }
-    : { name: '', type: preset.type ?? 'expense', parentId: preset.parentId ?? '', icon: preset.type === 'income' ? '💰' : ICONS[0], color: PALETTE[state.categories.length % PALETTE.length], budget: '' };
-  const hasKids = existing && state.categories.some((c) => c.parentId === existing.id);
-  const parentOptions = (type) =>
-    state.categories.filter((c) => c.type === type && !c.parentId && c.id !== id);
-
-  const body = html`<form class="stack" novalidate autocomplete="off">
-    <label class="field">
-      <span class="label">Name</span>
-      <input name="name" value="${v.name}" maxlength="${NAME_MAX}" aria-describedby="err-name" required />
-    </label>
-    ${errorSlot('name')}
-    <div class="seg" role="radiogroup" aria-label="Category type">
-      <label><input type="radio" name="type" value="expense" ${v.type === 'expense' ? 'checked' : ''} /><span>Expense</span></label>
-      <label><input type="radio" name="type" value="income" ${v.type === 'income' ? 'checked' : ''} /><span>Income</span></label>
-    </div>
-    <label class="field">
-      <span class="label">Inside another category <span class="opt">Optional</span></span>
-      <select name="parentId" aria-describedby="err-parentId" ${hasKids ? 'disabled' : ''}>
-        <option value="">No, keep it at the top level</option>
-        ${parentOptions(v.type).map((c) => html`<option value="${c.id}" ${c.id === v.parentId ? 'selected' : ''}>${c.icon} ${c.name}</option>`)}
-      </select>
-      ${hasKids ? html`<span class="hint">This category has subcategories, so it stays at the top level.</span>` : ''}
-    </label>
-    ${errorSlot('parentId')}
-    <fieldset class="field">
-      <legend class="label">Icon</legend>
-      <div class="icon-grid">
-        ${[...new Set([v.icon, ...ICONS])].map((ic) => html`<label class="icon-opt"><input type="radio" name="icon" value="${ic}" ${ic === v.icon ? 'checked' : ''} /><span aria-hidden="true">${ic}</span><span class="sr-only">${ic}</span></label>`)}
-      </div>
-    </fieldset>
-    <fieldset class="field">
-      <legend class="label">Color</legend>
-      <div class="swatches">
-        ${[...new Set([v.color, ...PALETTE])].map((c) => html`<label class="swatch" style="--c:${c}"><input type="radio" name="color" value="${c}" ${c === v.color ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}
-      </div>
-    </fieldset>
-    <div data-budget ${v.type === 'income' ? 'hidden' : ''}>
-      ${moneyField('budget', v.budget, { label: 'Monthly budget', optional: true, hint: 'Leave empty for no budget. 0 means you plan to spend nothing here.' })}
-    </div>
-  </form>`;
-
-  openSheet({
-    title: existing ? 'Edit category' : 'New category',
-    body,
-    footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add category', deletable: Boolean(existing) }),
-    onClose: () => onDone?.(null),
-    onMount(dialog, sheet) {
-      const form = $('form', dialog);
-      form.addEventListener('change', (e) => {
-        if (e.target.name !== 'type') return;
-        const type = e.target.value;
-        const select = $('select[name="parentId"]', form);
-        select.innerHTML = '';
-        select.append(new Option('No, keep it at the top level', ''));
-        for (const c of parentOptions(type)) select.append(new Option(`${c.icon} ${c.name}`, c.id));
-        $('[data-budget]', form).hidden = type === 'income';
-      });
-      wireSave(dialog, form, async () => {
-        const data = formData(form);
-        if (hasKids) data.parentId = '';
-        const result = validateCategoryInput({ ...data, id, locale }, state.categories);
-        if (!result.ok) return showErrors(form, result.errors);
-        const saved = await saveCategory(result.value, id);
-        toast(existing ? 'Category saved' : `Added ${saved.name}`);
-        sheet.close({ silent: true });
-        onDone?.(saved);
-      });
-      $('[data-delete]', dialog)?.addEventListener('click', () => {
-        sheet.close({ silent: true });
-        openDeleteCategory(existing, onDone);
-      });
-      if (!existing) $('input[name="name"]', form).focus();
-    },
-  });
+// A percentage typed as "4.25" becomes 425 basis points, and only that: two
+// decimals, nothing past 100.
+function parsePercent(text) {
+  const t = String(text ?? '').trim().replace(',', '.').replace('%', '');
+  if (t === '') return { ok: true, bp: 0 };
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return { ok: false, error: 'A percentage, like 4.25.' };
+  const bp = Math.round(Number(t) * 100);
+  if (bp > BP) return { ok: false, error: 'Can’t be more than 100%.' };
+  return { ok: true, bp };
 }
 
-export function openDeleteCategory(cat, onDone = null) {
-  const counts = categoryUsageCounts(cat.id);
-  const needsMove = counts.transactions > 0 || counts.rules > 0;
-  const tree = categoryTree(cat.type, cat.id);
-  const targets = tree.map((t) => t.cat);
-  const kids = state.categories.filter((c) => c.parentId === cat.id);
-  const fallback = cat.parentId && targets.some((t) => t.id === cat.parentId) ? cat.parentId : targets.find((t) => /^other$/i.test(t.name))?.id ?? targets[0]?.id;
+const fmtPercent = (bp) => (bp ? (bp / 100).toFixed(2).replace(/\.?0+$/, '') : '');
 
-  const uses = [];
-  if (counts.transactions) uses.push(plural(counts.transactions, 'transaction'));
-  if (counts.rules) uses.push(plural(counts.rules, 'repeating transaction'));
+// ---------- The strongbox ----------
 
-  const body = html`<form class="stack" novalidate>
-    ${needsMove
-      ? targets.length
-        ? html`<p>${uses.join(' and ')} use ${cat.name}. Choose where they should go.</p>
-          <label class="field">
-            <span class="label">Move them to</span>
-            <select name="moveTo">
-              ${tree.map((t) => html`<option value="${t.cat.id}" ${t.cat.id === fallback ? 'selected' : ''}>${categoryOptionLabel(t)}</option>`)}
-            </select>
-          </label>`
-        : html`<p class="notice warn">${uses.join(' and ')} use ${cat.name}, and there’s no other ${cat.type} category to move them to. Add another ${cat.type} category first.</p>`
-      : html`<p>Nothing uses ${cat.name} yet, so deleting it won’t change any transactions.</p>`}
-    ${kids.length ? html`<p>Its ${plural(kids.length, 'subcategory', 'subcategories')} (${kids.map((k) => k.name).join(', ')}) will move to the top level.</p>` : ''}
-    ${cat.budget != null ? html`<p>Its monthly budget of ${money(cat.budget)} will be removed.</p>` : ''}
-  </form>`;
-
-  const blocked = needsMove && !targets.length;
-  openSheet({
-    title: `Delete ${cat.name}?`,
-    body,
-    footer: html`<button type="button" class="btn ghost" data-sheet-close>Keep it</button>
-      <button type="button" class="btn danger grow" data-save ${blocked ? 'disabled' : ''}>Delete category</button>`,
-    onClose: () => onDone?.(null),
-    onMount(dialog, sheet) {
-      const form = $('form', dialog);
-      wireSave(dialog, form, async () => {
-        if (blocked) return;
-        const moveTo = needsMove ? $('select[name="moveTo"]', form).value : null;
-        await deleteCategory(cat.id, moveTo);
-        sheet.close({ silent: true });
-        toast(`Deleted ${cat.name}${needsMove ? ` and moved ${uses.join(' and ')}` : ''}`);
-        onDone?.(null);
-      });
-    },
-  });
-}
-
-export function openBudgetForm(categoryId) {
-  const cat = state.categories.find((c) => c.id === categoryId);
-  if (!cat) return;
-  const { locale } = state.settings;
-  const body = html`<form class="stack" novalidate autocomplete="off">
-    ${moneyField('budget', cat.budget == null ? '' : centsToInput(cat.budget, { locale }), {
-      label: `Monthly budget for ${cat.name}`,
-      hint: cat.parentId ? 'Tracked on its own. The parent category’s budget, if any, already includes this spending.' : state.categories.some((c) => c.parentId === cat.id) ? 'Includes spending in its subcategories.' : 'The same limit applies every month.',
-    })}
-  </form>`;
-  openSheet({
-    title: cat.budget == null ? 'Set a budget' : 'Change budget',
-    body,
-    footer: html`${cat.budget != null ? html`<button type="button" class="btn ghost danger-text" data-delete>Remove budget</button>` : ''}
-      <button type="button" class="btn primary grow" data-save>Save budget</button>`,
-    onMount(dialog, sheet) {
-      const form = $('form', dialog);
-      const input = $('input[name="budget"]', form);
-      input.focus();
-      input.select();
-      wireSave(dialog, form, async () => {
-        const parsed = parseAmount(input.value, { locale });
-        if (!parsed.ok) return showErrors(form, { budget: input.value.trim() === '' ? 'Enter a budget, or use Remove budget.' : parsed.error });
-        if (parsed.negative) return showErrors(form, { budget: 'A budget can’t be negative.' });
-        await setBudget(cat.id, parsed.cents);
-        sheet.close({ silent: true });
-        toast(`${cat.name} budget set to ${money(parsed.cents)} a month`);
-      });
-      $('[data-delete]', dialog)?.addEventListener('click', async () => {
-        try {
-          await setBudget(cat.id, null);
-          sheet.close({ silent: true });
-          toast(`Removed the ${cat.name} budget`);
-        } catch (err) {
-          fail(err);
-        }
-      });
+export async function passphraseDialog({ mode = 'unlock' } = {}) {
+  if (!vaultAvailable()) {
+    toast(describeVaultError(new Error('vault-unavailable')), { tone: 'error' });
+    return false;
+  }
+  const create = mode === 'create';
+  const change = mode === 'change';
+  const extra = html`<div class="stack">
+    ${change ? html`<label class="field"><span class="label">Current passphrase</span><input type="password" id="vault-current" autocomplete="current-password" /></label>` : ''}
+    <label class="field">
+      <span class="label">${create ? 'Choose a passphrase' : change ? 'New passphrase' : 'Passphrase'}</span>
+      <input type="password" id="vault-pass" autocomplete="${create || change ? 'new-password' : 'current-password'}" />
+    </label>
+    ${create || change ? html`<label class="field"><span class="label">Type it again</span><input type="password" id="vault-pass2" autocomplete="new-password" /></label>` : ''}
+    <p class="field-error" id="vault-error" role="alert" hidden></p>
+  </div>`;
+  return confirmDialog({
+    title: create ? 'Seal the strongbox' : change ? 'Change the passphrase' : 'Open the strongbox',
+    message: create
+      ? 'Numbers and logins are encrypted on this device with a key made from this passphrase. It is never written down anywhere, so there is no way to recover it: lose it and the sealed pages stay shut for good.'
+      : change
+        ? 'Everything sealed is unsealed and sealed again under the new passphrase.'
+        : 'It stays open for a few minutes, then shuts itself.',
+    confirmLabel: create ? 'Seal' : change ? 'Change' : 'Open',
+    extra,
+    focus: change ? '#vault-current' : '#vault-pass',
+    validate: async (dialog) => {
+      const err = $('#vault-error', dialog);
+      const show = (m) => {
+        err.textContent = m;
+        err.hidden = false;
+        return false;
+      };
+      const pass = $('#vault-pass', dialog).value;
+      if (create || change) {
+        if (pass.length < 8) return show('Use at least 8 characters.');
+        if (pass !== $('#vault-pass2', dialog).value) return show('The two don’t match.');
+      }
+      try {
+        if (create) await createVault(pass);
+        else if (change) {
+          const done = await changePassphrase($('#vault-current', dialog).value, pass, state.accounts, saveAccount);
+          if (!done) return show('That isn’t the current passphrase.');
+        } else if (!(await unlock(pass))) return show('That isn’t the passphrase.');
+      } catch (e) {
+        return show(describeVaultError(e) ?? describeError(e));
+      }
+      return true;
     },
   });
 }
 
 // ---------- Accounts ----------
-
-export function openAccountForm(id = null) {
-  const existing = id ? state.accounts.find((a) => a.id === id) : null;
-  const { locale } = state.settings;
-  const unlocked = isUnlocked();
-  const body = html`<form class="stack" novalidate autocomplete="off">
-    <label class="field">
-      <span class="label">Name</span>
-      <input name="name" value="${existing?.name ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Everyday checking" aria-describedby="err-name" />
-    </label>
-    ${errorSlot('name')}
-    <label class="field">
-      <span class="label">Institution <span class="opt">Optional</span></span>
-      <input name="institution" value="${existing?.institution ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Ally, Fidelity, Schwab" />
-    </label>
-    <div class="row-2">
-      <label class="field">
-        <span class="label">Kind</span>
-        <select name="kind">
-          ${Object.entries(ACCOUNT_KINDS).map(([k, label]) => html`<option value="${k}" ${(existing?.kind ?? 'checking') === k ? 'selected' : ''}>${label}</option>`)}
-        </select>
-      </label>
-      <label class="field">
-        <span class="label">Its job</span>
-        <select name="role">
-          ${Object.entries(ACCOUNT_ROLES).map(([k, label]) => html`<option value="${k}" ${(existing?.role ?? roleForKind(existing?.kind ?? 'checking')) === k ? 'selected' : ''}>${label}</option>`)}
-        </select>
-      </label>
-    </div>
-    <div class="row-2">
-      <label class="field">
-        <span class="label">Earns <span class="opt">% a year</span></span>
-        <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
-      </label>
-      <label class="field">
-        <span class="label">Last reviewed <span class="opt">Optional</span></span>
-        <input type="date" name="reviewedAt" value="${existing?.reviewedAt ?? ''}" min="1900-01-01" max="2199-12-31" />
-      </label>
-    </div>
-    ${errorSlot('apy')}
-    <label class="check">
-      <input type="checkbox" name="mfa" ${existing?.mfa ? 'checked' : ''} />
-      <span>Sign-in has a second step (an app code, a key, or a text)</span>
-    </label>
-    ${moneyField('openingBalance', existing ? centsToInput(existing.openingBalance ?? 0, { locale }) : '0', {
-      label: 'Starting balance',
-      allowNegative: true,
-      hint: 'The balance before your first transaction here. Use a minus sign for money owed, like a card balance: -250.',
-    })}
-    <label class="field">
-      <span class="label">Notes <span class="opt">Optional</span></span>
-      <textarea name="notes" rows="2" maxlength="${NOTE_MAX}" placeholder="Beneficiary set, card in wallet, fee-free ATMs…">${existing?.notes ?? ''}</textarea>
-    </label>
-    <fieldset class="field vault-fieldset">
-      <legend class="label">Sealed details <span class="opt">Only your passphrase can open these</span></legend>
-      <div data-sealed-fields>
-        ${!vaultAvailable()
-          ? html`<p class="hint">Needs the installed app or an https address.</p>`
-          : !vaultExists()
-            ? html`<p class="hint">Set a passphrase first.</p><button type="button" class="btn small" data-vault-setup>Set a passphrase</button>`
-            : !unlocked
-              ? html`<p class="hint">${existing?.vault ? 'Sealed. Open the vault to edit them.' : 'Open the vault to add them.'}</p><button type="button" class="btn small" data-vault-open>Open the vault</button>`
-              : sealedInputs(null)}
-      </div>
-    </fieldset>
-    ${state.accounts.length ? '' : html`<p class="hint">Once you have two or more accounts, the add form lets you pick one.</p>`}
-  </form>`;
-  openSheet({
-    title: existing ? 'Edit account' : 'New account',
-    body,
-    footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add account', deletable: Boolean(existing) }),
-    async onMount(dialog, sheet) {
-      const form = $('form', dialog);
-      if (!existing) $('input[name="name"]', form).focus();
-      // Kind suggests the job, until the job is chosen by hand.
-      let roleTouched = Boolean(existing);
-      form.addEventListener('change', (e) => {
-        if (e.target.name === 'role') roleTouched = true;
-        if (e.target.name === 'kind' && !roleTouched) $('select[name="role"]', form).value = roleForKind(e.target.value);
-      });
-      // The sealed values are filled in after the sheet is up: opening
-      // them is asynchronous, and a locked vault leaves them blank.
-      let sealedLoaded = false;
-      const loadSealed = async () => {
-        const slot = $('[data-sealed-fields]', form);
-        if (!isUnlocked()) return;
-        try {
-          const values = existing?.vault ? await openSealed(existing.vault) : null;
-          slot.replaceChildren();
-          slot.insertAdjacentHTML('beforeend', String(sealedInputs(values)));
-          sealedLoaded = true;
-        } catch (e) {
-          slot.replaceChildren();
-          slot.insertAdjacentHTML('beforeend', String(html`<p class="field-error">Couldn’t open the sealed details. ${describeVaultError(e) ?? ''}</p>`));
-        }
-      };
-      if (unlocked) await loadSealed();
-      form.addEventListener('click', async (e) => {
-        if (e.target.closest('[data-vault-setup]')) {
-          if (await passphraseDialog({ mode: 'create' })) await loadSealed();
-        } else if (e.target.closest('[data-vault-open]')) {
-          if (await passphraseDialog({ mode: 'unlock' })) await loadSealed();
-        }
-      });
-      wireSave(dialog, form, async () => {
-        const data = formData(form);
-        const errors = {};
-        const name = data.name.trim().replace(/\s+/g, ' ');
-        if (!name) errors.name = 'Give the account a name.';
-        else if (state.accounts.some((a) => a.id !== id && a.name.toLowerCase() === name.toLowerCase())) errors.name = `You already have an account called “${name}”.`;
-        let opening = 0;
-        if (data.openingBalance.trim() !== '') {
-          const parsed = parseAmount(data.openingBalance, { locale });
-          if (!parsed.ok) errors.openingBalance = parsed.error;
-          else opening = parsed.negative ? -parsed.cents : parsed.cents;
-        }
-        const apy = parsePercent(data.apy);
-        if (!apy.ok) errors.apy = apy.error;
-        if (Object.keys(errors).length) return showErrors(form, errors);
-        const record = {
-          name,
-          kind: data.kind,
-          role: data.role in ACCOUNT_ROLES ? data.role : roleForKind(data.kind),
-          institution: data.institution.trim().slice(0, NAME_MAX),
-          apyBp: apy.bp,
-          mfa: Boolean(data.mfa),
-          reviewedAt: isValidISODate(data.reviewedAt) ? data.reviewedAt : null,
-          notes: data.notes.trim().slice(0, NOTE_MAX),
-          openingBalance: opening,
-        };
-        if (sealedLoaded && isUnlocked()) {
-          const values = {};
-          for (const k of ['accountNumber', 'routingNumber', 'username', 'password', 'vaultNotes']) {
-            const v = (data[k] ?? '').trim();
-            if (v) values[k === 'vaultNotes' ? 'notes' : k] = v.slice(0, NOTE_MAX);
-          }
-          record.vault = Object.keys(values).length ? await seal(values) : null;
-        }
-        await saveAccount(record, id);
-        sheet.close({ silent: true });
-        toast(existing ? 'Account saved' : `Added ${name}`);
-      });
-      $('[data-delete]', dialog)?.addEventListener('click', async () => {
-        const count = state.transactions.filter((t) => t.accountId === id).length;
-        const others = state.accounts.filter((a) => a.id !== id);
-        const extra = count && others.length
-          ? html`<label class="field"><span class="label">Move its ${plural(count, 'transaction')} to</span>
-              <select id="move-account"><option value="">No account</option>${others.map((a) => html`<option value="${a.id}">${a.name}</option>`)}</select></label>`
-          : null;
-        const ok = await confirmDialog({
-          title: `Delete ${existing.name}?`,
-          message: count
-            ? `${plural(count, 'transaction')} ${count === 1 ? 'is' : 'are'} linked to this account. They’ll be kept${others.length ? '' : ' without an account'}.${existing.vault ? ' Its sealed details are deleted with it.' : ''}`
-            : `No transactions use this account.${existing.vault ? ' Its sealed details are deleted with it.' : ''}`,
-          confirmLabel: 'Delete account',
-          danger: true,
-          extra,
-        });
-        if (!ok) return;
-        const moveTo = document.getElementById('move-account')?.value || null;
-        try {
-          await deleteAccount(id, moveTo);
-          sheet.close({ silent: true });
-          toast(`Deleted ${existing.name}`);
-        } catch (err) {
-          fail(err);
-        }
-      });
-    },
-  });
-}
 
 function sealedInputs(values) {
   return html`<div class="stack sealed-inputs">
@@ -480,142 +132,174 @@ function sealedInputs(values) {
       <label class="field"><span class="label">Username</span><input name="username" value="${values?.username ?? ''}" autocomplete="off" /></label>
       <label class="field"><span class="label">Password</span><input name="password" type="password" value="${values?.password ?? ''}" autocomplete="off" /></label>
     </div>
-    <label class="field"><span class="label">Private notes <span class="opt">Security questions, PIN hints</span></span><textarea name="vaultNotes" rows="2" maxlength="${NOTE_MAX}">${values?.notes ?? ''}</textarea></label>
+    <label class="field"><span class="label">Private notes <span class="opt">security questions, PIN hints</span></span><textarea name="sealedNotes" rows="2" maxlength="${NOTE_MAX}">${values?.notes ?? ''}</textarea></label>
   </div>`;
 }
 
-// ---------- Recurring ----------
-
-export function openRuleForm(id = null, preset = {}) {
-  const existing = id ? state.recurring.find((r) => r.id === id) : null;
+export function openAccountForm(id = null) {
+  const existing = id ? state.accounts.find((a) => a.id === id) : null;
   const { locale } = state.settings;
-  const v = existing
-    ? { ...existing, amount: centsToInput(existing.amount, { locale }), endDate: existing.endDate ?? '' }
-    : { type: preset.type ?? 'expense', amount: '', categoryId: '', accountId: state.accounts.length === 1 ? state.accounts[0].id : '', note: '', frequency: 'monthly', startDate: state.today, endDate: '', mode: 'auto', paused: false };
-  const catSelect = (type, selected) =>
-    html`<option value="">Choose a category</option>${categoryTree(type).map((t) => html`<option value="${t.cat.id}" ${t.cat.id === selected ? 'selected' : ''}>${categoryOptionLabel(t)}</option>`)}`;
-
+  const unlocked = isUnlocked();
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <div class="seg" role="radiogroup" aria-label="Type">
-      <label><input type="radio" name="type" value="expense" ${v.type === 'expense' ? 'checked' : ''} /><span>Expense</span></label>
-      <label><input type="radio" name="type" value="income" ${v.type === 'income' ? 'checked' : ''} /><span>Income</span></label>
-    </div>
     <label class="field">
-      <span class="label">Name</span>
-      <input name="note" value="${v.note}" maxlength="${NOTE_MAX}" placeholder="e.g. Rent, Salary, Streaming" aria-describedby="err-note" />
+      <span class="label">What you call it</span>
+      <input name="name" value="${existing?.name ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Core hub" aria-describedby="err-name" />
     </label>
-    ${errorSlot('note')}
-    ${moneyField('amount', v.amount, { label: 'Amount' })}
+    ${errorSlot('name')}
     <label class="field">
-      <span class="label">Category</span>
-      <select name="categoryId" aria-describedby="err-categoryId">${catSelect(v.type, v.categoryId)}</select>
-    </label>
-    ${errorSlot('categoryId')}
-    ${state.accounts.length > 1
-      ? html`<label class="field"><span class="label">Account</span><select name="accountId"><option value="">No account</option>${state.accounts.map((a) => html`<option value="${a.id}" ${a.id === v.accountId ? 'selected' : ''}>${a.name}</option>`)}</select></label>`
-      : html`<input type="hidden" name="accountId" value="${v.accountId ?? ''}" />`}
-    <label class="field">
-      <span class="label">How often</span>
-      <select name="frequency">${Object.entries(FREQUENCIES).map(([k, f]) => html`<option value="${k}" ${k === v.frequency ? 'selected' : ''}>${f.label}</option>`)}</select>
+      <span class="label">Who holds it <span class="opt">optional</span></span>
+      <input name="institution" value="${existing?.institution ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Ally, Fidelity, Schwab" />
     </label>
     <div class="row-2">
       <label class="field">
-        <span class="label">${existing ? 'Starts' : 'First date'}</span>
-        <input type="date" name="startDate" value="${v.startDate}" min="1900-01-01" max="2199-12-31" aria-describedby="err-startDate" />
+        <span class="label">Kind</span>
+        <select name="kind">
+          ${Object.entries(ACCOUNT_KINDS).map(([k, label]) => html`<option value="${k}" ${(existing?.kind ?? 'savings') === k ? 'selected' : ''}>${label}</option>`)}
+        </select>
       </label>
       <label class="field">
-        <span class="label">Ends <span class="opt">Optional</span></span>
-        <input type="date" name="endDate" value="${v.endDate}" min="1900-01-01" max="2199-12-31" aria-describedby="err-endDate" />
+        <span class="label">Its job</span>
+        <select name="role">
+          ${Object.entries(ACCOUNT_ROLES).map(([k, label]) => html`<option value="${k}" ${(existing?.role ?? roleForKind(existing?.kind ?? 'savings')) === k ? 'selected' : ''}>${label}</option>`)}
+        </select>
       </label>
     </div>
-    ${errorSlot('startDate')}${errorSlot('endDate')}
-    <fieldset class="field">
-      <legend class="label">When it’s due</legend>
-      <label class="radio-card"><input type="radio" name="mode" value="auto" ${v.mode === 'auto' ? 'checked' : ''} /><span><strong>Add it automatically</strong><small>Best for fixed amounts like rent or a subscription.</small></span></label>
-      <label class="radio-card"><input type="radio" name="mode" value="remind" ${v.mode === 'remind' ? 'checked' : ''} /><span><strong>Remind me to log it</strong><small>Shows on Home when due, so you can confirm or skip. Good for bills that vary.</small></span></label>
+    ${moneyField('balance', existing ? centsToInput(existing.balance ?? 0, { locale }) : '', {
+      label: existing ? 'What it holds' : 'What it holds today',
+      hint: existing ? 'Changing it here replaces the last reading rather than adding one.' : 'Write in a new reading any time; the book keeps the old ones.',
+    })}
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Pays <span class="opt">% a year</span></span>
+        <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
+      </label>
+      <label class="field">
+        <span class="label">Last reviewed <span class="opt">optional</span></span>
+        <input type="date" name="reviewedAt" value="${existing?.reviewedAt ?? ''}" min="1900-01-01" max="2199-12-31" />
+      </label>
+    </div>
+    ${errorSlot('apy')}
+    <label class="check">
+      <input type="checkbox" name="mfa" ${existing?.mfa ? 'checked' : ''} />
+      <span>Sign-in has a second step — an app code, a key, or a text</span>
+    </label>
+    <label class="field">
+      <span class="label">Notes <span class="opt">optional</span></span>
+      <textarea name="notes" rows="2" maxlength="${NOTE_MAX}" placeholder="Beneficiary set, fee-free ATMs, notice period…">${existing?.notes ?? ''}</textarea>
+    </label>
+    <fieldset class="field vault-fieldset">
+      <legend class="label">Strongbox <span class="opt">sealed with your passphrase</span></legend>
+      <div data-sealed-fields>
+        ${!vaultAvailable()
+          ? html`<p class="hint">Needs the installed book or an https address.</p>`
+          : !vaultExists()
+            ? html`<p class="hint">Set a passphrase first.</p><button type="button" class="btn small" data-vault-setup>Set a passphrase</button>`
+            : !unlocked
+              ? html`<p class="hint">${existing?.vault ? 'Sealed. Open the strongbox to edit these.' : 'Open the strongbox to write these in.'}</p><button type="button" class="btn small" data-vault-open>Open the strongbox</button>`
+              : sealedInputs(null)}
+      </div>
     </fieldset>
-    <p class="hint" data-backfill hidden></p>
-    ${existing
-      ? html`<label class="check"><input type="checkbox" name="paused" ${v.paused ? 'checked' : ''} /><span>Paused<small>Nothing is added or reminded while paused.</small></span></label>
-          <p class="hint">Changes apply from now on. Transactions already added stay as they are.</p>`
-      : ''}
   </form>`;
 
   openSheet({
-    title: existing ? 'Edit repeating transaction' : 'New repeating transaction',
+    title: existing ? 'Edit account' : 'Write in an account',
     body,
-    footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add repeating transaction', deletable: Boolean(existing) }),
-    onMount(dialog, sheet) {
+    footer: footerButtons({ saveLabel: existing ? 'Save' : 'Write it in', deletable: Boolean(existing) }),
+    async onMount(dialog, sheet) {
       const form = $('form', dialog);
-      const backfill = $('[data-backfill]', form);
-      const updateHint = () => {
-        const d = formData(form);
-        if (existing || !isValidISODate(d.startDate) || d.startDate >= state.today) {
-          backfill.hidden = true;
-          return;
-        }
-        if (d.mode === 'remind') {
-          backfill.textContent = 'Reminders start from today. Past dates are not listed.';
-        } else {
-          const probe = { startDate: d.startDate, endDate: isValidISODate(d.endDate) ? d.endDate : null, frequency: d.frequency };
-          const count = occurrencesBetween(probe, null, state.today, 5000).length;
-          backfill.textContent = count
-            ? `The first date is in the past, so ${plural(count, 'transaction')} will be added for past dates right away.`
-            : '';
-        }
-        backfill.hidden = !backfill.textContent;
-      };
+      if (!existing) $('input[name="name"]', form).focus();
+      let roleTouched = Boolean(existing);
       form.addEventListener('change', (e) => {
-        if (e.target.name === 'type') $('select[name="categoryId"]', form).innerHTML = catSelect(e.target.value, '').toString();
-        updateHint();
+        if (e.target.name === 'role') roleTouched = true;
+        if (e.target.name === 'kind' && !roleTouched) $('select[name="role"]', form).value = roleForKind(e.target.value);
       });
-      updateHint();
-      if (!existing) $('input[name="note"]', form).focus();
+
+      let sealedLoaded = false;
+      const loadSealed = async () => {
+        if (!isUnlocked()) return;
+        const slot = $('[data-sealed-fields]', form);
+        try {
+          const values = existing?.vault ? await openSealed(existing.vault) : null;
+          slot.replaceChildren();
+          slot.insertAdjacentHTML('beforeend', String(sealedInputs(values)));
+          sealedLoaded = true;
+        } catch (e) {
+          slot.replaceChildren();
+          slot.insertAdjacentHTML('beforeend', String(html`<p class="field-error">Couldn’t unseal these. ${describeVaultError(e) ?? ''}</p>`));
+        }
+      };
+      if (unlocked) await loadSealed();
+      form.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-vault-setup]')) {
+          if (await passphraseDialog({ mode: 'create' })) await loadSealed();
+        } else if (e.target.closest('[data-vault-open]')) {
+          if (await passphraseDialog({ mode: 'unlock' })) await loadSealed();
+        }
+      });
 
       wireSave(dialog, form, async () => {
         const d = formData(form);
         const errors = {};
-        const parsed = parseAmount(d.amount, { locale });
-        if (!parsed.ok) errors.amount = parsed.error;
-        else if (parsed.negative || parsed.cents === 0) errors.amount = 'Enter an amount greater than zero.';
-        if (!d.note.trim()) errors.note = 'Give it a name so you can recognize it.';
-        if (!state.categories.some((c) => c.id === d.categoryId)) errors.categoryId = 'Choose a category.';
-        if (!isValidISODate(d.startDate)) errors.startDate = 'Enter a valid first date.';
-        if (d.endDate && !isValidISODate(d.endDate)) errors.endDate = 'Enter a valid end date, or leave it empty.';
-        else if (d.endDate && isValidISODate(d.startDate) && d.endDate < d.startDate) errors.endDate = 'The end date must be on or after the first date.';
+        const name = d.name.trim().replace(/\s+/g, ' ');
+        if (!name) errors.name = 'Give the account a name.';
+        else if (state.accounts.some((a) => a.id !== id && a.name.toLowerCase() === name.toLowerCase())) errors.name = `There is already an account called “${name}”.`;
+        let balance = 0;
+        if (d.balance.trim() !== '') {
+          const parsed = parseAmount(d.balance, { locale });
+          if (!parsed.ok) errors.balance = parsed.error;
+          else balance = parsed.negative ? -parsed.cents : parsed.cents;
+        }
+        const apy = parsePercent(d.apy);
+        if (!apy.ok) errors.apy = apy.error;
         if (Object.keys(errors).length) return showErrors(form, errors);
-        const value = {
-          type: d.type,
-          amount: parsed.cents,
-          categoryId: d.categoryId,
-          accountId: d.accountId || null,
-          note: d.note.trim(),
-          frequency: d.frequency,
-          startDate: d.startDate,
-          endDate: d.endDate || null,
-          mode: d.mode,
-          paused: Boolean(d.paused),
+
+        const record = {
+          name,
+          kind: d.kind,
+          role: d.role in ACCOUNT_ROLES ? d.role : roleForKind(d.kind),
+          institution: d.institution.trim().slice(0, NAME_MAX),
+          apyBp: apy.bp,
+          mfa: Boolean(d.mfa),
+          reviewedAt: isValidISODate(d.reviewedAt) ? d.reviewedAt : null,
+          notes: d.notes.trim().slice(0, NOTE_MAX),
+          balance,
+          balanceAt: existing && (existing.balance ?? 0) === balance ? existing.balanceAt : state.today,
         };
-        const before = state.transactions.length;
-        await saveRule(value, id);
-        const added = state.transactions.length - before;
+        if (sealedLoaded && isUnlocked()) {
+          const values = {};
+          for (const k of ['accountNumber', 'routingNumber', 'username', 'password', 'sealedNotes']) {
+            const v = (d[k] ?? '').trim();
+            if (v) values[k === 'sealedNotes' ? 'notes' : k] = v.slice(0, NOTE_MAX);
+          }
+          record.vault = Object.keys(values).length ? await seal(values) : null;
+        }
+        await saveAccount(record, id);
         sheet.close({ silent: true });
-        toast(existing ? 'Repeating transaction saved' : added ? `Saved, and added ${plural(added, 'past transaction')}` : `Saved ${value.note}`);
+        toast(existing ? 'Saved' : `${name} written in`);
       });
 
       $('[data-delete]', dialog)?.addEventListener('click', async () => {
-        const count = state.transactions.filter((t) => t.recurringId === id).length;
+        const held = state.goals.filter((g) => g.accountId === id);
+        const others = state.accounts.filter((a) => a.id !== id);
+        const extra = held.length && others.length
+          ? html`<label class="field"><span class="label">Move ${held.length === 1 ? 'its pot' : `its ${held.length} pots`} to</span>
+              <select id="move-account"><option value="">Nowhere for now</option>${others.map((a) => html`<option value="${a.id}">${a.name}</option>`)}</select></label>`
+          : null;
         const ok = await confirmDialog({
-          title: `Stop repeating “${existing.note}”?`,
-          message: count ? `The ${plural(count, 'transaction')} it already added will be kept.` : 'Nothing has been added by it yet.',
-          confirmLabel: 'Delete repeating transaction',
+          title: `Close ${existing.name}?`,
+          message: held.length
+            ? `${plural(held.length, 'pot')} kept here will stay in the book, unplaced.${existing.vault ? ' Its sealed details go with it.' : ''}`
+            : existing.vault ? 'Its sealed details go with it.' : 'Nothing else refers to this account.',
+          confirmLabel: 'Close it',
           danger: true,
+          extra,
         });
         if (!ok) return;
+        const moveTo = document.getElementById('move-account')?.value || null;
         try {
-          await deleteRule(id);
+          await deleteAccount(id, moveTo);
           sheet.close({ silent: true });
-          toast('Repeating transaction deleted');
+          toast(`${existing.name} closed`);
         } catch (err) {
           fail(err);
         }
@@ -624,119 +308,166 @@ export function openRuleForm(id = null, preset = {}) {
   });
 }
 
-// ---------- Goals ----------
+// Writing in a reading. The whole point of the book: one figure, one date.
+export function openBalanceForm(id) {
+  const account = state.accounts.find((a) => a.id === id);
+  if (!account) return;
+  const { locale } = state.settings;
+  const body = html`<form class="stack" novalidate autocomplete="off">
+    <p class="sheet-lede">${account.name}${account.institution ? ` · ${account.institution}` : ''} — last read ${account.balanceAt ? `on ${account.balanceAt} at ${money(account.balance ?? 0)}` : 'never'}.</p>
+    ${moneyField('balance', '', { label: 'What it holds now' })}
+    <label class="field">
+      <span class="label">As at</span>
+      <input type="date" name="date" value="${state.today}" min="1900-01-01" max="2199-12-31" />
+    </label>
+    <p class="hint">The figure that was there before is kept, so the book builds a history without you logging anything day to day.</p>
+  </form>`;
+  openSheet({
+    title: 'Write in a balance',
+    body,
+    footer: html`<button type="button" class="btn primary grow" data-save>Write it in</button>`,
+    onMount(dialog, sheet) {
+      const form = $('form', dialog);
+      $('input[name="balance"]', form).focus();
+      wireSave(dialog, form, async () => {
+        const d = formData(form);
+        const parsed = parseAmount(d.balance, { locale });
+        if (!parsed.ok) return showErrors(form, { balance: parsed.error });
+        if (!isValidISODate(d.date)) return showErrors(form, { balance: 'Pick a date for this reading.' });
+        const cents = parsed.negative ? -parsed.cents : parsed.cents;
+        const before = account.balance ?? 0;
+        const had = account.balanceAt;
+        await recordBalance(id, cents, d.date);
+        sheet.close({ silent: true });
+        const change = cents - before;
+        toast(had && change !== 0 ? `${account.name}: ${money(change, { sign: true })} since ${had}` : `${account.name} now ${money(cents)}`);
+      });
+    },
+  });
+}
 
-export function openGoalForm(id = null, preset = {}) {
+// ---------- Pots ----------
+
+export function openPlanForm(id = null, preset = {}) {
   const existing = id ? state.goals.find((g) => g.id === id) : null;
   const otherShares = state.goals.filter((g) => g.id !== id).reduce((sum, g) => sum + (g.allocBp ?? 0), 0);
   const { locale } = state.settings;
+  const kind = existing?.kind ?? preset.kind ?? 'fund';
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <div class="seg seg-4" role="radiogroup" aria-label="Kind of plan">
-      ${Object.entries(PLAN_KINDS).map(([k, label]) => html`<label><input type="radio" name="kind" value="${k}" ${(existing?.kind ?? preset.kind ?? 'fund') === k ? 'checked' : ''} /><span>${label}</span></label>`)}
+    <div class="seg seg-4" role="radiogroup" aria-label="Kind of pot">
+      ${Object.entries(PLAN_KINDS).map(([k, label]) => html`<label><input type="radio" name="kind" value="${k}" ${kind === k ? 'checked' : ''} /><span>${label}</span></label>`)}
     </div>
     <label class="field">
-      <span class="label">Name</span>
-      <input name="name" value="${existing?.name ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Emergency fund" aria-describedby="err-name" />
+      <span class="label">What it’s for</span>
+      <input name="name" value="${existing?.name ?? ''}" maxlength="${NAME_MAX}" placeholder="e.g. Rainy day" aria-describedby="err-name" />
     </label>
     ${errorSlot('name')}
-    ${moneyField('target', existing ? centsToInput(existing.target, { locale }) : '', { label: 'Target amount' })}
-    ${moneyField('saved', existing ? centsToInput(existing.saved ?? 0, { locale }) : '', { label: 'Saved so far', optional: true })}
+    <div class="row-2">
+      ${moneyField('target', existing ? centsToInput(existing.target, { locale }) : '', { label: 'Target' })}
+      ${moneyField('saved', existing ? centsToInput(existing.saved ?? 0, { locale }) : '', { label: 'Holds now', optional: true })}
+    </div>
     <label class="field">
-      <span class="label">Want it by <span class="opt">Optional</span></span>
+      <span class="label">Wanted by <span class="opt">optional</span></span>
       <input type="date" name="targetDate" value="${existing?.targetDate ?? ''}" min="1900-01-01" max="2199-12-31" />
     </label>
-    <div class="trip-dates" ${existing?.kind === 'trip' ? '' : 'hidden'}>
-      <div class="row-2">
-        <label class="field">
-          <span class="label">Leaves <span class="opt">Optional</span></span>
-          <input type="date" name="startDate" value="${existing?.startDate ?? ''}" min="1900-01-01" max="2199-12-31" />
-        </label>
-        <label class="field">
-          <span class="label">Comes back <span class="opt">Optional</span></span>
-          <input type="date" name="endDate" value="${existing?.endDate ?? ''}" min="1900-01-01" max="2199-12-31" />
-        </label>
-      </div>
-      ${errorSlot('endDate')}
-    </div>
     <div class="row-2">
       <label class="field">
         <span class="label">Share of the surplus <span class="opt">%</span></span>
         <input name="alloc" inputmode="decimal" value="${fmtPercent(existing?.allocBp)}" placeholder="0" aria-describedby="err-alloc" />
-        <span class="hint">${otherShares ? `Other plans take ${fmtPercent(otherShares) || 0}%, leaving ${fmtPercent(Math.max(0, BP - otherShares)) || 0}%.` : 'What part of each month’s leftover goes here.'}</span>
+        <span class="hint">${otherShares ? `Other pots take ${fmtPercent(otherShares) || 0}%, leaving ${fmtPercent(Math.max(0, BP - otherShares)) || 0}%.` : 'What part of each month’s leftover comes here.'}</span>
       </label>
       <label class="field">
         <span class="label">Earns <span class="opt">% a year</span></span>
         <input name="apy" inputmode="decimal" value="${fmtPercent(existing?.apyBp)}" placeholder="0" aria-describedby="err-apy" />
-        <span class="hint" data-apy-hint>${(existing?.kind ?? preset.kind) === 'invest' ? 'The return you’re assuming. 7% is a common long-run guess.' : 'The account’s APY, if it pays one.'}</span>
+        <span class="hint" data-apy-hint>${kind === 'invest' ? 'The return you’re assuming — 7% is a common long-run guess.' : 'The rate the account pays, if it pays one.'}</span>
       </label>
     </div>
     ${errorSlot('alloc')}
     ${errorSlot('apy')}
     ${state.accounts.length
       ? html`<label class="field">
-          <span class="label">Kept in <span class="opt">Optional</span></span>
-          <select name="accountId"><option value="">No particular account</option>${state.accounts.map((a) => html`<option value="${a.id}" ${existing?.accountId === a.id ? 'selected' : ''}>${a.name}${a.institution ? ` · ${a.institution}` : ''}</option>`)}</select>
+          <span class="label">Kept in</span>
+          <select name="accountId"><option value="">Nowhere in particular</option>${state.accounts.map((a) => html`<option value="${a.id}" ${existing?.accountId === a.id ? 'selected' : ''}>${a.name}${a.institution ? ` · ${a.institution}` : ''}</option>`)}</select>
+          <span class="hint">So the book can check the pots add up to the money.</span>
         </label>`
       : ''}
     <fieldset class="field">
-      <legend class="label">Color</legend>
-      <div class="swatches">${PALETTE.map((c) => html`<label class="swatch" style="--c:${c}"><input type="radio" name="color" value="${c}" ${(existing?.color ?? PALETTE[state.goals.length % PALETTE.length]) === c ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}</div>
+      <legend class="label">Its mark</legend>
+      <div class="marks">${PLAN_ICONS.map((i) => html`<label class="mark"><input type="radio" name="icon" value="${i}" ${(existing?.icon || PLAN_ICONS[0]) === i ? 'checked' : ''} /><span>${i}</span></label>`)}</div>
     </fieldset>
-    <p class="hint">Plans are tracked separately from your budget. Add money whenever you set some aside. A trip can also have spending charged to it, so you can see what it actually cost. Only one plan can be the safety net.</p>
+    <fieldset class="field">
+      <legend class="label">Its ink</legend>
+      <div class="swatches">${PALETTE.map((c) => html`<label class="swatch-pick" style="--c:${c}"><input type="radio" name="color" value="${c}" ${(existing?.color ?? PALETTE[state.goals.length % PALETTE.length]) === c ? 'checked' : ''} /><span class="sr-only">${c}</span></label>`)}</div>
+    </fieldset>
   </form>`;
+
   openSheet({
-    title: existing ? 'Edit plan' : 'New plan',
+    title: existing ? 'Edit pot' : 'New pot',
     body,
-    footer: footerButtons({ saveLabel: existing ? 'Save changes' : 'Add goal', deletable: Boolean(existing) }),
+    footer: footerButtons({ saveLabel: existing ? 'Save' : 'Write it in', deletable: Boolean(existing) }),
     onMount(dialog, sheet) {
       const form = $('form', dialog);
       if (!existing) $('input[name="name"]', form).focus();
-      // Trip dates only make sense for a trip, so they appear with one.
       form.addEventListener('change', (e) => {
         if (e.target.name !== 'kind') return;
-        $('.trip-dates', form).hidden = e.target.value !== 'trip';
-        $('[data-apy-hint]', form).textContent = e.target.value === 'invest' ? 'The return you’re assuming. 7% is a common long-run guess.' : 'The account’s APY, if it pays one.';
+        $('[data-apy-hint]', form).textContent = e.target.value === 'invest'
+          ? 'The return you’re assuming — 7% is a common long-run guess.'
+          : 'The rate the account pays, if it pays one.';
       });
       wireSave(dialog, form, async () => {
         const d = formData(form);
         const errors = {};
-        const kind = d.kind in PLAN_KINDS ? d.kind : 'fund';
+        const chosen = d.kind in PLAN_KINDS ? d.kind : 'fund';
         const name = d.name.trim();
-        if (!name) errors.name = 'Name your plan.';
-        if (kind === 'safety') {
+        if (!name) errors.name = 'Say what it’s for.';
+        if (chosen === 'safety') {
           const other = state.goals.find((g) => g.id !== id && g.kind === 'safety');
-          if (other) errors.name = `${other.name} is already the safety net. Change it to a nest egg first.`;
+          if (other) errors.name = `${other.name} is already the safety net. Make that one a nest egg first.`;
         }
-        const alloc = parsePercent(d.alloc);
-        if (!alloc.ok) errors.alloc = alloc.error;
-        else if (alloc.bp + otherShares > BP) errors.alloc = `Other plans already take ${fmtPercent(otherShares)}%, so this can be at most ${fmtPercent(BP - otherShares) || 0}%.`;
-        const apy = parsePercent(d.apy);
-        if (!apy.ok) errors.apy = apy.error;
         const target = parseAmount(d.target, { locale });
         if (!target.ok) errors.target = target.error;
-        else if (target.negative || target.cents === 0) errors.target = 'Enter a target greater than zero.';
+        else if (target.negative || target.cents === 0) errors.target = 'A target greater than zero.';
         let saved = 0;
         if (d.saved.trim()) {
           const s = parseAmount(d.saved, { locale });
           if (!s.ok) errors.saved = s.error;
-          else if (s.negative) errors.saved = 'Saved so far can’t be negative.';
+          else if (s.negative) errors.saved = 'This can’t be negative.';
           else saved = s.cents;
         }
-        const startDate = kind === 'trip' ? d.startDate || null : null;
-        const endDate = kind === 'trip' ? d.endDate || null : null;
-        if (startDate && endDate && endDate < startDate) errors.endDate = 'The return date is before the departure date.';
+        const alloc = parsePercent(d.alloc);
+        if (!alloc.ok) errors.alloc = alloc.error;
+        else if (alloc.bp + otherShares > BP) errors.alloc = `Other pots already take ${fmtPercent(otherShares)}%, so this can be at most ${fmtPercent(BP - otherShares) || 0}%.`;
+        const apy = parsePercent(d.apy);
+        if (!apy.ok) errors.apy = apy.error;
         if (Object.keys(errors).length) return showErrors(form, errors);
-        await saveGoal({ name, kind, target: target.cents, saved, targetDate: d.targetDate || null, startDate, endDate, color: d.color || PALETTE[0], allocBp: alloc.bp, apyBp: apy.bp, accountId: d.accountId || null }, id);
+
+        await saveGoal({
+          name,
+          kind: chosen,
+          target: target.cents,
+          saved,
+          targetDate: d.targetDate || null,
+          color: d.color || PALETTE[0],
+          icon: d.icon || PLAN_ICONS[0],
+          allocBp: alloc.bp,
+          apyBp: apy.bp,
+          accountId: d.accountId || null,
+        }, id);
         sheet.close({ silent: true });
-        toast(existing ? 'Plan saved' : `Added ${name}`);
+        toast(existing ? 'Saved' : `${name} written in`);
       });
       $('[data-delete]', dialog)?.addEventListener('click', async () => {
-        const ok = await confirmDialog({ title: `Delete “${existing.name}”?`, message: 'This removes the plan and its progress. Your transactions are not affected — any that were charged to it simply stop being.', confirmLabel: 'Delete plan', danger: true });
+        const ok = await confirmDialog({
+          title: `Strike out “${existing.name}”?`,
+          message: 'The pot and what it holds are removed from the book. The money in your accounts is untouched.',
+          confirmLabel: 'Strike it out',
+          danger: true,
+        });
         if (!ok) return;
         try {
           await deleteGoal(id);
           sheet.close({ silent: true });
-          toast('Plan deleted');
+          toast('Struck out');
         } catch (err) {
           fail(err);
         }
@@ -745,22 +476,23 @@ export function openGoalForm(id = null, preset = {}) {
   });
 }
 
-export function openGoalAdjust(id) {
-  const goal = state.goals.find((g) => g.id === id);
-  if (!goal) return;
+export function openPlanAdjust(id) {
+  const plan = state.goals.find((g) => g.id === id);
+  if (!plan) return;
   const { locale } = state.settings;
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <p>${goal.name}: ${money(goal.saved ?? 0)} of ${money(goal.target)} saved.</p>
-    <div class="seg" role="radiogroup" aria-label="Direction">
-      <label><input type="radio" name="dir" value="add" checked /><span>Add money</span></label>
-      <label><input type="radio" name="dir" value="withdraw" /><span>Take money out</span></label>
+    <p class="sheet-lede">${plan.name} holds ${money(plan.saved ?? 0)} of ${money(plan.target)}.</p>
+    <div class="seg" role="radiogroup" aria-label="Which way">
+      <label><input type="radio" name="dir" value="add" checked /><span>Set aside</span></label>
+      <label><input type="radio" name="dir" value="take" /><span>Take out</span></label>
     </div>
-    ${moneyField('amount', '', { label: 'Amount' })}
+    ${moneyField('amount', '', { label: 'How much' })}
+    <p class="hint">This moves the pot’s figure only. If it changes what an account holds, write in a new reading there too.</p>
   </form>`;
   openSheet({
-    title: 'Update goal',
+    title: 'Set aside',
     body,
-    footer: html`<button type="button" class="btn primary grow" data-save>Update goal</button>`,
+    footer: html`<button type="button" class="btn primary grow" data-save>Write it in</button>`,
     onMount(dialog, sheet) {
       const form = $('form', dialog);
       $('input[name="amount"]', form).focus();
@@ -768,12 +500,11 @@ export function openGoalAdjust(id) {
         const d = formData(form);
         const parsed = parseAmount(d.amount, { locale });
         if (!parsed.ok) return showErrors(form, { amount: parsed.error });
-        if (parsed.negative || parsed.cents === 0) return showErrors(form, { amount: 'Enter an amount greater than zero.' });
-        const delta = d.dir === 'withdraw' ? -parsed.cents : parsed.cents;
-        await adjustGoal(id, delta);
+        if (parsed.negative || parsed.cents === 0) return showErrors(form, { amount: 'An amount greater than zero.' });
+        await adjustGoal(id, d.dir === 'take' ? -parsed.cents : parsed.cents);
         sheet.close({ silent: true });
-        const updated = state.goals.find((g) => g.id === id);
-        toast(updated && updated.saved >= updated.target ? `${goal.name} is fully funded` : `${goal.name} now has ${money(updated?.saved ?? 0)}`);
+        const after = state.goals.find((g) => g.id === id);
+        toast(after && after.saved >= after.target ? `${plan.name} is full` : `${plan.name} now holds ${money(after?.saved ?? 0)}`);
       });
     },
   });

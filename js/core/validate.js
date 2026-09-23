@@ -1,8 +1,7 @@
-import { parseAmount, isValidCents, isValidSignedCents, isSupportedCurrency } from './money.js';
+import { isValidCents, isValidSignedCents, isSupportedCurrency } from './money.js';
 import { isValidISODate } from './dates.js';
 import { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE, ACCOUNT_ROLES, roleForKind } from './defaults.js';
 import { PLAN_KINDS } from './plans.js';
-import { FREQUENCIES } from './recurring.js';
 
 export const NOTE_MAX = 500;
 export const NAME_MAX = 60;
@@ -12,87 +11,6 @@ function yearOk(iso) {
   return y >= 1900 && y <= 2199;
 }
 
-// input: { amount (text), type, refund, categoryId, date, note, accountId }
-// Returns { ok, errors: { field: message }, value }.
-export function validateTransactionInput(input, { locale, categories, accounts, plans = [] }) {
-  const errors = {};
-  const type = input.type === 'income' ? 'income' : input.type === 'expense' ? 'expense' : null;
-  if (!type) errors.type = 'Choose expense or income.';
-
-  const parsed = parseAmount(input.amount, { locale });
-  let amount = 0;
-  if (!parsed.ok) errors.amount = parsed.error;
-  else if (parsed.negative) {
-    errors.amount = type === 'income'
-      ? 'Income can’t be negative. Log money going out as an expense.'
-      : 'Amounts can’t be negative. To record money coming back, turn on Refund.';
-  } else if (parsed.cents === 0) errors.amount = 'Enter an amount greater than zero.';
-  else amount = parsed.cents;
-
-  const category = categories.find((c) => c.id === input.categoryId);
-  if (!input.categoryId) errors.categoryId = 'Choose a category.';
-  else if (!category) errors.categoryId = 'That category no longer exists. Choose another.';
-
-  if (!isValidISODate(input.date)) errors.date = 'Enter a valid date.';
-  else if (!yearOk(input.date)) errors.date = 'Choose a date between 1900 and 2199.';
-
-  const note = String(input.note ?? '').trim();
-  if (note.length > NOTE_MAX) errors.note = `Keep the note under ${NOTE_MAX} characters.`;
-
-  let accountId = input.accountId || null;
-  if (accountId && !accounts.some((a) => a.id === accountId)) accountId = null;
-
-  // Only spending can belong to a plan: a plan is filled by setting money
-  // aside, not by earning, so income tagged to one would be counted twice.
-  let planId = input.planId || null;
-  if (type !== 'expense' || !plans.some((p) => p.id === planId)) planId = null;
-
-  const ok = Object.keys(errors).length === 0;
-  return {
-    ok,
-    errors,
-    value: ok ? { type, amount, refund: type === 'expense' && Boolean(input.refund), categoryId: category.id, date: input.date, note, accountId, planId } : null,
-  };
-}
-
-export function validateCategoryInput(input, categories) {
-  const errors = {};
-  const name = String(input.name ?? '').trim().replace(/\s+/g, ' ');
-  const type = input.type === 'income' ? 'income' : 'expense';
-  const parentId = input.parentId || null;
-  if (!name) errors.name = 'Give the category a name.';
-  else if (name.length > NAME_MAX) errors.name = `Keep the name under ${NAME_MAX} characters.`;
-  else {
-    const clash = categories.find(
-      (c) => c.id !== input.id && c.type === type && (c.parentId ?? null) === parentId && c.name.toLowerCase() === name.toLowerCase()
-    );
-    if (clash) errors.name = `You already have a category called “${clash.name}”.`;
-  }
-  if (parentId) {
-    const parent = categories.find((c) => c.id === parentId);
-    if (!parent) errors.parentId = 'That parent category no longer exists.';
-    else if (parent.parentId) errors.parentId = 'Subcategories can only go one level deep.';
-    else if (parent.id === input.id) errors.parentId = 'A category can’t be inside itself.';
-    else if (parent.type !== type) errors.parentId = 'The parent must be the same type (expense or income).';
-    else if (input.id && categories.some((c) => c.parentId === input.id)) {
-      errors.parentId = 'This category has subcategories, so it has to stay at the top level.';
-    }
-  }
-  let budget = null;
-  if (type === 'expense' && String(input.budget ?? '').trim() !== '') {
-    const parsed = parseAmount(input.budget, { locale: input.locale });
-    if (!parsed.ok) errors.budget = parsed.error;
-    else if (parsed.negative) errors.budget = 'A budget can’t be negative.';
-    else budget = parsed.cents;
-  }
-  const color = /^#[0-9a-f]{6}$/i.test(input.color ?? '') ? input.color : PALETTE[0];
-  const icon = String(input.icon ?? '').trim().slice(0, 8) || '📦';
-  const ok = Object.keys(errors).length === 0;
-  return { ok, errors, value: ok ? { name, type, parentId, budget, color, icon } : null };
-}
-
-// ---------- Backups ----------
-
 function str(v, max) {
   return typeof v === 'string' ? v.slice(0, max) : '';
 }
@@ -101,45 +19,6 @@ function idOk(v) {
   return typeof v === 'string' && v.length > 0 && v.length <= 64;
 }
 
-export function sanitizeTransaction(t) {
-  if (!t || typeof t !== 'object') return null;
-  if (!idOk(t.id)) return null;
-  if (t.type !== 'income' && t.type !== 'expense') return null;
-  if (!isValidCents(t.amount)) return null;
-  if (!isValidISODate(t.date)) return null;
-  return {
-    id: t.id,
-    type: t.type,
-    amount: t.amount,
-    refund: t.type === 'expense' && t.refund === true,
-    categoryId: idOk(t.categoryId) ? t.categoryId : null,
-    accountId: idOk(t.accountId) ? t.accountId : null,
-    date: t.date,
-    note: str(t.note, NOTE_MAX),
-    recurringId: idOk(t.recurringId) ? t.recurringId : null,
-    planId: idOk(t.planId) ? t.planId : null,
-    createdAt: str(t.createdAt, 40) || null,
-    updatedAt: str(t.updatedAt, 40) || null,
-  };
-}
-
-export function sanitizeCategory(c, index) {
-  if (!c || typeof c !== 'object' || !idOk(c.id)) return null;
-  const name = str(c.name, NAME_MAX).trim();
-  if (!name) return null;
-  return {
-    id: c.id,
-    name,
-    icon: str(c.icon, 8) || '📦',
-    color: /^#[0-9a-f]{6}$/i.test(c.color ?? '') ? c.color : PALETTE[index % PALETTE.length],
-    type: c.type === 'income' ? 'income' : 'expense',
-    parentId: idOk(c.parentId) ? c.parentId : null,
-    order: Number.isFinite(c.order) ? c.order : index,
-    budget: c.budget == null ? null : Number.isSafeInteger(c.budget) && c.budget >= 0 && c.budget <= 1e11 ? c.budget : null,
-  };
-}
-
-// Basis points: an integer share or rate from 0 to 100.00%.
 function bpOk(v) {
   return Number.isInteger(v) && v >= 0 && v <= 10000;
 }
@@ -156,11 +35,19 @@ export function sanitizeAccount(a, index) {
   const name = str(a.name, NAME_MAX).trim();
   if (!name) return null;
   const kind = typeof a.kind === 'string' ? a.kind.slice(0, 20) : 'other';
+  // Every reading ever taken, oldest kept, newest first in the record. A
+  // reading without a date or an amount is dropped rather than guessed at.
+  const history = (Array.isArray(a.history) ? a.history : [])
+    .filter((h) => h && isValidISODate(h.date) && yearOk(h.date) && isValidSignedCents(h.cents))
+    .slice(0, 400)
+    .map((h) => ({ date: h.date, cents: h.cents }));
   return {
     id: a.id,
     name,
     kind,
-    openingBalance: isValidSignedCents(a.openingBalance) ? a.openingBalance : 0,
+    balance: isValidSignedCents(a.balance) ? a.balance : 0,
+    balanceAt: isValidISODate(a.balanceAt) && yearOk(a.balanceAt) ? a.balanceAt : null,
+    history,
     order: Number.isFinite(a.order) ? a.order : index,
     institution: str(a.institution, NAME_MAX).trim(),
     role: a.role in ACCOUNT_ROLES ? a.role : roleForKind(kind),
@@ -172,29 +59,6 @@ export function sanitizeAccount(a, index) {
   };
 }
 
-export function sanitizeRule(r) {
-  if (!r || typeof r !== 'object' || !idOk(r.id)) return null;
-  if (r.type !== 'income' && r.type !== 'expense') return null;
-  if (!isValidCents(r.amount) || !FREQUENCIES[r.frequency] || !isValidISODate(r.startDate)) return null;
-  return {
-    id: r.id,
-    type: r.type,
-    amount: r.amount,
-    categoryId: idOk(r.categoryId) ? r.categoryId : null,
-    accountId: idOk(r.accountId) ? r.accountId : null,
-    note: str(r.note, NOTE_MAX),
-    frequency: r.frequency,
-    startDate: r.startDate,
-    endDate: isValidISODate(r.endDate) && r.endDate >= r.startDate ? r.endDate : null,
-    mode: r.mode === 'remind' ? 'remind' : 'auto',
-    paused: r.paused === true,
-    generatedThrough: isValidISODate(r.generatedThrough) ? r.generatedThrough : null,
-  };
-}
-
-// Plans are stored under the older `goals` name so that existing data and
-// backups keep working; `kind` is what separates a nest egg from a trip.
-// A backup written before plans existed has no kind, and reads as a fund.
 export function sanitizeGoal(g) {
   if (!g || typeof g !== 'object' || !idOk(g.id)) return null;
   const name = str(g.name, NAME_MAX).trim();
@@ -213,6 +77,7 @@ export function sanitizeGoal(g) {
     // calculation lie, so drop the end rather than keep an impossible range.
     endDate: endDate && startDate && endDate < startDate ? null : endDate,
     color: /^#[0-9a-f]{6}$/i.test(g.color ?? '') ? g.color : PALETTE[0],
+    icon: str(g.icon, 8),
     createdAt: str(g.createdAt, 40) || null,
     apyBp: bpOk(g.apyBp) ? g.apyBp : 0,
     allocBp: bpOk(g.allocBp) ? g.allocBp : 0,
@@ -233,14 +98,12 @@ export function sanitizeSettings(s) {
     }
   }
   if (['system', 'light', 'dark'].includes(s.theme)) out.theme = s.theme;
-  if (Number.isInteger(s.warnPercent) && s.warnPercent >= 50 && s.warnPercent <= 100) out.warnPercent = s.warnPercent;
   if ([0, 7, 14, 30].includes(s.backupReminderDays)) out.backupReminderDays = s.backupReminderDays;
   if (typeof s.lastExportAt === 'string') out.lastExportAt = s.lastExportAt;
   if (typeof s.lastChangeAt === 'string') out.lastChangeAt = s.lastChangeAt;
-  if (idOk(s.defaultAccountId)) out.defaultAccountId = s.defaultAccountId;
-  if (s.csvDateOrder === 'DMY') out.csvDateOrder = 'DMY';
   if (Number.isInteger(s.runwayTarget) && s.runwayTarget >= 1 && s.runwayTarget <= 60) out.runwayTarget = s.runwayTarget;
-  if (isValidCents(s.essentialMonthly) && s.essentialMonthly > 0) out.essentialMonthly = s.essentialMonthly;
+  if (isValidCents(s.monthlyIncome)) out.monthlyIncome = s.monthlyIncome;
+  if (isValidCents(s.monthlyOutgoings)) out.monthlyOutgoings = s.monthlyOutgoings;
   // The vault's salt and its check value are needed to open what the
   // accounts carry, so they travel with a backup. Neither is a secret.
   if (typeof s.vaultSalt === 'string' && /^[A-Za-z0-9+/=]{16,64}$/.test(s.vaultSalt)) out.vaultSalt = s.vaultSalt;
@@ -249,17 +112,19 @@ export function sanitizeSettings(s) {
 }
 
 export function buildBackup(data, exportedAt) {
-  return {
+  const backup = {
     app: APP_NAME,
     format: BACKUP_FORMAT,
     exportedAt,
     settings: data.settings,
-    categories: data.categories,
     accounts: data.accounts,
-    transactions: data.transactions,
-    recurring: data.recurring,
     goals: data.goals,
   };
+  // Anything recorded under an older version that this one no longer reads
+  // travels along untouched. It is never parsed, only carried, so upgrading
+  // can't be the thing that loses someone years of history.
+  if (data.archive && Object.keys(data.archive).length) backup.archive = data.archive;
+  return backup;
 }
 
 function cleanList(list, fn) {
@@ -284,31 +149,36 @@ export function parseBackup(text) {
   } catch {
     return { ok: false, error: 'This file isn’t valid JSON. Choose a backup file exported from this app.' };
   }
-  if (!obj || typeof obj !== 'object' || obj.app !== APP_NAME || !Array.isArray(obj.transactions)) {
+  if (!obj || typeof obj !== 'object' || obj.app !== APP_NAME || !Array.isArray(obj.accounts)) {
     return { ok: false, error: `This doesn’t look like a ${APP_NAME} backup. Choose a .json file exported from Settings.` };
   }
   if (typeof obj.format !== 'number' || obj.format > BACKUP_FORMAT) {
     return { ok: false, error: 'This backup was made by a newer version of the app. Update the app, then try again.' };
   }
-  const categories = cleanList(obj.categories, sanitizeCategory);
-  const catIds = new Set(categories.out.map((c) => c.id));
-  for (const c of categories.out) if (c.parentId && !catIds.has(c.parentId)) c.parentId = null;
   const accounts = cleanList(obj.accounts, sanitizeAccount);
-  const transactions = cleanList(obj.transactions, sanitizeTransaction);
-  const recurring = cleanList(obj.recurring, sanitizeRule);
+  const acctIds = new Set(accounts.out.map((a) => a.id));
   const goals = cleanList(obj.goals, sanitizeGoal);
-  const dropped = categories.dropped + accounts.dropped + transactions.dropped + recurring.dropped + goals.dropped;
+  // A pot pointing at an account that isn't in the file would be claimed
+  // against nothing, so it comes back unplaced instead.
+  for (const g of goals.out) if (g.accountId && !acctIds.has(g.accountId)) g.accountId = null;
+
+  // Collections this version doesn't read are kept exactly as they arrived.
+  const archive = { ...(obj.archive && typeof obj.archive === 'object' ? obj.archive : {}) };
+  for (const key of ['transactions', 'categories', 'recurring']) {
+    if (Array.isArray(obj[key]) && obj[key].length) archive[key] = obj[key];
+  }
+  const carried = Object.entries(archive).reduce((sum, [, v]) => sum + (Array.isArray(v) ? v.length : 0), 0);
+
   return {
     ok: true,
     exportedAt: typeof obj.exportedAt === 'string' ? obj.exportedAt : null,
-    dropped,
+    dropped: accounts.dropped + goals.dropped,
+    carried,
     data: {
       settings: sanitizeSettings(obj.settings),
-      categories: categories.out,
       accounts: accounts.out,
-      transactions: transactions.out,
-      recurring: recurring.out,
       goals: goals.out,
+      archive,
     },
   };
 }

@@ -1,15 +1,20 @@
-/* Tally — designed the way Apple would design it for a folding iPhone.
-   Three ideas carry the whole look:
-     1. The chrome is liquid glass. Navigation floats above the content in
-        translucent capsules that blur and enrich what passes underneath,
-        catch a specular rim along their lit edge, and never touch the
-        screen edge. Content scrolls under glass, so the blur does real work.
-     2. Corners are concentric with the hardware. The radii still step down
-        as the viewport widens — a folding phone's display is rounded far
-        harder than a laptop window — and anything nested inside a rounded
-        shape takes its parent's radius minus the gap between them, so
-        corners run parallel instead of fighting.
-     3. Colour is the system palette, and it only ever means money. */
+/* Tally, set as a book.
+ *
+ * Three ideas carry the whole look:
+ *
+ *   1. It is paper. A warm, slightly uneven sheet with ink on it, not a
+ *      screen with panels on it. Type is a book face, headings are small
+ *      caps, and the lines between rows are printer's rules, not borders.
+ *
+ *   2. It is a spread. Wherever there is width for two pages there are two,
+ *      with a spine down the middle — and on a folding phone that spine sits
+ *      exactly on the crease, so the hardware's hinge is the book's. The left
+ *      page is what you are reading; the right is what you picked out of it.
+ *
+ *   3. It is bound. The chapters are cut into the edge as a thumb index, a
+ *      ribbon hangs at the chapter you are on, and turning a page turns it:
+ *      the leaf lifts at the spine and falls the other way.
+ */
 
 @font-face {
   font-family: 'Public Sans';
@@ -20,210 +25,104 @@
 }
 
 :root {
-  --font: 'Public Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* The book face is the best serif the device already has: nothing to
+     download, nothing asked of a third party, and every platform ships one
+     drawn for setting text. Public Sans stays for small caps and labels —
+     the printed equivalent of a different case, not a different voice. */
+  --book: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Noto Serif', 'Times New Roman', serif;
+  --hand: 'Public Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
-  /* Grouped background under white cards, the way a wallet or a settings
-     screen is built: the page is the darker surface, content sits on it. */
-  --bg: #f2f2f7;
-  --surface: #ffffff;
-  --surface-2: #f2f2f7;
-  --surface-3: #e9e9ee;
-  /* What a card is filled with right now. It inverts on wide screens, where
-     the content sits on its own opaque canvas — one variable rather than a
-     pile of later overrides, so a tinted card can mix its hue into whichever
-     fill is current without fighting source order. */
-  --card: var(--surface);
-  --card-tint: 10%;
-  --aura-strength: 0.32;
-  --line: rgb(60 60 67 / 0.16);
-  --line-strong: rgb(60 60 67 / 0.29);
-  --edge: rgb(0 0 0 / 0.045);
-  --ink: #000000;
-  --ink-2: rgb(60 60 67 / 0.78);
-  --ink-3: rgb(60 60 67 / 0.6);
-  --ink-4: rgb(60 60 67 / 0.36);
+  /* Paper and ink: warm and low-contrast, the way a page is. Never black on
+     white, never white on black. */
+  --paper: #efe7d7;
+  --paper-2: #e7dcc7;
+  --paper-edge: #d8c9ab;
+  --ink: #241d14;
+  --ink-2: #4a3f31;
+  --ink-3: #6f6150;
+  --ink-4: #9c8c74;
+  --rule: rgb(78 62 40 / 0.26);
+  --rule-soft: rgb(78 62 40 / 0.14);
 
-  --accent: #007aff;
-  --accent-hover: #0062cc;
-  --accent-ink: #ffffff;
-  --accent-soft: rgb(0 122 255 / 0.12);
+  /* Three inks that mean money, one for the binding. */
+  --covered: #2f6b3f;
+  --thin: #8a6a1f;
+  --short: #9c3323;
+  --accent: #1d4e6f;
+  --accent-ink: #f6efe0;
+  --ribbon: #8c2f2a;
 
-  /* Money, and only money: in, nearly out, over. Text takes the darker
-     accessible variants so it carries on white; fills take the vivid ones. */
-  --pos: #248a3d;
-  --ok: #248a3d;
-  --warn: #b25000;
-  --warn-soft: rgb(255 149 0 / 0.16);
-  --over: #d70015;
-  --over-soft: rgb(255 59 48 / 0.14);
-  --goal: #007aff;
-  --bar-in: #34c759;
-  --bar-out: #007aff;
+  --grain: 0.055;
+  --shade: rgb(60 44 22 / 0.13);
+  --gutter: rgb(60 44 22 / 0.3);
+  --shadow-page: 0 1px 2px rgb(60 44 22 / 0.1), 0 10px 30px rgb(60 44 22 / 0.1);
+  --shadow-raise: 0 2px 5px rgb(60 44 22 / 0.16), 0 14px 32px rgb(60 44 22 / 0.14);
 
-  /* Section identity, not money: as of September 2026 the interface is no
-     longer held to a single accent everywhere. Home's sections each carry
-     one of these instead, the way iOS gives Settings rows or widgets their
-     own colour, so the eye can tell them apart without reading every word.
-     Kept clear of the money hues above (green/amber/red) and clear of
-     --accent, so nothing here is ever mistaken for a state or for the one
-     colour that means "do this". */
-  --hue-budgets: #5856d6;
-  --hue-spending: #30b0c7;
-  --hue-trend: #a2845e;
-  --hue-activity: #ffcc00;
-  --hue-advisor: #30b0c7;
-
-  --scrim: rgb(0 0 0 / 0.28);
-
-  /* Liquid glass. The rim is the tell: a bright hairline where light lands
-     on the lit edge, fading to nothing around the rest of the shape. */
-  --glass: rgb(255 255 255 / 0.68);
-  --glass-strong: rgb(255 255 255 / 0.84);
-  --glass-filter: saturate(180%) blur(22px);
-  --glass-rim: inset 0 0.5px 0 0 rgb(255 255 255 / 0.9), inset 0 0 0 0.5px rgb(255 255 255 / 0.4), inset 0 -0.5px 0 0 rgb(255 255 255 / 0.25);
-  --glass-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.06), 0 12px 32px rgb(0 0 0 / 0.16);
-
-  /* Soft, neutral, low-contact — a card resting on the page, not lifted off it. */
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.045), 0 1px 4px rgb(0 0 0 / 0.035);
-  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.06), 0 10px 24px rgb(0 0 0 / 0.08);
-  --shadow: 0 10px 30px rgb(0 0 0 / 0.14), 0 40px 80px rgb(0 0 0 / 0.18);
-  --ring: 0 0 0 4px var(--accent-soft);
-  --bw: 1px;
-
-  /* Corners match the screen they sit on. These are the folding phone's
-     cover-screen values, the hardest-rounded of the three. */
-  --r-sm: 12px;
-  --r: 20px;
-  --r-lg: 28px;
-  --r-screen: 40px;
+  /* Corners follow the device, as they always have here: a folding phone is
+     rounded hard, a laptop window barely at all. */
+  --r-sm: 8px;
+  --r: 14px;
+  --r-lg: 22px;
   --pill: 999px;
 
-  /* Apple's motion: a real spring for things that arrive, and the sheet
-     curve — fast to leave, long to settle — for things that travel. */
-  --spring: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.98 57.1%, 0.998 69.8%, 1.004 76.9%, 1);
-  --bounce: linear(0, 0.004, 0.016, 0.035, 0.063, 0.098, 0.141 11.6%, 0.25, 0.391, 0.563, 0.765, 1 44.1%, 1.06, 1.104, 1.132, 1.145, 1.143, 1.128, 1.11 71.2%, 1.062, 1.039, 1.025, 1.013, 1.004, 1);
-  --ease: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
-
-  --aside-w: 0px;
-  /* The system's text styles. Body is 17px because that is what the
-     platform reads at; everything else is a step on the same ladder, and the
-     tracking tightens as the size grows the way optical sizing does. */
-  --t-large-title: 2.125rem;
-  --t-title1: 1.75rem;
-  --t-title2: 1.375rem;
-  --t-title3: 1.25rem;
-  --t-headline: 1.0625rem;
+  /* A book is set on one scale and stays on it. */
+  --t-display: clamp(2.3rem, 11cqi, 3.5rem);
   --t-body: 1.0625rem;
-  --t-subhead: 0.9375rem;
-  --t-footnote: 0.8125rem;
-  --t-caption: 0.75rem;
+  --t-small: 0.9375rem;
+  --t-caption: 0.8125rem;
+  --t-tiny: 0.6875rem;
 
-  --tabbar-h: 60px;
-  --topbar-h: 52px;
-  --rail-w: 84px;
-  --safe-b: env(safe-area-inset-bottom, 0px);
+  --measure: 34rem;
+  --pad: 20px;
+  --index-h: 62px;
+  --head-h: 44px;
   --safe-t: env(safe-area-inset-top, 0px);
-  --pad: 16px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --spine-w: 0px;
+
+  /* Paper is heavy, so nothing snaps. */
+  --turn: cubic-bezier(0.32, 0.72, 0, 1);
+  --settle: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.98 57.1%, 0.998 69.8%, 1.004 76.9%, 1);
 
   color-scheme: light;
 }
 
+/* Night reading: a dark board with the same warm ink reversed out of it. */
 :root[data-theme='dark'] {
-  --bg: #000000;
-  --surface: #1c1c1e;
-  --surface-2: #2c2c2e;
-  --surface-3: #3a3a3c;
-  --card: var(--surface);
-  /* Colour has to work harder against black to register at all. */
-  --card-tint: 16%;
-  --aura-strength: 0.95;
-  --line: rgb(84 84 88 / 0.5);
-  --line-strong: rgb(84 84 88 / 0.78);
-  --edge: rgb(255 255 255 / 0.08);
-  --ink: #ffffff;
-  --ink-2: rgb(235 235 245 / 0.72);
-  --ink-3: rgb(235 235 245 / 0.56);
-  --ink-4: rgb(235 235 245 / 0.32);
+  --paper: #17130e;
+  --paper-2: #1f1913;
+  --paper-edge: #0d0a07;
+  --ink: #efe3cd;
+  --ink-2: #d2c3a9;
+  --ink-3: #a9987c;
+  --ink-4: #7d6e58;
+  --rule: rgb(220 200 165 / 0.22);
+  --rule-soft: rgb(220 200 165 / 0.12);
 
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
-  --accent-ink: #ffffff;
-  --accent-soft: rgb(10 132 255 / 0.22);
+  --covered: #71b585;
+  --thin: #d8ad55;
+  --short: #dd7361;
+  --accent: #8fbcd8;
+  --accent-ink: #13100c;
+  --ribbon: #a9433c;
 
-  --pos: #30d158;
-  --ok: #30d158;
-  --warn: #ff9f0a;
-  --warn-soft: rgb(255 159 10 / 0.2);
-  --over: #ff453a;
-  --over-soft: rgb(255 69 58 / 0.2);
-  --goal: #0a84ff;
-  --bar-in: #30d158;
-  --bar-out: #0a84ff;
-
-  --hue-budgets: #7d7aff;
-  --hue-spending: #40c8e0;
-  --hue-trend: #b59469;
-  --hue-activity: #ffd60a;
-  --hue-advisor: #40c8e0;
-
-  --scrim: rgb(0 0 0 / 0.5);
-
-  --glass: rgb(30 30 32 / 0.68);
-  --glass-strong: rgb(30 30 32 / 0.86);
-  --glass-rim: inset 0 0.5px 0 0 rgb(255 255 255 / 0.18), inset 0 0 0 0.5px rgb(255 255 255 / 0.09), inset 0 -0.5px 0 0 rgb(255 255 255 / 0.05);
-  --glass-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.12), 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.55);
-
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 1px 4px rgb(0 0 0 / 0.35);
-  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.5), 0 10px 24px rgb(0 0 0 / 0.45);
-  --shadow: 0 10px 30px rgb(0 0 0 / 0.6), 0 40px 80px rgb(0 0 0 / 0.65);
+  --grain: 0.08;
+  --shade: rgb(0 0 0 / 0.45);
+  --gutter: rgb(0 0 0 / 0.8);
+  --shadow-page: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 34px rgb(0 0 0 / 0.45);
+  --shadow-raise: 0 2px 6px rgb(0 0 0 / 0.55), 0 16px 36px rgb(0 0 0 / 0.5);
   color-scheme: dark;
 }
 
-/* ---------- Radius scale ---------- */
-
-/* The corners of the app track the corners of the screen it is running on.
-   A folding phone's cover screen is rounded hard, its inner screen a little
-   less, a laptop window least of all — so every radius steps down together
-   as the viewport widens, and nothing hardcodes a corner. */
-
-@media (min-width: 600px) {
+@media (min-width: 820px) {
   :root {
-    --r-sm: 11px;
-    --r: 18px;
-    --r-lg: 24px;
-    --r-screen: 30px;
+    --r-sm: 7px;
+    --r: 12px;
+    --r-lg: 18px;
+    --pad: 30px;
+    --spine-w: 34px;
   }
 }
-
-@media (min-width: 900px) {
-  :root {
-    --r-sm: 10px;
-    --r: 14px;
-    --r-lg: 20px;
-    --r-screen: 20px;
-  }
-}
-
-/* ---------- Liquid glass ---------- */
-
-/* One material, used by every piece of floating chrome: the tab bar, the
-   title bar, the rail, sheets and toasts. Translucent and saturating, with
-   a specular rim along the lit edge. Where a browser can't blur a backdrop
-   the fill falls back to opaque, so nothing ever turns unreadable. */
-.glass {
-  background: var(--glass-strong);
-  box-shadow: var(--glass-rim), var(--glass-shadow);
-}
-
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .glass {
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-filter);
-    backdrop-filter: var(--glass-filter);
-  }
-}
-
 
 /* ---------- Base ---------- */
 
@@ -241,44 +140,31 @@ html {
 
 body {
   margin: 0;
-  font-family: var(--font);
+  font-family: var(--book);
   font-size: var(--t-body);
-  line-height: 1.45;
-  letter-spacing: -0.006em;
+  line-height: 1.55;
   color: var(--ink);
-  background: var(--bg);
-  font-feature-settings: 'tnum' 0;
+  background: var(--paper-edge);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
 }
 
-h1,
-h2,
-h3,
-p,
-dl,
-dd,
-figure {
+h1, h2, h3, p, dl, dd, figure, fieldset {
   margin: 0;
 }
 
-h1,
-h2,
-h3 {
-  font-weight: 650;
-  letter-spacing: -0.014em;
-  line-height: 1.2;
+fieldset {
+  border: 0;
+  padding: 0;
 }
 
 a {
-  color: var(--accent);
-  text-underline-offset: 2px;
+  color: inherit;
+  text-decoration-color: var(--ink-4);
+  text-underline-offset: 3px;
 }
 
-button,
-input,
-select,
-textarea {
+button, input, select, textarea {
   font: inherit;
   color: inherit;
 }
@@ -287,14 +173,10 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
-  cursor: not-allowed;
-}
-
 :focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 [hidden] {
@@ -303,8 +185,6 @@ button:disabled {
 
 .sr-only {
   position: absolute !important;
-  top: 0;
-  left: 0;
   width: 1px;
   height: 1px;
   padding: 0;
@@ -320,7 +200,7 @@ button:disabled {
   left: 8px;
   top: -40px;
   z-index: 100;
-  background: var(--surface);
+  background: var(--paper);
   padding: 8px 12px;
   border-radius: var(--r-sm);
 }
@@ -329,4634 +209,758 @@ button:disabled {
   top: 8px;
 }
 
-.boot {
-  padding: 48px 16px;
-  text-align: center;
-  color: var(--ink-3);
-}
-
-.amt,
-.figures dd,
-.num,
-.axis,
-.goal-pct,
-.budget-meta,
-.running,
-kbd {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
-}
-
-.amt {
-  white-space: nowrap;
-  font-weight: 560;
-}
-
-.amt-in {
-  color: var(--pos);
-}
-
-.amt-neg,
-.s-over {
-  color: var(--over);
-}
-
-.s-warning {
-  color: var(--warn);
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .muted {
   color: var(--ink-3);
 }
 
-.small {
-  font-size: 0.875rem;
+.fig {
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-.lede {
-  color: var(--ink-2);
-  margin: 4px 0 20px;
-  max-width: 60ch;
-}
+.covered { color: var(--covered); }
+.thin { color: var(--thin); }
+.short { color: var(--short); }
 
-.footnote {
-  margin-top: 24px;
-  max-width: 62ch;
-}
+/* ---------- The book ---------- */
 
-.plain-list,
-.tx-list,
-.card-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-kbd {
-  display: inline-block;
-  min-width: 1.6em;
-  padding: 1px 6px;
-  border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  font-family: inherit;
-  font-size: var(--t-footnote);
-  text-align: center;
-  background: var(--surface);
-}
-
-/* ---------- Layout ---------- */
-
-.app {
+.book {
+  position: relative;
   min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-main:focus,
-main:focus-visible {
-  outline: none;
+/* The sheet itself: two very large, very faint washes crossing each other.
+   Enough to stop the page reading as flat colour, cheap enough to sit under
+   everything — and it drifts, slowly, for as long as the book is open. */
+.book::before {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  z-index: -2;
+  background:
+    radial-gradient(120% 80% at 12% 8%, rgb(255 246 226 / var(--grain)), transparent 60%),
+    radial-gradient(110% 90% at 88% 92%, rgb(120 88 40 / var(--grain)), transparent 62%),
+    var(--paper);
+  animation: grain-drift 48s ease-in-out infinite alternate;
 }
 
-main {
-  padding: calc(var(--topbar-h) + var(--safe-t) + 4px) var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 56px);
-  max-width: 720px;
-  margin: 0 auto;
-  outline: none;
-  /* Safety net: never let unexpected content widen the page on phones. */
-  overflow-x: clip;
-  /* Headline figures size themselves against this, not against the window.
-     With the second page taking a column, the two are very different: on the
-     Fold opened flat the window is 841px and this is about 470px. Sizing
-     from `vw` there breaks numbers across two lines. */
+.leaf {
+  position: relative;
+  min-width: 0;
+  padding: calc(var(--safe-t) + var(--head-h) + 6px) var(--pad) calc(var(--index-h) + var(--safe-b) + 40px);
   container-type: inline-size;
-  container-name: page;
+  container-name: leaf;
 }
 
-.sidebar {
+/* On one page the facing page is folded away, and what it carries opens
+   inline instead — nothing is only reachable on a wide screen. */
+.recto {
   display: none;
 }
 
-/* ---------- Title bar ---------- */
+/* ---------- Running head and folio ---------- */
 
-/* Sits over the content rather than above it, so the page scrolls beneath
-   the glass. It is invisible until the large page title has scrolled away,
-   and then fades in carrying that title in compact form — the same handover
-   the system apps make. Both halves are always in the DOM; only opacity and
-   a small slide move, so the swap costs nothing. */
-.topbar {
+.running-head {
   position: fixed;
-  z-index: 25;
+  z-index: 20;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(var(--topbar-h) + var(--safe-t));
-  padding-top: var(--safe-t);
+  height: calc(var(--head-h) + var(--safe-t));
+  padding: var(--safe-t) var(--pad) 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: linear-gradient(var(--paper) 62%, transparent);
+  opacity: 0;
+  transition: opacity 0.4s var(--turn);
   pointer-events: none;
 }
 
-/* The two ends of the toolbar share the leftover space equally, which is
-   what keeps the capsule between them optically centred however long the
-   title happens to be. Adding lives in the bottom capsule on the cover
-   screen, so this end is empty there. */
-.topbar-side {
+.running-head[data-shown] {
+  opacity: 1;
+}
+
+.running-fund {
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+/* A folio needs a margin to sit in. A phone hasn't got one — the page runs
+   to the edges — so the number only appears where there is room for it. */
+.folio {
   display: none;
-  flex: 1 1 0;
-  justify-content: flex-end;
-  pointer-events: auto;
+  position: fixed;
+  z-index: 15;
+  bottom: calc(var(--index-h) + var(--safe-b) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--t-caption);
+  font-style: italic;
+  color: var(--ink-4);
+  pointer-events: none;
 }
 
-/* Later than .icon-btn in the file would be fragile; the class pair says
-   plainly that this one is an action and takes the tint. */
-.icon-btn.topbar-add {
-  color: var(--accent);
-}
-
-/* The glass itself is a separate layer so it can fade without taking the
-   title's own transition with it. */
-.topbar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--glass);
-  box-shadow: var(--glass-rim), 0 1px 0 0 var(--line);
-  opacity: 0;
-  transition: opacity 0.3s var(--ease);
-}
-
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .topbar::before {
-    -webkit-backdrop-filter: var(--glass-filter);
-    backdrop-filter: var(--glass-filter);
+@media (pointer: fine) {
+  .folio {
+    display: block;
   }
 }
 
-.topbar[data-scrolled]::before {
-  opacity: 1;
-}
+/* ---------- The thumb index ---------- */
 
-.topbar-title {
-  position: relative;
-  flex: 0 1 auto;
-  max-width: calc(100% - 96px);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 1.0625rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.26s var(--ease), transform 0.26s var(--ease);
-}
-
-.topbar[data-scrolled] .topbar-title {
-  opacity: 1;
-  transform: none;
-}
-
-/* ---------- Tab bar ---------- */
-
-/* A capsule floating clear of the screen edge, not a bar welded to it. On a
-   display this rounded, chrome that runs into the corners fights them; held
-   inside its own radius it sits in the same family as the hardware. */
-.tabbar {
+/* Chapters cut into the edge of the book. On a touch screen they stay at the
+   bottom at every width — the Fold opened flat is a 7.6" screen held in two
+   hands, and the top edge is the one place a thumb cannot reach. */
+.thumb-index {
   position: fixed;
-  z-index: 20;
-  left: 50%;
-  bottom: calc(var(--safe-b) + 10px);
-  transform: translateX(-50%);
-  width: min(420px, calc(100% - 24px));
-  height: var(--tabbar-h);
-  border-radius: var(--pill);
+  z-index: 25;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--index-h) + var(--safe-b));
+  padding: 0 10px var(--safe-b);
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  align-items: center;
-  /* It lives inside the toolbar, which lets taps through to the page. The
-     capsule itself must not. */
-  pointer-events: auto;
-  background: var(--glass-strong);
-  box-shadow: var(--glass-rim), var(--glass-shadow);
-  transition: transform 0.4s var(--ease), opacity 0.3s var(--ease);
+  background: linear-gradient(transparent, var(--paper) 34%);
 }
 
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .tabbar {
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-filter);
-    backdrop-filter: var(--glass-filter);
-  }
-}
-
-.tabbar a {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  height: 100%;
-  padding: 0;
-  color: var(--ink-3);
-  text-decoration: none;
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  transition: color 0.2s var(--ease);
-}
-
-.tabbar a svg {
-  transition: transform 0.4s var(--spring);
-}
-
-.tabbar a[aria-current='page'] {
-  color: var(--accent);
-}
-
-.tabbar a[aria-current='page'] svg {
-  transform: translateY(-1px) scale(1.06);
-}
-
-.tabbar a:active svg {
-  transform: scale(0.88);
-  transition-duration: 0.1s;
-}
-
-/* The add button breaks the capsule's plane, which is what makes it read as
-   the one thing on the bar that does something rather than goes somewhere. */
-.fab {
-  justify-self: center;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--pill);
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 6px 16px color-mix(in srgb, var(--accent) 38%, transparent);
-  transition: transform 0.4s var(--spring), box-shadow 0.2s var(--ease), background-color 0.2s var(--ease);
-}
-
-.fab svg {
-  transition: transform 0.45s var(--spring);
-}
-
-.fab:hover {
-  background: var(--accent-hover);
-}
-
-.fab:hover svg {
-  transform: rotate(90deg);
-}
-
-.fab:active {
-  transform: scale(0.88);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 2px 6px color-mix(in srgb, var(--accent) 30%, transparent);
-  transition-duration: 0.1s;
-}
-
-.banner {
-  padding: 10px var(--pad);
-  font-size: 0.875rem;
-}
-
-.banner.warn {
-  background: var(--over-soft);
-  color: var(--ink);
-  border-bottom: 1px solid color-mix(in srgb, var(--over) 30%, transparent);
-}
-
-@media (max-width: 599px) {
-  .desktop-only {
-    display: none !important;
-  }
-}
-
-/* 600px and up — the folding phone opened flat, and every laptop window.
-
-   The content lifts onto its own canvas: a rounded, opaque sheet inset from
-   the window. That inset is what makes the radius read; a full-bleed page has
-   no corners to be concentric with.
-
-   Navigation moves to the top. The capsule that lived at the bottom of the
-   cover screen floats into the toolbar row instead, with the screen's compact
-   title on the left and one add button on the right — so a screen this size
-   hands its whole width to the content, and the same destinations stay in the
-   same capsule they were in on the phone. A rail of stacked icon-over-label
-   buttons down the left was never the shape this platform uses, and it cost
-   84px to say the same thing. The full sidebar comes back at 1120px, where
-   there is room for it, the content and the second page at once. */
-@media (min-width: 600px) {
-  :root {
-    --pad: 24px;
-    /* Taller, because the toolbar now carries a control rather than just a
-       line of text, and that control has to stay a 48px touch target. */
-    --topbar-h: 56px;
-  }
-
-  .app {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    gap: 0;
-  }
-
-  .sidebar {
-    display: none;
-  }
-
-  .banner-slot {
-    grid-column: 1;
-  }
-
-  :root {
-    --card: var(--surface-2);
-  }
-
-  main {
-    grid-column: 1;
-    width: auto;
-    max-width: none;
-    /* The canvas. Opaque, so the glass floating over it has something worth
-       blurring, and rounded to the same scale as everything else. The top
-       margin clears the status bar: on a phone this width — the Fold opened
-       flat — there is one, and a canvas that starts at 12px runs under it. */
-    margin: calc(var(--safe-t) + 12px) 12px 12px;
-    padding: calc(var(--topbar-h) + 14px) var(--pad) 56px;
-    min-height: calc(100dvh - var(--safe-t) - 24px);
-    border-radius: var(--r-screen);
-    background: var(--surface);
-    box-shadow: var(--shadow-1);
-  }
-
-  /* The toolbar belongs to the canvas: it starts and ends with it and rounds
-     off with its top corners. Title on the left, add on the right, and the
-     capsule floating over the middle — the two share a centre line. */
-  /* The toolbar belongs to the canvas, so it starts where the canvas does —
-     below the status bar. Its own safe-area padding has to go with it, or
-     the bar keeps a 56px box while its contents sit an inset lower, and the
-     capsule lands on the first line of the page. */
-  .topbar {
-    left: 0;
-    top: calc(var(--safe-t) + 12px);
-    right: calc(var(--aside-w) + 12px);
-    margin-left: 12px;
-    height: var(--topbar-h);
-    padding: 0 12px;
-    padding-top: 0;
-    justify-content: space-between;
-    border-radius: var(--r-screen) var(--r-screen) 0 0;
-    overflow: hidden;
-  }
-
-  .topbar::before {
-    box-shadow: var(--glass-rim), 0 1px 0 0 var(--line);
-  }
-
-  .topbar-title {
-    flex: 1 1 0;
-    max-width: none;
-    text-align: left;
-  }
-
-  .topbar-side {
-    display: flex;
-  }
-
-  /* In the toolbar the capsule is laid out, not positioned: the equal end
-     slots either side hold it on the centre line without any arithmetic. */
-  .tabbar {
-    display: grid;
-    position: static;
-    grid-template-columns: repeat(4, 1fr);
-    flex: 0 1 208px;
-    width: auto;
-    height: 48px;
-    transform: none;
-  }
-
-  /* Icons only in the toolbar. A labelled capsule and the compact title were
-     fighting over the same ~550px, and the title is the one carrying
-     something the capsule can't say — which month you are looking at. The
-     labels come back with the sidebar, which has room for all of them. */
-  .tabbar a span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .tabbar a svg {
-    width: 23px;
-    height: 23px;
-  }
-
-  /* Adding is the toolbar's job at this size, so the capsule is destinations
-     only: five places to go, nothing to do. */
-  .fab {
-    display: none;
-  }
-}
-
-@media (min-width: 900px) {
-  :root {
-    --pad: 32px;
-  }
-}
-
-/* A window this wide can carry the sidebar, the content and the second page
-   at once, so navigation comes out of the capsule and becomes a labelled
-   sidebar — every destination visible, no overflow menu. */
-@media (min-width: 1120px) {
-  :root {
-    --rail-w: 240px;
-  }
-
-  .app {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, var(--aside-w));
-  }
-
-  .sidebar {
-    grid-row: 1 / span 2;
-    grid-column: 1;
-    position: sticky;
-    top: 0;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 14px;
-    padding: calc(var(--safe-t) + 16px) 14px 16px;
-    background: var(--glass);
-    box-shadow: inset -0.5px 0 0 0 var(--line);
-  }
-
-  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-    .sidebar {
-      -webkit-backdrop-filter: var(--glass-filter);
-      backdrop-filter: var(--glass-filter);
-    }
-  }
-
-  .banner-slot,
-  main {
-    grid-column: 2;
-  }
-
-  main {
-    margin: calc(var(--safe-t) + 12px) 12px 12px 0;
-    padding-top: calc(var(--topbar-h) + 4px);
-  }
-
-  /* With a sidebar there, the toolbar belongs to the canvas: it starts where
-     the sidebar ends and rounds off with the canvas's own top corners. */
-  .topbar {
-    left: var(--rail-w);
-    top: calc(var(--safe-t) + 12px);
-    right: calc(var(--aside-w) + 12px);
-    height: var(--topbar-h);
-    padding: 0 20px;
-    padding-top: 0;
-    justify-content: center;
-    border-radius: var(--r-screen) var(--r-screen) 0 0;
-    overflow: hidden;
-  }
-
-  .topbar::before {
-    display: block;
-    box-shadow: var(--glass-rim), 0 1px 0 0 var(--line);
-  }
-
-  .topbar-title {
-    max-width: calc(100% - 96px);
-    text-align: center;
-  }
-
-  /* The sidebar carries its own add button, so the toolbar's would be a
-     second one saying the same thing. Hidden by the slot rather than the
-     button, because .icon-btn sets its own display further down the file. */
-  .topbar-side {
-    display: none;
-  }
-
-  .tabbar {
-    display: none;
-  }
-}
-
-/* Rail (600–899px): icon-mark only, no wordmark; nav items stack icon over a
-   short label. Widened into a full sidebar with the wordmark and row-style
-   nav at 900px, see the override below. */
-.brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 4px 0 8px;
-}
-
-.brand-name {
-  display: none;
-  font-size: var(--t-title3);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.brand-mark {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  padding: 3px;
-  border: 0;
-  /* A squircle in the app-icon family, not a rounded rectangle. */
-  border-radius: 24%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.14), 0 3px 10px color-mix(in srgb, var(--accent) 34%, transparent);
-}
-
-.rail-cta {
-  flex-direction: column;
-  gap: 2px;
-  width: 52px;
-  height: 52px;
-  padding: 0;
-  border-radius: var(--pill);
-}
-
-.rail-cta svg {
-  margin-left: 0;
-}
-
-.rail-cta .rail-label {
-  display: none;
-}
-
-.side-nav {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-}
-
-.side-nav a {
+.thumb-index a {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: 100%;
-  padding: 8px 2px;
-  border-radius: var(--r-sm);
-  color: var(--ink-2);
+  padding: 6px 2px;
+  margin-top: 10px;
+  color: var(--ink-3);
   text-decoration: none;
-  font-weight: 580;
-  font-size: 0.6875rem;
-  line-height: 1.15;
-  text-align: center;
-  text-wrap: balance;
-  transition: background-color 0.18s var(--ease), color 0.18s var(--ease), transform 0.3s var(--spring);
+  font-family: var(--hand);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  transition: color 0.25s var(--turn), background-color 0.25s var(--turn), transform 0.4s var(--settle);
 }
 
-.side-nav a:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+/* A tab is a piece of the page's own edge, so it takes the page's colour and
+   a rule on three sides — not a button. */
+.thumb-index a[aria-current='page'] {
   color: var(--ink);
+  background: var(--paper-2);
+  box-shadow: inset 0 1px 0 var(--rule-soft), inset 1px 0 0 var(--rule-soft), inset -1px 0 0 var(--rule-soft);
+  transform: translateY(-4px);
 }
 
-.side-nav a:active {
-  transform: scale(0.94);
-  transition-duration: 0.1s;
+.thumb-index a:active {
+  transform: translateY(-1px) scale(0.96);
 }
 
-.side-nav a[aria-current='page'] {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 640;
+.thumb-index svg {
+  width: 19px;
+  height: 19px;
 }
 
-.side-nav .sep {
-  height: 1px;
+/* ---------- The ribbon ---------- */
+
+/* Sewn in at the head of the book, hanging down the page you are on. It
+   stirs a little, for ever, because a ribbon does. */
+.ribbon {
+  position: fixed;
+  z-index: 18;
+  top: 0;
+  left: calc(var(--pad) + 10px);
+  width: 15px;
+  height: 108px;
+  pointer-events: none;
+  transform-origin: top center;
+  animation: ribbon-sway 9s ease-in-out infinite;
+}
+
+.ribbon i {
+  display: block;
   width: 100%;
-  margin: 8px 0;
-  background: var(--line);
+  height: 100%;
+  background: linear-gradient(var(--ribbon), color-mix(in srgb, var(--ribbon) 74%, black));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%);
+  box-shadow: 1px 0 3px rgb(0 0 0 / 0.25);
+  opacity: 0.92;
 }
 
-.side-foot {
-  display: none;
+/* ---------- Chapter openings ---------- */
+
+.chapter-head {
+  max-width: var(--measure);
+  margin-bottom: 24px;
+  padding-top: 8px;
 }
 
-@media (min-width: 1120px) {
-  .brand {
-    justify-content: flex-start;
-    padding: 4px 8px 8px;
-  }
-
-  .brand-name {
-    display: inline;
-  }
-
-  .rail-cta {
-    flex-direction: row;
-    width: 100%;
-    height: auto;
-    min-height: 44px;
-    padding: 0 16px;
-    border-radius: var(--r);
-  }
-
-  .rail-cta svg {
-    margin-left: -4px;
-  }
-
-  .rail-cta .rail-label {
-    display: inline;
-  }
-
-  .side-nav {
-    align-items: stretch;
-  }
-
-  .side-nav a {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 8px 10px;
-    font-size: 1rem;
-    text-align: left;
-  }
-
-  .side-nav .sep {
-    margin: 8px 10px;
-    width: auto;
-  }
-
-  .side-foot {
-    display: block;
-    margin-top: auto;
-    padding: 0 10px;
-    font-size: var(--t-footnote);
-    color: var(--ink-3);
-  }
+.chapter-number {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 6px;
 }
 
-/* ---------- Where the capsule lives on a touch screen ---------- */
-
-/* Width alone was the wrong thing to decide this on. The Fold opened flat is
-   841px, so it took the wide layout and moved every control to the top of a
-   7.6" screen — the one place a thumb holding the phone cannot reach. Width
-   says how much room there is; the pointer says how the screen is held. So
-   on any touch screen short of the sidebar, the capsule goes back to the
-   bottom where the hand already is, and takes the add button with it.
-   Pointing devices keep the toolbar layout: a cursor reaches the top for
-   free, and a laptop wants the vertical space for content. */
-@media (pointer: coarse) and (max-width: 1119px) {
-  .tabbar {
-    position: fixed;
-    /* Centred on the content column, not the window: with the second page
-       taking 280px on the right, a capsule centred on the window straddles
-       the divide between them. */
-    left: calc(50% - var(--aside-w) / 2);
-    bottom: calc(var(--safe-b) + 10px);
-    transform: translateX(-50%);
-    width: min(440px, calc(100% - var(--aside-w) - 24px));
-    height: var(--tabbar-h);
-    grid-template-columns: repeat(5, 1fr);
-    flex: none;
-  }
-
-  /* Room for labels again down here, and they earn their place: the capsule
-     is the only navigation on screen. */
-  .tabbar a span {
-    position: static;
-    width: auto;
-    height: auto;
-    clip-path: none;
-    overflow: visible;
-  }
-
-  .fab {
-    display: grid;
-  }
-
-  /* Adding belongs to the capsule at this size, so the toolbar's button
-     would be the same action offered twice on one screen. */
-  .topbar-side {
-    display: none;
-  }
-
-  main {
-    padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 48px);
-  }
-
-  /* A sheet covers the page, so the capsule drops away under it again. */
-  :root[data-sheet] .tabbar {
-    transform: translateX(-50%) translateY(28px);
-  }
-}
-
-/* ---------- Page structure ---------- */
-
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 48px;
-  margin: 8px 0 16px;
-}
-
-.page-head h1 {
-  font-size: var(--t-large-title);
-  font-weight: 730;
-  letter-spacing: -0.022em;
-  line-height: 1.1;
-}
-
-.page-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.month-nav {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-height: 48px;
-  margin: 4px 0 8px -8px;
-}
-
-.month-title {
-  font-size: var(--t-title1);
-  font-weight: 730;
-  letter-spacing: -0.02em;
-  min-width: 0;
-  padding: 0 4px;
-}
-
-.month-nav .link-btn {
-  margin-left: 8px;
-}
-
-.section-head {
+.chapter-title-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.chapter-title {
+  font-size: var(--t-display);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+
+.chapter-blurb {
+  margin-top: 8px;
+  color: var(--ink-3);
+  font-style: italic;
+  max-width: 44ch;
+}
+
+/* The rule under a chapter's opening: printer's, hairline, full measure. */
+.chapter-head::after {
+  content: '';
+  display: block;
+  height: 1px;
+  margin-top: 18px;
+  background: linear-gradient(90deg, var(--rule), var(--rule-soft) 72%, transparent);
+}
+
+/* ---------- Sections ---------- */
+
+.leaf-section {
+  max-width: var(--measure);
+  margin: 28px 0;
+}
+
+.section-rule {
+  display: flex;
+  align-items: baseline;
   gap: 12px;
   margin-bottom: 10px;
 }
 
-.section-head h2,
-.panel > h2 {
-  font-size: var(--t-headline);
-  font-weight: 650;
-  color: var(--ink);
-}
-
-.panel > h2 {
-  margin-bottom: 12px;
-}
-
-.list-title {
-  font-size: var(--t-subhead);
+.section-rule h2 {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
   font-weight: 620;
-  margin: 28px 0 6px;
-  color: var(--ink-3);
-}
-
-.panel {
-  padding: 18px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r);
-  background: var(--card);
-  box-shadow: var(--shadow-1);
-}
-
-/* Home's sections are tinted with the hue their icon chip carries, so a
-   screenful of cards reads as five different places rather than five grey
-   slabs. The tint is a wash across the top corner only — enough to colour
-   the card, never enough to touch the contrast of the text on it. */
-.panel.tinted {
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--hue) var(--card-tint), transparent), transparent 62%),
-    var(--card);
-}
-
-.panel.tinted::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 2px;
-  border-radius: var(--r) var(--r) 0 0;
-  background: linear-gradient(90deg, var(--hue), color-mix(in srgb, var(--hue) 20%, transparent));
-  opacity: 0.85;
-}
-
-/* Anything nested inside a card takes the card's radius minus the gap it
-   sits in, so the two curves run parallel instead of crossing. */
-.panel {
-  --r-nested: max(var(--r-sm), calc(var(--r) - 18px));
-}
-
-/* A single tally stroke marks every section heading. */
-.panel > h2,
-.section-head h2 {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.panel > h2::before,
-.section-head h2::before {
-  content: '';
-  flex: none;
-  width: 3px;
-  height: 1.05em;
-  background: currentColor;
-  transform-origin: bottom;
-  animation: stroke-in 340ms cubic-bezier(0.2, 0.9, 0.2, 1) backwards;
-}
-
-/* Home replaces the stroke with a coloured icon chip instead — each section
-   carries its own hue there, so the stroke (which reads as one more grey
-   mark) would just be doubling up on the same job. */
-.section-head.no-stroke h2::before {
-  display: none;
-}
-
-.sec-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 27px;
-  height: 27px;
-  border-radius: var(--r-sm);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--hue) 78%, white), var(--hue));
-  color: #fff;
-  animation:
-    pop-in 380ms var(--spring) backwards,
-    chip-breathe 5.5s ease-in-out 380ms infinite;
-}
-
-/* Staggered, so the five chips on Home breathe out of step with each other
-   rather than blinking in unison. */
-.dash-col:nth-child(2) .sec-icon { animation-delay: 380ms, 1.4s; }
-.reminders .sec-icon { animation-delay: 380ms, 2.6s; }
-
-.sec-icon.on-light {
-  color: #1c1c1e;
-}
-
-.panel + .panel {
-  margin-top: 16px;
-}
-
-/* A card a mouse can hover lifts slightly, the way a button compresses under
-   a press — the same feedback vocabulary, the other direction. Left off
-   touch screens, where there's no hover to give it. */
-@media (hover: hover) {
-  .panel,
-  .hero {
-    transition: transform 0.35s var(--spring);
-  }
-
-  .panel:hover,
-  .hero:hover {
-    transform: translateY(-3px);
-  }
-}
-
-.dash-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px 24px;
-}
-
-.dash-col,
-.goal-list > li {
-  min-width: 0;
-}
-
-/* Two dashboard columns where the width isn't already going to the second
-   page: between the rail appearing and the second page appearing, and again
-   once the window is wide enough to carry both. */
-@media (min-width: 760px) and (max-width: 819px), (min-width: 1180px) {
-  .dash-grid {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    align-items: start;
-  }
-}
-
-/* ---------- Hero and figures ---------- */
-
-/* The one card that has to carry the month. Two soft washes of the state's
-   own colour drift across it for as long as the screen is on, so Home is
-   never a still picture — the movement is the card breathing, not anything
-   asking to be read. */
-.hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 22px 20px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r-lg);
-  background: var(--card);
-  box-shadow: var(--shadow-1);
-}
-
-.hero::before,
-.hero::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  width: 78%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  filter: blur(46px) opacity(var(--aura-strength));
-  pointer-events: none;
-}
-
-.hero::before {
-  top: -34%;
-  right: -18%;
-  background: radial-gradient(circle, var(--aura-a, var(--accent)), transparent 68%);
-  animation: aurora-a 19s var(--ease-inout, ease-in-out) infinite alternate;
-}
-
-.hero::after {
-  bottom: -40%;
-  left: -20%;
-  background: radial-gradient(circle, var(--aura-b, var(--accent)), transparent 68%);
-  animation: aurora-b 26s var(--ease-inout, ease-in-out) infinite alternate;
-}
-
-/* The wash takes its colour from where the month actually stands. */
-.hero[data-state='ok'] { --aura-a: var(--bar-in); --aura-b: var(--accent); }
-.hero[data-state='warning'] { --aura-a: var(--warn); --aura-b: #ff9500; }
-.hero[data-state='over'] { --aura-a: var(--over); --aura-b: #ff2d55; }
-.hero[data-state='accent'] { --aura-a: var(--accent); --aura-b: var(--hue-budgets); }
-
-/* Ring and words share a line as soon as the content column can carry both;
-   stacked, the ring left a band of empty card either side of it. */
-.hero-main {
-  display: grid;
-  gap: 4px;
-}
-
-@container page (min-width: 430px) {
-  .hero-main {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 22px;
-  }
-
-  .hero-main .hero-ring-row {
-    margin-bottom: 0;
-  }
-
-  .hero.small .hero-line {
-    font-size: clamp(1.375rem, 4.4cqi, 2rem);
-  }
-}
-
-.hero-line {
-  font-size: clamp(1.625rem, 6.2cqi, 2.375rem);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-  max-width: 22ch;
-  font-variant-numeric: tabular-nums;
-  text-wrap: balance;
-}
-
-.hero.small .hero-line {
-  font-size: clamp(1.375rem, 5cqi, 1.875rem);
-}
-
-.hero-line.s-over {
-  color: var(--over);
-}
-
-.hero-line.s-warning {
-  color: var(--ink);
-}
-
-.hero-sub {
-  margin-top: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   color: var(--ink-2);
-  max-width: 60ch;
-}
-
-.figures {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-  padding: 16px 18px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r);
-  background: var(--card);
-  box-shadow: var(--shadow-1);
-}
-
-.figures > div {
-  min-width: 0;
-}
-
-.figures dt {
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-  margin-bottom: 2px;
-}
-
-.figures dd {
-  font-size: clamp(1.0625rem, 4.2cqi, 1.375rem);
-  font-weight: 660;
-  letter-spacing: -0.015em;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-/* Already inside a panel, so it shouldn't be a card of its own. */
-.figures.compact {
-  margin-top: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-}
-
-/* The hero used to hand off to a separate figures card below it; now the
-   numbers live inside the same card as the ring, one focal panel instead of
-   two stacked ones. Each is a tinted chip in its own money colour, so the
-   three of them read apart without a label being needed. */
-.hero-figures {
-  margin-top: 16px;
-  gap: 8px;
-}
-
-.hero-figures dt {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--t-caption);
-  color: var(--ink-3);
-}
-
-/* On the cover screen the three figures are labelled with a dot of their
-   own colour rather than boxed: a box costs 24px of the column each, which
-   is the difference between "+$5,972.42" fitting on one line and breaking
-   across two. */
-.hero-figures dt::before {
-  content: '';
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--chip, var(--ink-3));
-}
-
-.hero-figures dd {
-  font-size: clamp(0.9375rem, 3.9cqi, 1.1875rem);
-}
-
-/* Room for the boxes once the column is wide enough to keep the figures on
-   one line inside them. */
-@container page (min-width: 430px) {
-  .hero-figures > div {
-    padding: 9px 12px 10px;
-    border-radius: var(--r-sm);
-    background: color-mix(in srgb, var(--chip, var(--ink)) 12%, var(--card));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--ink)) 16%, transparent);
-  }
-}
-
-/* ---------- Progress ring ---------- */
-
-/* The month's headline used to be a linear track; it's now a pair of
-   concentric rings, the single boldest thing on Home and the answer to "am I
-   okay?" at a glance — Apple's own shorthand for progress, not a re-invented
-   one. Sized by the hero card's own container width (cqi), not the window,
-   for the same reason the headline figures are. */
-.hero-ring-row {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 18px;
-}
-
-.hero-ring {
-  position: relative;
-  flex: none;
-  width: clamp(108px, 30cqi, 168px);
-  aspect-ratio: 1;
-}
-
-.hero-ring svg {
-  display: block;
-  overflow: visible;
-}
-
-.ring-track {
-  stroke: color-mix(in srgb, var(--ink) 9%, transparent);
-}
-
-/* Each ring is a two-stop gradient rather than one flat colour, and the
-   money state picks the pair. The day ring stays in interface colours,
-   because elapsed time is not money. */
-.hero-ring[data-state='ok'] { --ring-a: #30d158; --ring-b: #00c7a3; --ring-glow: var(--ok); }
-.hero-ring[data-state='warning'] { --ring-a: #ffb340; --ring-b: #ff8a00; --ring-glow: var(--warn); }
-.hero-ring[data-state='over'] { --ring-a: #ff6961; --ring-b: #ff2d55; --ring-glow: var(--over); }
-.hero-ring[data-state='accent'] { --ring-a: #40a2ff; --ring-b: #5e5ce6; --ring-glow: var(--accent); }
-/* A plan's ring is the plan's own colour, set inline beside it. */
-.hero-ring[data-state='plan'] { --ring-a: var(--c, var(--accent)); --ring-b: var(--c, var(--accent)); }
-.hero-ring { --ring2-a: #0a84ff; --ring2-b: #64d2ff; }
-
-.ring-fill,
-.ring-fill-inner {
-  transition: stroke-dasharray 0.5s var(--ease);
-}
-
-.ring-fill {
-  filter: drop-shadow(0 3px 11px color-mix(in srgb, var(--ring-glow, var(--accent)) 50%, transparent));
-}
-
-.ring-fill-inner {
-  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--ring2-a) 40%, transparent));
-}
-
-/* A short specular arc travels the dial for as long as the page is open.
-   It is the one thing on Home that moves without being asked to, which is
-   what keeps the screen feeling live rather than printed. */
-.ring-sheen {
-  stroke: #fff;
-  opacity: 0.32;
-  transform-box: view-box;
-  transform-origin: 50% 50%;
-  animation: ring-orbit 6.5s linear infinite;
-}
-
-.hero-ring-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.hero-ring-center strong {
-  font-size: clamp(1.25rem, 6.5cqi, 1.75rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.hero-ring-center span {
-  margin-top: 3px;
-  font-size: var(--t-caption);
-  color: var(--ink-3);
-}
-
-/* ---------- State colors for fills ---------- */
-
-.s-ok.bar-fill,
-.bar-fill.s-ok {
-  background: var(--ok);
-}
-
-.bar-fill.s-warning {
-  background: var(--warn);
-}
-
-.bar-fill.s-over {
-  background: var(--over);
-}
-
-.bar-fill.s-none {
-  background: var(--ink-4);
-}
-
-.bar-fill.s-goal {
-  background: var(--c, var(--goal));
-}
-
-.bar-fill.s-done {
-  background: var(--ok);
-}
-
-/* Money already spent out of a trip's pot: the same hue as the plan, drawn
-   lighter so it reads as coming out of the bar above it, not adding to it. */
-.bar-fill.s-spend {
-  background: color-mix(in srgb, var(--c, var(--goal)) 55%, var(--surface));
-}
-
-.bar {
-  position: relative;
-  height: 9px;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  overflow: hidden;
-}
-
-.bar-fill {
-  position: relative;
-  display: block;
-  height: 100%;
-  border-radius: 5px;
-  background: var(--ink-3);
-  overflow: hidden;
-  transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/* A highlight crosses each filled bar every few seconds. It is the quietest
-   of the ambient motions and the one that makes a list of budgets read as
-   live figures rather than printed ones. */
-.bar-fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  width: 42%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
-  animation: bar-sheen 4.5s var(--ease) infinite;
-}
-
-/* ---------- Buttons ---------- */
-
-/* Secondary by default: a tinted capsule, no drawn border and no lift.
-   Weight comes from the fill, which is how the system separates a button
-   that suggests from a button that commits. */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: var(--pill);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink);
-  font-weight: 620;
-  font-size: var(--t-subhead);
-  letter-spacing: -0.01em;
-  text-decoration: none;
   white-space: nowrap;
-  transition: background-color 0.18s var(--ease), transform 0.4s var(--spring), opacity 0.18s var(--ease);
 }
 
-.btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
+/* The rule runs from the heading to the end of the measure, the way a
+   printed sidehead is finished. */
+.section-rule::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--rule-soft);
+  transform-origin: left center;
+  animation: rule-draw 620ms var(--turn) backwards;
 }
 
-/* Pressing compresses the button under your finger and lets it spring back. */
-.btn:active:not(:disabled) {
-  transform: scale(0.94);
-  opacity: 0.75;
-  transition-duration: 0.1s;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-}
-
-.btn svg {
-  width: 20px;
-  height: 20px;
-  margin-left: -4px;
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.btn.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.btn.danger {
-  background: var(--over);
-  color: #fff;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 4px 14px color-mix(in srgb, var(--over) 30%, transparent);
-}
-
-.btn.ghost {
-  background: transparent;
-}
-
-.btn.ghost:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-
-.btn.danger-text {
-  color: var(--over);
-}
-
-.btn.small {
-  min-height: 36px;
-  padding: 0 14px;
-  font-size: 0.875rem;
-  border-radius: var(--pill);
-}
-
-.btn.block {
-  width: 100%;
-}
-
-.btn.grow {
-  flex: 1;
-}
-
-.btn-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.btn-row.end {
-  justify-content: flex-end;
-}
-
-.icon-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: var(--pill);
-  background: transparent;
-  color: var(--ink-2);
-  transition: background-color 0.18s var(--ease), transform 0.4s var(--spring);
-}
-
-.icon-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink);
-}
-
-.icon-btn:active:not(:disabled) {
-  transform: scale(0.88);
-  transition-duration: 0.1s;
-}
-
-.icon-btn:disabled {
-  opacity: 0.3;
-}
-
-.icon-btn.sm {
-  width: 36px;
-  height: 36px;
-}
-
-.link-btn {
-  border: 0;
-  background: none;
-  padding: 4px 2px;
+.section-rule a {
+  order: 3;
+  font-family: var(--hand);
+  font-size: var(--t-caption);
+  letter-spacing: 0.04em;
+  text-transform: none;
   color: var(--accent);
-  font-weight: 600;
-  font-size: var(--t-subhead);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 1px;
+  white-space: nowrap;
 }
 
-/* Nothing is tinted blue any more, so a link has to say so with a rule
-   under it rather than with colour. */
-.link {
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
-}
+/* ---------- Figures ---------- */
 
-.link:hover {
-  text-decoration: underline;
-}
-
-/* ---------- Forms ---------- */
-
-.stack {
+.display-figure {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 10px 0 4px;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.display-value {
+  font-size: var(--t-display);
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.02em;
+  animation: ink-in 760ms var(--turn) backwards;
 }
 
-.label,
-fieldset > legend.label {
-  font-size: 0.875rem;
-  font-weight: 600;
+.display-label {
+  font-family: var(--hand);
+  font-size: var(--t-caption);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.display-note {
   color: var(--ink-2);
-  padding: 0;
+  max-width: 46ch;
 }
 
-fieldset > legend.label {
-  margin-bottom: 8px;
+.display-figure.short .display-value {
+  color: var(--short);
 }
 
-.opt {
-  font-weight: 450;
+.fund-headline {
+  max-width: var(--measure);
+}
+
+.hand {
+  max-width: 46ch;
+  color: var(--ink-2);
+}
+
+.marginal {
+  font-size: var(--t-caption);
   color: var(--ink-3);
-}
-
-.hint {
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-  line-height: 1.4;
-}
-
-input:not([type='radio']):not([type='checkbox']),
-select,
-textarea {
-  width: 100%;
-  min-height: 48px;
-  padding: 11px 14px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  transition: box-shadow 0.18s var(--ease), background-color 0.18s var(--ease);
-  font-size: 1rem;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-input[type='date'] {
-  min-width: 0;
-}
-
-input::-webkit-date-and-time-value {
-  text-align: left;
-}
-
-select {
-  padding-right: 36px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 18px;
-}
-
-input:not([type='radio']):not([type='checkbox']):focus,
-select:focus,
-textarea:focus {
-  outline: none;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  box-shadow: var(--ring);
-}
-
-[aria-invalid='true'] {
-  border-color: var(--over) !important;
-}
-
-.field-error {
-  margin: -8px 0 0;
-  font-size: 0.875rem;
-  font-weight: 560;
-  color: var(--over);
-}
-
-.field .field-error,
-fieldset .field-error {
-  margin: 4px 0 0;
-}
-
-.row-2 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
-}
-
-.check {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  cursor: pointer;
-}
-
-.check input,
-.radio-card input {
-  width: 20px;
-  height: 20px;
-  margin: 2px 0 0;
-  flex: none;
-  accent-color: var(--accent);
-}
-
-.check small,
-.radio-card small {
-  display: block;
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-}
-
-.radio-card {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r);
-  cursor: pointer;
-}
-
-.radio-card + .radio-card {
+  font-style: italic;
+  max-width: 48ch;
   margin-top: 8px;
 }
 
-.radio-card:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+.marginal.note {
+  padding-left: 12px;
+  border-left: 2px solid var(--rule-soft);
 }
 
-/* The selected pill is one element that slides between the options rather
-   than a background that blinks from one to the next — which is what makes a
-   segmented control feel like a physical switch. `:has()` reads which option
-   is checked, so it stays a plain radio group with no script behind it. */
-.seg {
-  --n: 2;
-  position: relative;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  padding: 3px;
-  border-radius: var(--pill);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+.verdict {
+  font-size: 1.2rem;
+  max-width: 42ch;
+  margin: 10px 0 4px;
 }
 
-.seg:has(> label:nth-child(3)) {
-  --n: 3;
-}
-
-.seg:has(> label:nth-child(4)) {
-  --n: 4;
-}
-
-.seg::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc((100% - 6px) / var(--n));
-  border-radius: var(--pill);
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 3px 8px rgb(0 0 0 / 0.08);
-  transition: transform 0.42s var(--spring);
-}
-
-:root[data-theme='dark'] .seg::before {
-  background: var(--surface-3);
-}
-
-.seg:has(> label:nth-child(2) > input:checked)::before {
-  transform: translateX(100%);
-}
-
-.seg:has(> label:nth-child(3) > input:checked)::before {
-  transform: translateX(200%);
-}
-
-.seg:has(> label:nth-child(4) > input:checked)::before {
-  transform: translateX(300%);
-}
-
-.seg label {
-  position: relative;
-  cursor: pointer;
-}
-
-/* Above both the sliding pill and the label text, so the whole segment stays
-   one hit target rather than the text swallowing the tap. */
-.seg input {
-  position: absolute;
-  z-index: 2;
-  opacity: 0;
-  inset: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.seg span {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  min-height: 38px;
-  padding: 0 8px;
-  border-radius: var(--pill);
-  font-weight: 600;
-  font-size: var(--t-subhead);
-  color: var(--ink-3);
-  text-align: center;
-  transition: color 0.24s var(--ease), transform 0.3s var(--spring);
-}
-
-.seg input:checked + span {
-  color: var(--ink);
-}
-
-.seg label:active span {
-  transform: scale(0.95);
-  transition-duration: 0.1s;
-}
-
-.seg input:focus-visible + span {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.notice {
-  padding: 10px 12px;
-  border-radius: var(--r);
-  background: var(--accent-soft);
-  font-size: var(--t-subhead);
-}
-
-.notice.warn {
-  background: var(--warn-soft);
-}
-
-.meta-note {
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-}
-
-/* Transaction form */
-
-.tx-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.amount-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.amount-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.amount-sym {
-  position: absolute;
-  left: 14px;
-  font-size: var(--t-title1);
-  font-weight: 600;
-  color: var(--ink-3);
-  pointer-events: none;
-}
-
-.amount-field input[name='amount'] {
-  min-height: 64px;
-  padding-left: 44px;
-  font-size: 2rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.amount-field[data-type='income'] input[name='amount'] {
-  color: var(--pos);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  max-height: 212px;
-  overflow-y: auto;
-  padding: 2px;
-  margin: -2px;
-}
-
-.chip {
-  position: relative;
-  display: inline-flex;
-}
-
-.chip input {
-  position: absolute;
-  opacity: 0;
-  inset: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.chip span,
-.chip-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 12px 0 10px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--pill);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-  font-size: var(--t-subhead);
-  font-weight: 560;
-  white-space: nowrap;
-  transition: transform 0.14s var(--spring), box-shadow 0.14s var(--spring), background-color 0.14s ease;
-}
-
-.chip:active span,
-.chip-add:active {
-  transform: scale(0.94);
-  box-shadow: none;
-}
-
-.chip small {
-  color: var(--ink-3);
-  font-size: var(--t-caption);
-}
-
-.chip i {
-  font-style: normal;
-}
-
-.chip input:checked + span {
-  border-color: var(--c);
-  background: color-mix(in srgb, var(--c) 16%, var(--surface));
-  box-shadow: inset 0 0 0 1px var(--c);
-  font-weight: 620;
-}
-
-.chip input:focus-visible + span {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.chip-add {
-  border-style: dashed;
-  color: var(--ink-2);
-  background: transparent;
-  padding: 0 14px;
-}
-
-.date-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.date-row input {
-  flex: 1;
-}
-
-.icon-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 4px;
-}
-
-.icon-opt,
-.swatch {
-  position: relative;
-  display: grid;
-  place-items: center;
-  height: 44px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  font-size: var(--t-title2);
-}
-
-.icon-opt input,
-.swatch input {
-  position: absolute;
-  opacity: 0;
-  inset: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.icon-opt:has(input:checked) {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-.icon-opt:has(input:focus-visible),
-.swatch:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.swatch {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--c);
-}
-
-.swatch:has(input:checked) {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--c);
-}
-
-/* ---------- Sheets and dialogs ---------- */
-
-dialog {
-  padding: 0;
-  border: 0;
-  color: var(--ink);
-  background: transparent;
-  max-width: none;
-  max-height: none;
-}
-
-dialog::backdrop {
-  background: var(--scrim);
-}
-
-dialog.sheet {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  display: none;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-dialog.sheet[open] {
-  display: flex;
-}
-
-.sheet-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-height: 94dvh;
-  border: 0;
-  border-radius: var(--r-screen) var(--r-screen) 0 0;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  animation: sheet-up 0.5s var(--ease);
-}
-
-/* The grabber. It says the card can be dragged away before you try, which
-   is the whole reason the system draws one. */
-.sheet-panel::before {
-  content: '';
-  position: absolute;
-  z-index: 2;
-  top: 6px;
-  left: 50%;
-  width: 36px;
-  height: 5px;
-  border-radius: var(--pill);
-  background: var(--ink-4);
-  transform: translateX(-50%);
-}
-
-@keyframes sheet-up {
-  from {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-dialog[open]::backdrop {
-  animation: fade-in 0.2s ease;
-}
-
-.sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 18px 8px 4px 20px;
-}
-
-.sheet-head h2 {
-  font-size: 1.125rem;
-}
-
-.sheet-body {
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 8px 20px 20px;
-}
-
-.sheet-foot {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px calc(12px + var(--safe-b));
-  border-top: 1px solid var(--line);
-}
-
-.sheet-foot .btn {
-  min-height: 50px;
-}
-
-@media (min-width: 640px) {
-  dialog.sheet {
-    align-items: center;
-    padding: 24px;
-  }
-
-  .sheet-panel {
-    max-width: 480px;
-    max-height: min(820px, 92dvh);
-    border: 0;
-    border-radius: var(--r-lg);
-    animation: sheet-pop 0.44s var(--spring);
-  }
-
-  /* Centred in a window it is a dialog, not a card you can flick away. */
-  .sheet-panel::before {
-    display: none;
-  }
-
-  dialog.sheet.wide .sheet-panel {
-    max-width: 680px;
-  }
-
-  .sheet-foot {
-    padding-bottom: 12px;
-  }
-
-  @keyframes sheet-pop {
-    from {
-      transform: scale(0.92);
-      opacity: 0;
-    }
-  }
-}
-
-/* Context beside the add and edit form: how the chosen category is tracking.
-   Hidden until there's room for a second column, so a wider screen — the
-   Fold opened flat, or a laptop — reveals it instead of stretching the form. */
-.tx-context {
-  display: none;
-}
-
-.tx-context-cat {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 650;
-}
-
-.tx-context-figs {
-  display: flex;
-  flex-direction: column;
-  margin-top: 4px;
-}
-
-.tx-context-figs > div {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-}
+/* ---------- Ruled rows ---------- */
 
-.tx-context-figs dt {
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
+.ruled-list {
+  margin: 10px 0;
 }
 
-.tx-context-figs dd {
-  margin: 0;
-  font-size: var(--t-title3);
-  font-weight: 620;
-  letter-spacing: -0.01em;
+.ruled {
+  border-bottom: 1px solid var(--rule-soft);
 }
 
-.tx-context-title {
-  margin-top: 14px;
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
+.ruled:first-child {
+  border-top: 1px solid var(--rule-soft);
 }
 
-.tx-context-recent li {
+.ruled-row {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 5px 0;
-  font-size: 0.875rem;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 2px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  transition: background-color 0.2s var(--turn);
 }
 
-.tx-context-when {
-  overflow: hidden;
-  text-overflow: ellipsis;
+a.ruled-row:hover,
+button.ruled-row:hover {
+  background: var(--rule-soft);
+}
+
+.ruled-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ruled-name small {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* Leader dots, the way a table of contents joins a title to its page. */
+.ruled-leader {
+  flex: 1 1 auto;
+  min-width: 16px;
+  align-self: center;
+  height: 1em;
+  background-image: radial-gradient(circle, var(--ink-4) 0.7px, transparent 0.8px);
+  background-size: 6px 6px;
+  background-position: bottom;
+  background-repeat: repeat-x;
+  opacity: 0.5;
+}
+
+.ruled-value {
+  flex: none;
+  font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
 }
 
-.tx-context-hint,
-.tx-context-none {
-  font-size: 0.875rem;
-  color: var(--ink-3);
-}
-
-@media (min-width: 760px) {
-  dialog.sheet.tx .sheet-panel {
-    max-width: 740px;
-  }
-
-  dialog.sheet.tx .sheet-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 236px);
-    gap: 0 28px;
-    align-items: start;
-  }
-
-  .tx-context {
-    display: block;
-    position: sticky;
-    top: 0;
-    padding-left: 28px;
-    border-left: var(--bw) solid var(--edge);
-  }
-}
-
-dialog.confirm[open] {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 16px;
-}
-
-.confirm-panel {
-  width: 100%;
-  max-width: 420px;
-  padding: 20px;
-  border: var(--bw) solid var(--edge);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  animation: sheet-up 0.2s ease;
-}
-
-.confirm-panel h2 {
-  font-size: 1.125rem;
-}
-
-.confirm-msg {
-  color: var(--ink-2);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* ---------- Toasts ---------- */
-
-.toasts {
-  position: fixed;
-  z-index: 60;
-  left: 50%;
-  bottom: calc(var(--tabbar-h) + var(--safe-b) + 22px);
-  transform: translateX(-50%);
-  width: min(560px, calc(100% - 24px));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-}
-
-@media (min-width: 600px) {
-  .toasts {
-    left: calc((100% - var(--aside-w)) / 2);
-    bottom: 24px;
-  }
-}
-
-@media (min-width: 1120px) {
-  .toasts {
-    left: calc(var(--rail-w) + ((100% - var(--rail-w) - var(--aside-w)) / 2));
-  }
-}
-
-/* A glass capsule, the same material as the bar it floats above. */
-.toast {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 50px;
-  padding: 7px 7px 7px 18px;
-  border-radius: var(--pill);
-  background: var(--glass-strong);
-  color: var(--ink);
-  box-shadow: var(--glass-rim), var(--shadow);
-  pointer-events: auto;
-  animation: toast-in 0.44s var(--spring);
-  font-size: var(--t-subhead);
-  font-weight: 560;
-}
-
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .toast {
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-filter);
-    backdrop-filter: var(--glass-filter);
-  }
-}
-
-@keyframes toast-in {
-  from {
-    transform: translateY(16px) scale(0.9);
-    opacity: 0;
-  }
-}
-
-.toast.error {
-  background: var(--over);
-  color: #fff;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-.toast-msg {
-  flex: 1;
-}
-
-.toast-action {
+.swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
   flex: none;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--pill);
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  color: inherit;
-  font-weight: 650;
-  transition: transform 0.35s var(--spring), background-color 0.18s var(--ease);
+  border-radius: 2px;
+  transform: translateY(-1px);
 }
 
-.toast-action:active {
-  transform: scale(0.92);
-  transition-duration: 0.1s;
+.swatch-none {
+  background: repeating-linear-gradient(135deg, var(--ink-4) 0 3px, transparent 3px 6px);
 }
 
-/* Inside an open dialog (top layer) toasts sit at the bottom of the viewport. */
-dialog .toasts {
-  bottom: calc(16px + var(--safe-b));
-  left: 50%;
+/* ---------- Ink drawings ---------- */
+
+.ink-ring {
+  position: relative;
+  flex: none;
+  width: clamp(104px, 30cqi, 150px);
+  aspect-ratio: 1;
 }
 
-/* ---------- Lists ---------- */
-
-/* The separator begins at the text, not at the edge — so the icon column
-   reads as one run down the list instead of being chopped at every row.
-   Drawn as a background so it stays on the <li> and needs no extra element;
-   a list whose rows have no leading icon sets --row-inset to 0. */
-.tx-list,
-.card-list {
-  --row-inset: 54px;
+.ink-ring svg {
+  display: block;
 }
 
-.tx-list > li + li,
-.card-list > li + li {
-  background-image: linear-gradient(var(--line), var(--line));
-  background-size: calc(100% - var(--row-inset)) 1px;
-  background-position: var(--row-inset) 0;
-  background-repeat: no-repeat;
+.ring-guide {
+  stroke: var(--rule-soft);
 }
 
-.tx-row,
-.list-btn {
+.ring-ink {
+  stroke: var(--accent);
+  animation: ink-round 900ms var(--turn) backwards;
+}
+
+.ink-ring[data-tone='covered'] .ring-ink { stroke: var(--covered); }
+.ink-ring[data-tone='thin'] .ring-ink { stroke: var(--thin); }
+.ink-ring[data-tone='short'] .ring-ink { stroke: var(--short); }
+.ink-ring[data-tone='pot'] .ring-ink { stroke: var(--c, var(--accent)); }
+
+/* A fleck of light travelling the ring, for ever: the page is never a
+   photograph of itself. */
+.ring-sheen {
+  stroke: var(--paper);
+  opacity: 0.4;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: ring-orbit 11s linear infinite;
+}
+
+.ink-ring-centre {
+  position: absolute;
+  inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  text-align: center;
+}
+
+.ink-ring-centre strong {
+  font-size: clamp(1.3rem, 7cqi, 1.8rem);
+  font-weight: 400;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+}
+
+.ink-ring-centre span {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+
+.rule {
+  display: block;
+  height: 5px;
+  margin: 6px 0;
+  border-radius: 3px;
+  background: var(--rule-soft);
+  overflow: hidden;
+}
+
+.rule-ink {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--c, var(--accent));
+  transform-origin: left center;
+  animation: fill-across 760ms var(--turn) backwards;
+}
+
+.rule-ink.done {
+  background: var(--covered);
+}
+
+.bars {
   width: 100%;
-  min-height: 60px;
-  padding: 8px 4px;
-  border: 0;
-  background: none;
-  text-align: left;
-  border-radius: var(--r-sm);
-  transition: background-color 0.18s var(--ease);
+  margin-top: 6px;
 }
 
-.tx-row:hover,
-.list-btn:hover {
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+.bar-ink {
+  fill: var(--accent);
+  opacity: 0.85;
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: grow-up 700ms var(--turn) backwards;
 }
 
-/* Pressing a row fills it and lets go straight away, the way a system list
-   acknowledges a tap. */
-.tx-row:active,
-.list-btn:active {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  transition-duration: 0.04s;
+.bars svg rect:nth-of-type(2) { animation-delay: 60ms; }
+.bars svg rect:nth-of-type(3) { animation-delay: 120ms; }
+.bars svg rect:nth-of-type(4) { animation-delay: 180ms; }
+.bars svg rect:nth-of-type(5) { animation-delay: 240ms; }
+.bars svg rect:nth-of-type(n + 6) { animation-delay: 300ms; }
+
+.bar-rule {
+  stroke: var(--rule-soft);
+  stroke-width: 1;
 }
 
-.list-btn.dim {
+.bar-rule.base {
+  stroke: var(--rule);
+}
+
+.bar-label {
+  fill: var(--ink-4);
+  font-family: var(--hand);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bar-value {
+  fill: var(--ink-2);
+  font-family: var(--book);
+  font-size: 11px;
+}
+
+.alloc-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  margin: 12px 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--rule-soft);
+}
+
+.alloc-bar i {
+  width: var(--w);
+  background: var(--c);
+  transform-origin: left center;
+  animation: fill-across 700ms var(--turn) backwards;
+}
+
+.alloc-bar i.alloc-free {
+  background: repeating-linear-gradient(135deg, var(--ink-4) 0 4px, transparent 4px 8px);
   opacity: 0.6;
 }
 
-.tx-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
+/* ---------- The runway ---------- */
 
-.tx-title {
-  font-size: var(--t-body);
-  font-weight: 530;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tx-sub {
+.runway {
   display: flex;
+  gap: 22px;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 2px 10px;
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
+}
+
+.runway-words {
+  flex: 1 1 15rem;
   min-width: 0;
 }
 
-.tx-sub:empty {
-  display: none;
+/* ---------- Pots ---------- */
+
+.pot-list {
+  margin-top: 14px;
 }
 
-.tx-sub > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+.pot {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  transition: background-color 0.3s var(--turn), padding-left 0.3s var(--turn);
 }
 
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: var(--t-caption);
-  font-weight: 560;
-  line-height: 1.5;
+.pot:first-child {
+  border-top: 1px solid var(--rule-soft);
 }
 
-/* The category's colour, carried properly rather than hinted at. A 17% wash
-   on white read as grey on a phone and as nothing at all against black, so
-   the fill is stronger, gradient-lit from the top corner, and ringed in the
-   full-strength hue — colour you can actually identify a category by. */
-.badge {
+.pot.selected {
+  box-shadow: inset 3px 0 0 var(--c);
+  padding-left: 12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, transparent), transparent 60%);
+}
+
+.pot-open {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+/* The mark in the margin: a pot's own ink, ringed, the way a ledger carries
+   a sign against an entry. */
+.pot-mark {
   flex: none;
   display: grid;
   place-items: center;
   width: 38px;
   height: 38px;
-  /* Proportional, so the small badge keeps the same corner as the large one. */
-  border-radius: 28%;
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--c, var(--ink-4)) 42%, var(--card)), color-mix(in srgb, var(--c, var(--ink-4)) 22%, var(--card)));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--ink-4)) 55%, transparent);
-  font-size: 1.125rem;
-  line-height: 1;
+  border-radius: 50%;
+  font-size: 1.05rem;
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent);
 }
 
-.badge.sm {
-  width: 30px;
-  height: 30px;
-  font-size: var(--t-subhead);
-}
-
-.badge.acct {
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-weight: 700;
-}
-
-.tx-row .amt,
-.list-btn .amt {
-  font-size: 1rem;
-}
-
-.amt-out {
-  color: var(--ink);
-}
-
-/* Activity */
-
-.filters {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.search {
-  position: relative;
-  display: block;
-}
-
-.search svg {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--ink-3);
-}
-
-.search input {
-  padding-left: 38px !important;
-}
-
-.filter-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-
-.filter-row > label {
-  min-width: 0;
-}
-
-.filter-row select {
-  min-height: 40px;
-  padding-top: 6px;
-  padding-bottom: 6px;
-  font-size: var(--t-subhead);
-}
-
-.field.inline {
-  flex: 1;
-}
-
-.summary-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 16px;
-  padding: 10px 0;
-  font-size: 0.875rem;
-  color: var(--ink-2);
-  border-bottom: 1px solid var(--line-strong);
-}
-
-.summary-bar .link-btn {
-  font-size: 0.875rem;
-  margin-left: auto;
-}
-
-.month-group {
-  margin-top: 20px;
-}
-
-.group-head {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 16px;
-  padding: 10px 0 8px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line-strong);
-}
-
-.group-head h2 {
-  font-size: 1.125rem;
-}
-
-.group-totals {
-  display: flex;
-  gap: 12px;
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.day {
-  margin-top: 12px;
-}
-
-.day-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 4px 2px;
-  font-size: var(--t-footnote);
-  font-weight: 600;
-  color: var(--ink-2);
-}
-
-.day-nums {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  text-align: right;
-}
-
-.day-nums .amt {
-  font-weight: 600;
-}
-
-.running {
-  font-weight: 450;
-  color: var(--ink-3);
-}
-
-.more-row {
-  display: flex;
-  justify-content: center;
-  padding: 24px 0;
-}
-
-/* Budgets */
-
-.budget-list > li + li {
-  border-top: 1px solid var(--line);
-}
-
-.budget-list > li.child {
-  border-top-style: dashed;
-}
-
-.budget-btn {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  width: 100%;
-  padding: 12px 4px;
-  border: 0;
-  background: none;
-  text-align: left;
-  border-radius: var(--r-sm);
-}
-
-.budget-btn:hover {
-  background: var(--surface-2);
-}
-
-.child .budget-btn {
-  padding-left: 30px;
-}
-
-.budget-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 2px;
-}
-
-.budget-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  font-weight: 600;
-}
-
-.budget-top > span:last-child {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.budget-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.budget-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-}
-
-.link-like {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.budget-total {
-  border-top: 0;
-  padding-top: 4px;
-}
-
-.budget-total .bar {
-  height: 10px;
-  margin-bottom: 8px;
-}
-
-.budget-mini li + li {
-  margin-top: 14px;
-}
-
-.bm-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-  font-size: var(--t-subhead);
-}
-
-.bm-name {
-  font-weight: 560;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bm-left {
-  font-weight: 600;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.bm-left.s-ok {
-  color: var(--ink-2);
-}
-
-.rank li + li {
-  margin-top: 16px;
-}
-
-.rank .bar {
-  margin-bottom: 4px;
-}
-
-/* Reminders and nudges */
-
-.reminders {
-  border-top-color: var(--accent);
-}
-
-.reminder {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 12px;
-  padding: 8px 0;
-}
-
-.reminder + .reminder {
-  border-top: 1px solid var(--line);
-}
-
-.reminder-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.reminder-main strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reminder-main span {
-  font-size: var(--t-footnote);
-}
-
-.reminder-actions {
-  grid-column: 2 / -1;
-  display: flex;
-  gap: 8px;
-}
-
-@media (min-width: 640px) {
-  .reminder {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-  }
-
-  .reminder-actions {
-    grid-column: auto;
-  }
-}
-
-/* A housekeeping note, not a section of the app — so it reads as a slim
-   strip rather than a card with the same weight as the month itself. */
-.nudge {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  margin: 2px 0 12px;
-  padding: 9px 10px 9px 14px;
-  border: 0;
-  border-radius: var(--pill);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  box-shadow: none;
-  font-size: var(--t-footnote);
-  color: var(--ink-2);
-}
-
-.nudge p {
-  flex: 1 1 200px;
-}
-
-.nudge strong {
-  color: var(--ink);
-}
-
-.nudge .btn {
-  min-height: 34px;
-  padding: 0 14px;
-  background: var(--card);
-}
-
-/* Donut and legend */
-
-.breakdown {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 20px 28px;
-}
-
-.donut {
-  position: relative;
-  flex: none;
-}
-
-.donut svg {
-  display: block;
-}
-
-.donut-track {
-  stroke: var(--surface-3);
-}
-
-.donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 30px;
-}
-
-.donut-center strong {
-  font-size: 1.125rem;
-  font-weight: 680;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  overflow-wrap: anywhere;
-}
-
-.donut-center span {
-  font-size: var(--t-caption);
-  color: var(--ink-3);
-}
-
-.legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.legend li {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 0;
-  font-size: var(--t-subhead);
-}
-
-.legend li + li {
-  border-top: 1px solid var(--line);
-}
-
-.key {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-}
-
-.legend-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.legend-pct {
-  color: var(--ink-3);
-  font-size: var(--t-footnote);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  min-width: 3ch;
-}
-
-.legend .amt {
-  font-weight: 560;
-  text-align: right;
-}
-
-.legend-inline {
-  display: flex;
-  gap: 16px;
-  font-size: var(--t-footnote);
-  color: var(--ink-2);
-  margin-top: 4px;
-}
-
-.legend-inline span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.key.bar-in {
-  background: var(--bar-in);
-}
-
-.key.bar-out {
-  background: var(--bar-out);
-}
-
-/* Bar chart */
-
-.chart {
-  width: 100%;
-}
-
-.chart svg {
-  display: block;
-  overflow: visible;
-}
-
-.chart .grid {
-  stroke: var(--line);
-  stroke-width: 1;
-}
-
-.chart .grid.base {
-  stroke: var(--line-strong);
-}
-
-.chart .axis {
-  fill: var(--ink-3);
-  font-size: 11px;
-  font-family: var(--font);
-}
-
-.chart .axis.x.current {
-  fill: var(--ink);
-  font-weight: 700;
-}
-
-.chart rect.bar-in {
-  fill: var(--bar-in);
-}
-
-.chart rect.bar-out {
-  fill: var(--bar-out);
-}
-
-/* Categories */
-
-.cat-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.cat-row .list-btn {
-  flex: 1;
-  min-width: 0;
-}
-
-.cat-row.child .list-btn {
-  padding-left: 30px;
-}
-
-.order-btns {
-  display: flex;
-  flex: none;
-}
-
-/* Goals */
-
-.goal-list {
-  display: grid;
-  gap: 8px;
-}
-
-@media (min-width: 900px) {
-  .goal-list {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 8px 40px;
-  }
-}
-
-.goal {
-  border-top: 3px solid var(--c);
-}
-
-.goal-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.goal-top h2 {
-  font-size: 1.125rem;
-}
-
-.goal-pct {
-  font-weight: 650;
-  color: var(--ink-2);
-}
-
-.goal-amt {
-  margin: 4px 0 10px;
-}
-
-.goal-amt .amt {
-  font-size: 1.5rem;
-  font-weight: 680;
-  letter-spacing: -0.02em;
-}
-
-/* Plans */
-
-.plan {
-  border-top: 3px solid var(--c);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.plan-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.plan-top h2 {
-  font-size: 1.125rem;
-  min-width: 0;
-}
-
-/* Nest egg or trip, said once and quietly — the bars below carry the story. */
-.plan-kind {
-  flex: none;
-  padding: 2px 10px;
-  border-radius: var(--pill);
-  background: var(--surface-2);
-  color: var(--ink-3);
-  font-size: var(--t-caption);
-  font-weight: 620;
-}
-
-.plan .goal-amt {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.plan .goal-amt .goal-pct {
-  margin-left: auto;
-}
-
-.plan-spend {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 14px 0 6px;
-  font-size: 0.875rem;
-  color: var(--ink-2);
-}
-
-.plan-charges {
-  margin-top: 10px;
-  font-size: 0.875rem;
-}
-
-.plan-charges > li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.plan-charges > li:last-child {
-  border-bottom: 0;
-}
-
-.plan-charge-what {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.plan .bar + .muted,
-.plan .bar + .plan-verdict {
-  margin-top: 10px;
-}
-
-.plan .btn-row {
-  margin-top: 12px;
-}
-
-/* The one line that answers "will I make it?". Colour is allowed here
-   because it is a statement about money, not decoration. */
-.plan-verdict {
-  font-size: 0.875rem;
-  font-weight: 560;
-}
-
-.plan-verdict.ok {
-  color: var(--ok);
-}
-
-.plan-verdict.late {
-  color: var(--over);
-}
-
-.plan-whatif .plan-levers {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.plan-headline {
-  font-size: 1.0625rem;
-  font-weight: 620;
-  line-height: 1.35;
-  margin: 18px 0 4px;
-  text-wrap: balance;
-}
-
-.plan-headline.ok {
-  color: var(--ok);
-}
-
-.plan-headline.late {
-  color: var(--over);
-}
-
-.plan-note {
-  font-size: 0.875rem;
-  color: var(--ink-2);
-  margin-bottom: 14px;
-}
-
-.goal .bar {
-  height: 10px;
-  margin-bottom: 8px;
-}
-
-.goal .bar-fill {
-  background: var(--c);
-}
-
-/* More menu */
-
-.menu li + li {
-  border-top: 1px solid var(--line);
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 64px;
-  padding: 10px 4px;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.menu-item strong {
-  display: block;
-  font-weight: 600;
-}
-
-.menu-item small {
-  display: block;
-  color: var(--ink-3);
-  font-size: 0.875rem;
-}
-
-.menu-item svg {
-  color: var(--ink-4);
-  flex: none;
-}
-
-/* Facts */
-
-.facts > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 8px 0;
-}
-
-.facts > div + div {
-  border-top: 1px solid var(--line);
-}
-
-.facts dt {
-  color: var(--ink-3);
-  flex: none;
-}
-
-.facts dd {
-  text-align: right;
-  font-weight: 560;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.facts.keys dt {
-  color: var(--ink);
-}
-
-/* Empty states */
-
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 36px 0 28px;
-  max-width: 44ch;
-}
-
-.empty.small {
-  padding: 28px 0;
-}
-
-.empty-mark {
-  width: 64px;
-  height: 40px;
-  color: var(--ink-4);
-  margin-bottom: 8px;
-}
-
-.empty h2 {
-  font-size: var(--t-title2);
-}
-
-.empty p {
-  color: var(--ink-2);
-}
-
-.tips ul {
-  margin: 0;
-  padding-left: 1.1em;
-  color: var(--ink-2);
-}
-
-.tips li + li {
-  margin-top: 6px;
-}
-
-/* Import */
-
-.import-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px;
-  border-radius: var(--r);
-  background: var(--surface-2);
-}
-
-.table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-}
-
-.preview {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.preview th,
-.preview td {
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.preview th {
-  font-weight: 600;
-  color: var(--ink-3);
-  background: var(--surface-2);
-}
-
-.preview tr:last-child td {
-  border-bottom: 0;
-}
-
-.preview .num {
-  text-align: right;
-}
-
-@media (max-width: 520px) {
-  .preview .wide-only {
-    display: none;
-  }
-}
-
-.errors summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--warn);
-}
-
-.errors ul {
-  margin: 8px 0 0;
-  padding-left: 1.2em;
-  font-size: 0.875rem;
-  color: var(--ink-2);
-}
-
-/* Settings */
-
-.settings {
-  display: flex;
-  flex-direction: column;
-  max-width: 720px;
-}
-
-.settings .panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.settings .panel > h2 {
-  margin-bottom: 0;
-}
-
-.settings .btn-row {
-  margin-top: 0;
-}
-
-.danger-zone {
-  border-top-color: color-mix(in srgb, var(--over) 60%, var(--line));
-}
-
-.danger-zone .btn {
-  align-self: flex-start;
-}
-
-/* ---------- The second page ---------- */
-
-/* Hidden by default: it only appears where there is genuinely a second area
-   to put it in — a wide laptop window, or the facing leaf of a half-folded
-   Fold. The content is identical in both, so there is one thing to maintain
-   and one thing to learn. */
-.companion {
-  display: none;
-  flex-direction: column;
-  gap: 18px;
-  min-width: 0;
-}
-
-.companion-label {
-  font-size: var(--t-footnote);
-  font-weight: 650;
-  color: var(--ink-3);
-}
-
-/* Logging is the reason to look at this page, so it leads with a full-width
-   commit button and the categories you reach for most. */
-.companion-new {
-  width: 100%;
-  margin-bottom: 10px;
-}
-
-.companion-again-btn {
-  justify-content: flex-start;
-  width: 100%;
-  gap: 10px;
-  padding: 0 12px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  font-size: var(--t-subhead);
-  font-weight: 580;
-}
-
-.companion-again-btn span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.companion-today {
-  font-size: 1.75rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.05;
-  font-variant-numeric: tabular-nums;
-  animation: reveal-up 520ms var(--ease) backwards;
-}
-
-.companion-today-sub {
-  margin-top: 2px;
-  font-size: var(--t-caption);
-  color: var(--ink-3);
-}
-
-/* Seven days, one bar each. Small enough to be a sparkline, big enough to
-   see which day got away from you. */
-.companion-week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-  align-items: end;
-  height: 58px;
-  margin: 12px 0 8px;
-}
-
-.cw-day {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  height: 100%;
-}
-
-/* A faint slot behind every day, so a quiet week still reads as seven days
-   rather than one lonely bar. */
-.cw-day::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 15px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-
-.cw-bar {
-  position: relative;
-  width: 100%;
-  height: var(--h, 3%);
-  border-radius: 4px;
-  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent));
-  transform-origin: bottom;
-  animation: grow-y 520ms var(--ease) backwards;
-}
-
-.cw-day small {
-  font-size: 0.625rem;
-  color: var(--ink-4);
-  line-height: 1;
-}
-
-/* Today keeps a slow glow of its own, so the pane has something moving in
-   it even when the ring is off screen. */
-.cw-today .cw-bar {
-  background: linear-gradient(180deg, var(--hue-activity), var(--warn));
-  animation: grow-y 520ms var(--ease) backwards, day-glow 3.4s ease-in-out 520ms infinite;
-}
-
-.cw-today small {
-  color: var(--ink-2);
-  font-weight: 700;
-}
-
-.companion-next > li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 0;
-  font-size: 0.875rem;
-}
-
-.companion-next > li + li {
-  border-top: 1px solid var(--line);
-}
-
-.companion-next-main {
-  display: flex;
-  flex-direction: column;
+.pot-body {
   min-width: 0;
   flex: 1 1 auto;
 }
 
-.companion-next-name {
-  font-weight: 580;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.companion-next-main small {
-  color: var(--ink-3);
-  font-size: var(--t-caption);
-}
-
-.companion-block h2 {
-  font-size: var(--t-caption);
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  color: var(--ink-3);
-  margin-bottom: 8px;
-}
-
-.companion-plan {
+.pot-title {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  color: inherit;
-  text-decoration: none;
-  transition: transform 0.16s var(--spring), background-color 0.14s ease;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.companion-plan:hover {
-  background: var(--surface-3);
-  transform: translateY(-2px);
+.pot-name {
+  font-size: 1.2rem;
 }
 
-.companion-plan-name {
-  font-weight: 620;
-  font-size: var(--t-subhead);
+.pot-kind {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
 }
 
-.companion-plan small {
-  color: var(--ink-3);
-  font-size: var(--t-caption);
-}
-
-.companion-again {
-  display: grid;
+.pot-figures {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
 }
 
-.companion-again .btn {
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.companion-empty {
-  font-size: 0.875rem;
+.pot-pct {
+  margin-left: auto;
+  font-variant-numeric: lining-nums tabular-nums;
   color: var(--ink-3);
 }
 
-/* 820px is the Pixel Fold opened flat, and the first width where a column
-   can be taken out without squeezing the content. That is the state the
-   phone spends most of its life in, so it gets the second page too — the
-   half-folded spread below is the same idea, not a separate feature. */
-@media (min-width: 820px) {
-  :root {
-    --aside-w: 280px;
-  }
-
-  .app {
-    grid-template-columns: minmax(0, 1fr) minmax(0, var(--aside-w));
-  }
-
-  main {
-    max-width: none;
-  }
-
-  .companion {
-    display: flex;
-    grid-column: -2;
-    grid-row: 1 / span 2;
-    position: sticky;
-    top: 0;
-    align-self: start;
-    height: 100dvh;
-    overflow-y: auto;
-    /* Clears the status bar: this column runs the full height of the window,
-       so without the inset its first line sits under the clock. */
-    padding: calc(var(--safe-t) + 24px) var(--pad) calc(var(--safe-b) + 32px);
-    border-left: var(--bw) solid var(--line);
-    background: var(--surface);
-    animation: leaf-open 420ms var(--ease);
-  }
-}
-
-@media (min-width: 1180px) {
-  .app {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, 320px);
-  }
-}
-
-/* ---------- Foldable postures ---------- */
-
-/* Half-folding a phone makes the browser report two viewport segments with
-   the hinge between them. Everything below is additive: a device that can't
-   report segments never matches these queries and keeps the normal layout.
-   Both postures hand the crease a job instead of letting it cut through
-   content — the page stays on one side of it, the sheet opens on the other. */
-
-/* Book posture: the hinge runs top to bottom and the phone is held open like
-   a book. The left page becomes a phone-sized app, and the right page is the
-   facing page — the month's running total, or the sheet when one is open. */
-@media (horizontal-viewport-segments: 2) {
-  :root {
-    --pad: 16px;
-    --page-w: env(viewport-segment-width 0 0, 50vw);
-    --page2-left: env(viewport-segment-left 1 0, 50vw);
-    --page2-w: env(viewport-segment-width 1 0, 50vw);
-  }
-
-  .app {
-    display: block;
-  }
-
-  .sidebar {
-    display: none;
-  }
-
-  .banner-slot,
-  main {
-    width: var(--page-w);
-    max-width: none;
-  }
-
-  main {
-    /* Sit against the outer edge, not centred across the crease. */
-    margin: 0;
-    padding: calc(var(--topbar-h) + var(--safe-t) + 4px) var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 48px);
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    min-height: 0;
-  }
-
-  /* Both bars belong to the left leaf: the capsule centres in that page, and
-     the title bar stops at the crease instead of reaching across it. */
-  .topbar {
-    left: 0;
-    top: 0;
-    right: auto;
-    width: var(--page-w);
-    margin-left: 0;
-    height: calc(var(--topbar-h) + var(--safe-t));
-    padding-top: var(--safe-t);
-    border-radius: 0;
-  }
-
-  /* A leaf is phone-sized, so the phone's own chrome comes back: the capsule
-     returns to the bottom of the leaf with the add button in it, and the
-     toolbar goes back to a plain centred title. */
-  /* Back to a fixed bottom bar: at 600px the capsule becomes a laid-out
-     child of the toolbar, and a leaf that wide would otherwise keep it up
-     there with its labels stripped. */
-  .tabbar {
-    position: fixed;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    top: auto;
-    height: var(--tabbar-h);
-    transform: translateX(-50%);
-  }
-
-  .tabbar a span {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
-  }
-
-  .tabbar a svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  .tabbar a {
-    flex-direction: column;
-    gap: 2px;
-    font-size: 0.625rem;
-  }
-
-  .fab {
-    display: grid;
-  }
-
-  .topbar-side {
-    display: none;
-  }
-
-  .tabbar {
-    bottom: calc(var(--safe-b) + 10px);
-    left: calc(var(--page-w) / 2);
-    width: min(420px, calc(var(--page-w) - 24px));
-  }
-
-  .topbar {
-    justify-content: center;
-    padding: 0;
-    overflow: visible;
-  }
-
-  .topbar::before {
-    display: block;
-  }
-
-  .topbar-title {
-    flex: 0 1 auto;
-    max-width: calc(100% - 96px);
-    text-align: center;
-  }
-
-  /* A page is phone-width even though the viewport spans both, so type that
-     scales with vw would be sized for the whole spread and break figures
-     onto two lines. Pin it to the narrow end of each scale. */
-  .hero-line {
-    font-size: 1.625rem;
-  }
-
-  .hero.small .hero-line {
-    font-size: var(--t-title2);
-  }
-
-  /* The card's own padding eats into a 400px page, so give the three
-     figures their room back before a number breaks across lines. */
-  .figures {
-    padding: 14px 12px;
-    gap: 8px;
-  }
-
-  .figures dd {
-    font-size: 1rem;
-  }
-
-  /* Likewise the dashboard: two columns fit the spread, not a single page. */
-  .dash-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* The facing leaf. It sits against the crease, not centred in the half,
-     so the two pages read as one spread. */
-  .companion {
-    display: flex;
-    position: fixed;
-    z-index: 5;
-    top: 0;
-    left: var(--page2-left);
-    width: var(--page2-w);
-    height: 100dvh;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 18px;
-    padding: 28px var(--pad) calc(var(--safe-b) + 24px);
-    overflow-y: auto;
-    border-left: var(--bw) solid var(--line);
-    background: var(--surface);
-    animation: leaf-open 420ms var(--ease);
-  }
-
-  .companion-net {
-    font-size: var(--t-title1);
-  }
-
-  dialog.sheet {
-    align-items: stretch;
-    justify-content: flex-start;
-    padding: 0 0 0 var(--page2-left);
-  }
-
-  .sheet-panel {
-    width: var(--page2-w);
-    max-width: none;
-    max-height: none;
-    border-radius: 0;
-  }
-
-  /* A facing page is phone-width, so the form keeps its single column. */
-  dialog.sheet.tx .sheet-body {
-    display: block;
-  }
-
-  .tx-context {
-    display: none;
-  }
-
-  .toasts {
-    left: calc(var(--page-w) / 2);
-    bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
-    width: min(560px, calc(var(--page-w) - 24px));
-  }
-}
-
-/* Tabletop posture: the hinge runs left to right and the phone stands like a
-   small laptop. The top half stays upright and readable, so the sheet opens
-   in the bottom half, flat under your hands. */
-@media (vertical-viewport-segments: 2) {
-  :root {
-    /* Stacked segments are indexed down the y axis: the lower half is 0 1. */
-    --bottom-h: env(viewport-segment-height 0 1, 50dvh);
-  }
-
-  .app {
-    display: block;
-  }
-
-  .sidebar {
-    display: none;
-  }
-
-  main {
-    max-width: none;
-    padding: calc(var(--topbar-h) + var(--safe-t) + 4px) var(--pad) calc(var(--tabbar-h) + var(--safe-b) + 48px);
-    margin: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    min-height: 0;
-  }
-
-  .topbar {
-    left: 0;
-    top: 0;
-    right: 0;
-    width: auto;
-    margin-left: 0;
-    height: calc(var(--topbar-h) + var(--safe-t));
-    padding: var(--safe-t) 0 0;
-    justify-content: center;
-    border-radius: 0;
-    overflow: visible;
-  }
-
-  .topbar::before {
-    display: block;
-  }
-
-  .topbar-title {
-    flex: 0 1 auto;
-    max-width: calc(100% - 96px);
-    text-align: center;
-  }
-
-  /* Stood on a table it is one phone-shaped page, so the capsule goes back
-     to the bottom of it with the add button in place. */
-  /* Back to a fixed bottom bar: at 600px the capsule becomes a laid-out
-     child of the toolbar, and a leaf that wide would otherwise keep it up
-     there with its labels stripped. */
-  .tabbar {
-    position: fixed;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    top: auto;
-    height: var(--tabbar-h);
-    transform: translateX(-50%);
-  }
-
-  .tabbar a span {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
-  }
-
-  .tabbar a svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  .tabbar a {
-    flex-direction: column;
-    gap: 2px;
-    font-size: 0.625rem;
-  }
-
-  .fab {
-    display: grid;
-  }
-
-  .topbar-side {
-    display: none;
-  }
-
-  .tabbar {
-    bottom: calc(var(--safe-b) + 10px);
-    left: 50%;
-    width: min(420px, calc(100% - 24px));
-  }
-
-  dialog.sheet {
-    align-items: flex-end;
-    padding: 0;
-  }
-
-  .sheet-panel {
-    width: 100%;
-    max-width: none;
-    height: var(--bottom-h);
-    max-height: none;
-    border-radius: var(--r-lg) var(--r-lg) 0 0;
-  }
-
-  /* Keep confirmations above the crease, where the screen is upright. */
-  .toasts {
-    left: 50%;
-    bottom: calc(var(--bottom-h) + 12px);
-  }
-}
-
-/* ---------- Motion ---------- */
-
-/* Nearly everything here is a transform or an opacity, so it stays on the
-   compositor and costs nothing on a phone. The exceptions are the donut's
-   stroke-width and the clip-path used to wipe figures in, both of which are
-   cheap at these sizes. All of it is switched off wholesale by the
-   reduced-motion block at the end of the file. */
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.985);
-  }
-}
-
-@keyframes stroke-in {
-  from {
-    transform: scaleY(0);
-  }
-}
-
-@keyframes fill-x {
-  from {
-    transform: scaleX(0);
-  }
-}
-
-@keyframes grow-y {
-  from {
-    transform: scaleY(0);
-  }
-}
-
-@keyframes ring-in {
-  from {
-    stroke-width: 0;
-    opacity: 0;
-  }
-}
-
-@keyframes ring-pulse {
-  0%, 100% {
-    filter: drop-shadow(0 3px 12px color-mix(in srgb, var(--ring-glow) 55%, transparent));
-  }
-  50% {
-    filter: drop-shadow(0 3px 22px color-mix(in srgb, var(--ring-glow) 90%, transparent));
-  }
-}
-
-/* ---------- Ambient motion ---------- */
-
-/* Motion that runs on its own, with nothing touched. The app should look
-   alive when it is just sitting on the desk: light travelling round the
-   dial, colour drifting behind the month, a highlight crossing each budget
-   bar as it settles. All of it is transform, opacity or filter, and all of
-   it stops dead under reduced motion. */
-@keyframes ring-orbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes aurora-a {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.45;
-  }
-  50% {
-    transform: translate3d(-12%, 9%, 0) scale(1.18);
-    opacity: 0.62;
-  }
-  100% {
-    transform: translate3d(6%, -6%, 0) scale(0.94);
-    opacity: 0.4;
-  }
-}
-
-@keyframes aurora-b {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1.05);
-    opacity: 0.38;
-  }
-  50% {
-    transform: translate3d(14%, -10%, 0) scale(0.9);
-    opacity: 0.55;
-  }
-  100% {
-    transform: translate3d(-8%, 8%, 0) scale(1.16);
-    opacity: 0.34;
-  }
-}
-
-@keyframes bar-sheen {
-  0% {
-    transform: translateX(-120%);
-  }
-  55%, 100% {
-    transform: translateX(340%);
-  }
-}
-
-@keyframes day-glow {
-  0%, 100% {
-    filter: brightness(1) drop-shadow(0 0 0 transparent);
-  }
-  50% {
-    filter: brightness(1.22) drop-shadow(0 0 8px color-mix(in srgb, var(--hue-activity) 70%, transparent));
-  }
-}
-
-@keyframes chip-breathe {
-  0%, 100% {
-    box-shadow: 0 2px 7px color-mix(in srgb, var(--hue) 45%, transparent);
-  }
-  50% {
-    box-shadow: 0 3px 14px color-mix(in srgb, var(--hue) 80%, transparent);
-  }
-}
-
-@keyframes pop-in {
-  from {
-    opacity: 0;
-    transform: scale(0.88);
-  }
-}
-
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.96);
-  }
-}
-
-@keyframes draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* A figure wipes upward into place. The text is never altered, only masked,
-   so the number on screen is always the real one. */
-@keyframes reveal-up {
-  from {
-    clip-path: inset(0 0 100% 0);
-    transform: translateY(0.25em);
-  }
-  to {
-    clip-path: inset(0 0 -20% 0);
-    transform: translateY(0);
-  }
-}
-
-@keyframes slide-in-left {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-}
-
-/* The second page swinging open from the crease. Wiped rather than slid: a
-   pane that slides in from the right edge overflows the page while it does
-   it, which the overflow checks catch. */
-@keyframes leaf-open {
-  from {
-    opacity: 0;
-    clip-path: inset(0 0 0 34%);
-  }
-  to {
-    opacity: 1;
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-/* Screens push sideways in the direction you're travelling — the screen you
-   leave slides out the way you came from, the new one arrives from the far
-   side. The offset stays a fraction of the width rather than a full screen,
-   so nothing ever escapes the content column on a folded phone. */
-@keyframes page-out {
-  to {
-    opacity: 0;
-    transform: translateX(-24%);
-  }
-}
-
-@keyframes page-in {
-  from {
-    opacity: 0;
-    transform: translateX(24%);
-  }
-}
-
-@keyframes page-out-back {
-  to {
-    opacity: 0;
-    transform: translateX(24%);
-  }
-}
-
-@keyframes page-in-back {
-  from {
-    opacity: 0;
-    transform: translateX(-24%);
-  }
-}
-
-/* ---------- Moving between screens ---------- */
-
-/* Only the content area is named, so the rail, tab bar and second page stay
-   put and live while the screen behind them slides across. app.js sets
-   data-nav for the duration, and reverses the slide when you go back. */
-main {
-  view-transition-name: page;
-}
-
-::view-transition-group(page) {
-  animation-duration: 360ms;
-}
-
-::view-transition-image-pair(page) {
-  isolation: auto;
-}
-
-::view-transition-old(page),
-::view-transition-new(page) {
-  mix-blend-mode: normal;
-  height: 100%;
-  overflow: clip;
-}
-
-::view-transition-old(page) {
-  animation: page-out 190ms var(--ease) both;
-}
-
-::view-transition-new(page) {
-  animation: page-in 360ms var(--ease) 50ms both;
-}
-
-/* Going back reverses the direction. Separate keyframes rather than
-   animation-direction: reverse, which would start the outgoing screen
-   already invisible and fade it *in* as it leaves. */
-:root[data-nav='back'] ::view-transition-old(page) {
-  animation-name: page-out-back;
-}
-
-:root[data-nav='back'] ::view-transition-new(page) {
-  animation-name: page-in-back;
-}
-
-/* Arriving on a screen without view transitions: blocks come up in sequence,
-   top first. Set only on a route change (app.js), so saving a transaction
-   doesn't replay the whole page. */
-main[data-enter] > * {
-  animation: rise 420ms var(--spring) backwards;
-}
-
-main[data-enter] > *:nth-child(2) { animation-delay: 50ms; }
-main[data-enter] > *:nth-child(3) { animation-delay: 100ms; }
-main[data-enter] > *:nth-child(4) { animation-delay: 150ms; }
-main[data-enter] > *:nth-child(5) { animation-delay: 200ms; }
-main[data-enter] > *:nth-child(n + 6) { animation-delay: 240ms; }
-
-/* ---------- Figures ---------- */
-
-/* Every number on screen wipes in, and does it again whenever it changes —
-   that's the confirmation that what you just saved landed. */
-.hero-line,
-.figures dd,
-.companion-net {
-  animation: reveal-up 520ms var(--ease) backwards;
-}
-
-.figures dd { animation-duration: 460ms; }
-.figures > div:nth-child(2) dd { animation-delay: 70ms; }
-.figures > div:nth-child(3) dd { animation-delay: 140ms; }
-
-/* Bars and budget fills wipe out from the left every time the figure
-   changes. */
-.bar-fill,
-.goal .bar-fill {
-  transform-origin: left center;
-  animation: fill-x 620ms var(--ease) backwards;
-}
-
-.budget-row:nth-child(2) .bar-fill { animation-delay: 60ms; }
-.budget-row:nth-child(3) .bar-fill { animation-delay: 120ms; }
-.budget-row:nth-child(4) .bar-fill { animation-delay: 180ms; }
-.budget-row:nth-child(n + 5) .bar-fill { animation-delay: 220ms; }
-
-/* Chart columns grow from the baseline, left to right. */
-.chart rect {
-  transform-box: fill-box;
-  transform-origin: bottom;
-  animation: grow-y 500ms var(--ease) backwards;
-}
-
-.chart rect:nth-of-type(1) { animation-delay: 0ms; }
-.chart rect:nth-of-type(2) { animation-delay: 35ms; }
-.chart rect:nth-of-type(3) { animation-delay: 70ms; }
-.chart rect:nth-of-type(4) { animation-delay: 105ms; }
-.chart rect:nth-of-type(5) { animation-delay: 140ms; }
-.chart rect:nth-of-type(6) { animation-delay: 175ms; }
-.chart rect:nth-of-type(7) { animation-delay: 210ms; }
-.chart rect:nth-of-type(8) { animation-delay: 245ms; }
-.chart rect:nth-of-type(9) { animation-delay: 280ms; }
-.chart rect:nth-of-type(10) { animation-delay: 315ms; }
-.chart rect:nth-of-type(n + 11) { animation-delay: 350ms; }
-
-/* The donut thickens into place a segment at a time. Animating stroke-width
-   leaves the inline dasharray that positions each segment alone. */
-.donut svg circle:not(.donut-track) {
-  animation: ring-in 620ms var(--ease) backwards;
-}
-
-.donut svg circle:nth-of-type(2) { animation-delay: 70ms; }
-.donut svg circle:nth-of-type(3) { animation-delay: 140ms; }
-.donut svg circle:nth-of-type(4) { animation-delay: 210ms; }
-.donut svg circle:nth-of-type(5) { animation-delay: 280ms; }
-.donut svg circle:nth-of-type(6) { animation-delay: 350ms; }
-.donut svg circle:nth-of-type(n + 7) { animation-delay: 400ms; }
-
-.donut-center {
-  animation: pop-in 420ms var(--spring) 220ms backwards;
-}
-
-/* The hero ring draws in the same way the donut segments thicken into place —
-   the outer (money) ring first, the inner (day-of-month) ring just behind
-   it — and an over-budget ring keeps a slow glow going afterward so it's the
-   one thing on Home that's still moving when you glance back at it. */
-.ring-fill {
-  animation: ring-in 640ms var(--ease) backwards;
-}
-
-.ring-fill-inner {
-  animation: ring-in 640ms var(--ease) 140ms backwards;
-}
-
-.hero-ring[data-state='over'] .ring-fill {
-  animation: ring-in 640ms var(--ease) backwards, ring-pulse 2.2s ease-in-out 700ms infinite;
-}
-
-.hero-ring-center {
-  animation: pop-in 420ms var(--spring) 260ms backwards;
-}
-
-.legend li {
-  animation: slide-in-left 360ms var(--ease) backwards;
-}
-
-.legend li:nth-child(2) { animation-delay: 45ms; }
-.legend li:nth-child(3) { animation-delay: 90ms; }
-.legend li:nth-child(4) { animation-delay: 135ms; }
-.legend li:nth-child(5) { animation-delay: 180ms; }
-.legend li:nth-child(n + 6) { animation-delay: 210ms; }
-
-/* ---------- Lists ---------- */
-
-/* Rows fan in behind the screen they arrive on. Scoped to the entrance so a
-   saved transaction doesn't restart the whole list. */
-main[data-enter] .tx-row,
-main[data-enter] .budget-row,
-main[data-enter] .companion-next > li {
-  animation: slide-in-left 320ms var(--ease) backwards;
-}
-
-main[data-enter] .tx-row:nth-child(2) { animation-delay: 40ms; }
-main[data-enter] .tx-row:nth-child(3) { animation-delay: 80ms; }
-main[data-enter] .tx-row:nth-child(4) { animation-delay: 120ms; }
-main[data-enter] .tx-row:nth-child(5) { animation-delay: 160ms; }
-main[data-enter] .tx-row:nth-child(n + 6) { animation-delay: 190ms; }
-
-/* ---------- Chrome ---------- */
-
-.toast {
-  animation: toast-in 300ms var(--bounce);
-}
-
-/* The tab bar's current page is underlined by a stroke that springs out from
-   the middle, and its icon lifts. */
-.tabbar a svg {
-  transition: transform 280ms var(--spring);
-}
-
-.tabbar a[aria-current='page'] svg {
-  transform: translateY(-1px) scale(1.06);
-}
-
-.tabbar a:active svg {
-  transform: scale(0.88);
-  transition-duration: 90ms;
-}
-
-/* The same idea in the rail and sidebar: the active item slides its marker
-   into place rather than blinking on. */
-.side-nav a {
-  transition: background-color 180ms var(--ease), color 180ms var(--ease), transform 180ms var(--spring);
-}
-
-.side-nav a:hover {
-  transform: translateX(2px);
-}
-
-.side-nav a:active {
-  transform: scale(0.97);
-}
-
-/* The mark draws itself, stroke by stroke, the way you'd actually tally. */
-.brand-mark path {
-  stroke-dasharray: 30;
-  stroke-dashoffset: 30;
-  animation: draw 440ms var(--ease) forwards;
-}
-
-.brand-mark path:nth-child(1) { animation-delay: 80ms; }
-.brand-mark path:nth-child(2) { animation-delay: 170ms; }
-.brand-mark path:nth-child(3) { animation-delay: 260ms; }
-.brand-mark path:nth-child(4) { animation-delay: 350ms; }
-.brand-mark path:nth-child(5) { animation-delay: 470ms; }
-
-/* Cards lift toward a pointer; rows slide under a finger. */
-@media (hover: hover) and (pointer: fine) {
-  .panel,
-  .hero {
-    transition: transform 240ms var(--ease), box-shadow 240ms var(--ease);
-  }
-
-  .panel:hover,
-  .hero:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-2);
-  }
-}
-
-.tx-row,
-.list-btn,
-.budget-btn {
-  transition: background-color 0.16s ease, transform 0.16s var(--spring);
-}
-
-.tx-row:active,
-.list-btn:active,
-.budget-btn:active {
-  transform: scale(0.985);
-}
-
-.chip span,
-.chip-add,
-.badge {
-  transition: transform 0.18s var(--bounce), box-shadow 0.18s var(--ease), background-color 0.14s ease;
-}
-
-.companion-again .btn:hover .badge {
-  transform: rotate(-8deg) scale(1.12);
-}
-
-/* Inputs settle into focus rather than snapping. */
-input:not([type='radio']):not([type='checkbox']),
-select,
-textarea {
-  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease), background-color 0.18s ease;
-}
-
-/* ---------- Motion preferences ---------- */
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-@media (hover: none) {
-  .tx-row:hover,
-  .list-btn:hover,
-  .budget-btn:hover {
-    background: none;
-  }
-
-  .tx-row:active,
-  .list-btn:active,
-  .budget-btn:active {
-    background: var(--surface-2);
-  }
-}
-
-@media print {
-  .sidebar,
-  .tabbar,
-  .toasts,
-  .banner-slot {
-    display: none !important;
-  }
-
-  main {
-    padding: 0;
-  }
-}
-
-
-/* ---------- Presenting a sheet ---------- */
-
-/* A sheet doesn't just cover the page, it pushes it back a step: the page
-   shrinks into a rounded card and the black behind it shows through at the
-   edges, so the two read as a stack rather than as one flat screen. The
-   bottom capsule drops away at the same time, since nothing on it is
-   reachable while a sheet is up. */
-.app {
-  background: var(--bg);
-  transform-origin: top center;
-  transition: transform 0.5s var(--ease), border-radius 0.5s var(--ease);
-}
-
-body {
-  transition: background-color 0.5s var(--ease);
-}
-
-:root[data-sheet] body {
-  background: #000;
-}
-
-:root[data-sheet] .app {
-  transform: translateY(10px) scale(0.93);
-  border-radius: var(--r-screen);
-  overflow: clip;
-}
-
-:root[data-sheet] .tabbar {
-  opacity: 0;
-  transform: translateX(-50%) translateY(28px);
-}
-
-@media (min-width: 600px) {
-  :root[data-sheet] .tabbar {
-    transform: none;
-  }
-}
-
-/* The receded card is content only. Both bars go with it — and the title bar
-   has to, because shrinking the page reparents anything fixed inside it and
-   would otherwise strand the bar at the top of the document. */
-:root[data-sheet] .topbar {
-  opacity: 0;
-}
-
-.topbar {
-  transition: opacity 0.3s var(--ease);
-}
-
-/* Half-folded, each leaf already has its own job and the sheet takes a whole
-   leaf rather than covering the page, so there is nothing to push back. */
-@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
-  :root[data-sheet] .app {
-    transform: none;
-    border-radius: 0;
-    overflow: visible;
-  }
-
-  :root[data-sheet] body {
-    background: var(--bg);
-  }
-
-  :root[data-sheet] .tabbar {
-    opacity: 1;
-    transform: translateX(-50%);
-  }
-
-  :root[data-sheet] .topbar {
-    opacity: 1;
-  }
-}
-
-
-/* ---------- Cards on the canvas ---------- */
-
-/* With the content lifted onto an opaque canvas, the cards on it can no
-   longer be the same white — so the ladder inverts one step: the canvas
-   takes the lighter surface and the cards take the grouped one. Same
-   contrast, same reading order. */
-@media (min-width: 600px) {
-  .panel,
-  .hero,
-  .figures,
-  .nudge {
-    border-color: transparent;
-    box-shadow: none;
-  }
-
-  .figures.compact {
-    background: none;
-  }
-}
-
-/* ---------- Cards on a leaf ---------- */
-
-/* Half-folded, a leaf is phone-sized and there is no canvas to lift the
-   content onto — so the ladder goes back the way round it is on the cover
-   screen: page underneath, white cards on top. Without this the cards keep
-   the canvas fill and vanish into the background. This has to sit after the
-   canvas rules above, which is why it is last in the file. */
-@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
-  :root {
-    --card: var(--surface);
-  }
-
-  .panel,
-  .hero,
-  .figures,
-  .nudge {
-    box-shadow: var(--shadow-1);
-  }
-
-  .figures.compact {
-    background: none;
-    box-shadow: none;
-  }
-}
-
-/* Standing on a table the sheet is a card you can flick away again, so the
-   grabber comes back and the corners match the cover screen's. */
-@media (vertical-viewport-segments: 2) {
-  .sheet-panel {
-    border-radius: var(--r-screen) var(--r-screen) 0 0;
-  }
-
-  .sheet-panel::before {
-    display: block;
-  }
-
-  .sheet-head {
-    padding-top: 18px;
-  }
-}
-
-/* ---------- Touch targets ---------- */
-
-/* A finger needs more room than a cursor, but growing the buttons would move
-   everything around them — so on a touch screen each small control gets an
-   invisible pad centred on itself that only the pointer sees. Nothing in the
-   layout shifts, and the icons stay the size the design wants them. */
-@media (pointer: coarse) {
-  .icon-btn,
-  .btn.small,
-  .month-nav .icon-btn {
-    position: relative;
-  }
-
-  .icon-btn::after,
-  .btn.small::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: max(100%, 48px);
-    height: max(100%, 48px);
-    transform: translate(-50%, -50%);
-  }
-
-  /* Reorder arrows sit side by side, so a 48px pad on each would overlap its
-     neighbour and steal its taps. 44px is the smallest a finger reliably
-     hits, and it still clears the gap between them. */
-  .icon-btn.sm::after {
-    width: max(100%, 44px);
-    height: max(100%, 44px);
-  }
-}
-
-
-/* ---------- Savings first ---------- */
-
-/* Figures that sit under a hero: a chip each, in its own colour, so three
-   numbers read apart without labels doing the work. */
-.stat-chips {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 16px 0 0;
-}
-
-.stat-chips > div {
-  min-width: 0;
-  padding: 9px 12px 10px;
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--chip, var(--ink)) 12%, var(--card));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--ink)) 16%, transparent);
-}
-
-.stat-chips dt {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--t-caption);
-  color: var(--ink-3);
-}
-
-.stat-chips dd {
-  margin: 0;
-  font-size: clamp(0.9375rem, 3.6cqi, 1.25rem);
-  font-weight: 660;
-  letter-spacing: -0.015em;
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-chips dd small {
-  font-size: 0.6875rem;
-  font-weight: 560;
-  color: var(--ink-3);
-}
-
-/* A plan as a tile: its ring, its name, what it costs a month. On the cover
-   screen these are a row you flick through with a thumb; from the width of
-   an opened Fold they lay out as a grid, because there is room for it. */
-.plan-strip {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(230px, 1fr);
-  gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
-  padding-bottom: 4px;
-  margin: 0 calc(var(--pad) * -1);
-  padding-inline: var(--pad);
-  scrollbar-width: none;
-}
-
-.plan-strip::-webkit-scrollbar {
-  display: none;
-}
-
-@container page (min-width: 520px) {
-  .plan-strip {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
-    overflow: visible;
-    margin: 0;
-    padding-inline: 0;
-  }
-}
-
-.plan-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  padding: 14px;
-  border-radius: var(--r-nested, var(--r-sm));
-  background: color-mix(in srgb, var(--c) 10%, var(--card));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 22%, transparent);
-  scroll-snap-align: start;
-  transition: transform 0.35s var(--spring), box-shadow 0.3s var(--ease);
-}
-
-.plan-tile.selected {
-  box-shadow: inset 0 0 0 2px var(--c), 0 6px 18px color-mix(in srgb, var(--c) 28%, transparent);
-}
-
-.plan-tile-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  min-width: 0;
-}
-
-.ring-sm {
+.pot-note {
   display: block;
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.pot-side {
   flex: none;
-  width: 60px;
-}
-
-.ring-sm .hero-ring {
-  width: 100%;
-}
-
-.ring-sm .hero-ring-center strong {
-  font-size: 0.875rem;
-}
-
-.plan-tile-main {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.pot-share {
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+.pot-share small {
+  color: var(--ink-4);
+  font-size: var(--t-caption);
+}
+
+.pot-detail-head,
+.acct-detail-head {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.pot-detail-head h2,
+.acct-detail-head h2 {
+  font-size: 1.6rem;
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.pot-detail-head > div,
+.acct-detail-head > div {
   min-width: 0;
 }
 
-.plan-tile-name {
-  font-weight: 620;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* ---------- Accounts ---------- */
+
+.acct-list {
+  margin-top: 16px;
 }
 
-.plan-tile-kind {
-  font-size: var(--t-caption);
-  color: var(--ink-3);
+.acct {
+  border-bottom: 1px solid var(--rule-soft);
 }
 
-/* The pot and its target are two lines, not one wrapped one: at tile width
-   "$2,000.00 of $4,000.00" breaks after "of" and reads as a mistake. */
-.plan-tile-amt {
+.acct:first-child {
+  border-top: 1px solid var(--rule-soft);
+}
+
+.acct.selected {
+  background: linear-gradient(90deg, var(--rule-soft), transparent 70%);
+}
+
+.acct-open-btn {
   display: flex;
-  flex-direction: column;
-  font-size: var(--t-footnote);
-  font-variant-numeric: tabular-nums;
-}
-
-.plan-tile-amt .muted {
-  font-size: var(--t-caption);
-}
-
-.plan-tile-share {
-  font-size: var(--t-caption);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: color-mix(in srgb, var(--c) 70%, var(--ink));
-  font-weight: 600;
-}
-
-.plan-tile-add {
-  align-self: flex-start;
-}
-
-.plan-select {
-  padding: 0;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 2px;
   border: 0;
   background: none;
   color: inherit;
@@ -4964,314 +968,166 @@ body {
   text-align: left;
 }
 
-/* Where the surplus goes: one bar, then the rows behind it. */
-.alloc-bar {
-  display: flex;
-  gap: 2px;
-  height: 14px;
-  margin: 12px 0 10px;
-  border-radius: var(--pill);
-  overflow: hidden;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-.alloc-bar i {
-  width: var(--w);
-  background: var(--c);
-  transform-origin: left center;
-  animation: fill-x 620ms var(--ease) backwards;
-}
-
-.alloc-bar i.alloc-free,
-.key.alloc-free {
-  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 18%, transparent) 0 5px, transparent 5px 10px);
-}
-
-.alloc-rows li {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 0;
-  font-size: var(--t-subhead);
-}
-
-.alloc-rows li + li {
-  border-top: 1px solid var(--line);
-}
-
-/* The advisor's checklist. */
-.checklist li + li {
-  border-top: 1px solid var(--line);
-}
-
-.check-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  color: inherit;
-  text-decoration: none;
-  border-radius: var(--r-sm);
-  transition: background-color 0.16s var(--ease);
-}
-
-.check-row:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
-.check-mark {
+/* An institution's initial, stamped. */
+.acct-mark {
   flex: none;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  color: #fff;
-  background: var(--warn);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--warn) 45%, transparent);
+  font-size: 1.15rem;
+  color: var(--ink-2);
+  background: var(--rule-soft);
+  box-shadow: inset 0 0 0 1px var(--rule);
 }
 
-.checklist li.ok .check-mark {
-  background: var(--ok);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--ok) 40%, transparent);
+.acct-mark.large {
+  width: 52px;
+  height: 52px;
+  font-size: 1.5rem;
 }
 
-.checklist li.soft .check-mark {
-  background: var(--ink-4);
-  box-shadow: none;
-}
-
-.check-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+.acct-body {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
-.check-main strong {
-  font-weight: 600;
-}
-
-.check-main small {
-  font-size: var(--t-footnote);
-  color: var(--ink-3);
-}
-
-.check-row svg {
-  flex: none;
-  color: var(--ink-4);
-}
-
-/* The five-year table. Scrolls sideways on a narrow screen rather than
-   squeezing five years of figures into a phone's width. */
-.table-scroll {
-  overflow-x: auto;
-  margin: 0 calc(var(--pad) * -1);
-  padding-inline: var(--pad);
-  scrollbar-width: thin;
-}
-
-.milestones {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--t-footnote);
-}
-
-.milestones th,
-.milestones td {
-  padding: 8px 10px;
-  text-align: right;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--line);
-}
-
-.milestones thead th {
-  font-size: var(--t-caption);
-  color: var(--ink-3);
-  font-weight: 620;
-}
-
-.milestones tbody th {
-  text-align: left;
-  font-weight: 580;
+.acct-title {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.milestones tbody th small {
+.acct-name {
+  font-size: 1.15rem;
+}
+
+.acct-where {
+  font-family: var(--hand);
   font-size: var(--t-caption);
   color: var(--ink-3);
-  font-weight: 500;
 }
 
-.milestones td {
-  font-variant-numeric: tabular-nums;
-}
-
-.milestones .total th,
-.milestones .total td {
-  border-bottom: 0;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-/* ---------- Accounts and the vault ---------- */
-
-.acct-list {
-  display: grid;
-  gap: 12px;
-}
-
-.acct-card {
-  border-left: 3px solid var(--hue);
-}
-
-.acct-card.selected {
-  box-shadow: inset 0 0 0 2px var(--hue);
-}
-
-.acct-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-.acct-meta {
+.acct-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 5px 8px;
+  margin-top: 5px;
 }
 
-.acct-meta .tag {
+.acct-tags .tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 2px 7px;
   border-radius: var(--pill);
+  background: var(--rule-soft);
 }
 
-.acct-meta .tag.good {
-  background: color-mix(in srgb, var(--ok) 16%, transparent);
-  color: var(--ok);
-}
+.acct-tags .tag.good { color: var(--covered); }
+.acct-tags .tag.bad { color: var(--short); }
+.acct-tags .tag svg { width: 11px; height: 11px; }
 
-.acct-meta .tag.bad {
-  background: color-mix(in srgb, var(--over) 15%, transparent);
-  color: var(--over);
-}
-
-.acct-meta .tag svg {
-  width: 12px;
-  height: 12px;
-}
-
-.acct-detail-head,
-.plan-detail-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.acct-detail-head h2,
-.plan-detail-head h2 {
-  font-size: var(--t-title3);
-}
-
-.plan-detail .goal-amt {
+.acct-figure {
+  flex: none;
   display: flex;
   flex-direction: column;
-  line-height: 1.25;
+  align-items: flex-end;
+  gap: 1px;
 }
 
-.plan-detail-head > div,
-.acct-detail-head > div {
-  min-width: 0;
+.acct-figure .fig {
+  font-size: 1.15rem;
 }
 
-.detail-rows {
-  display: grid;
-  gap: 2px;
-  margin: 0 0 14px;
+.acct-figure small {
+  font-size: var(--t-tiny);
+  font-style: italic;
+  color: var(--ink-4);
 }
 
-.detail-rows > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--t-subhead);
+.acct-open,
+.pot-open-detail {
+  padding: 8px 0 22px;
+  border-bottom: 1px solid var(--rule-soft);
 }
 
-.detail-rows dt {
-  color: var(--ink-3);
+/* ---------- The strongbox ---------- */
+
+.strongbox {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
 }
 
-.detail-rows dd {
-  margin: 0;
-  text-align: right;
-  font-weight: 560;
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-rows dd.prewrap {
-  white-space: pre-wrap;
-  text-align: left;
-}
-
-.vault-box {
-  margin-top: 16px;
-  padding: 14px;
-  border-radius: var(--r-nested, var(--r-sm));
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
-.vault-box h3 {
+.strongbox h3 {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: var(--t-footnote);
-  color: var(--ink-2);
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  font-weight: 620;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
   margin-bottom: 8px;
 }
 
-.vault-box h3 svg {
-  width: 13px;
-  height: 13px;
+.strongbox-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
 }
 
-.vault-fields > div {
+.strongbox-note .marginal {
+  margin: 0;
+  flex: 1 1 16rem;
+}
+
+.strongbox-note.open {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--covered) 45%, transparent);
+}
+
+.sealed > div {
   padding: 8px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule-soft);
 }
 
-.vault-fields dt {
-  font-size: var(--t-caption);
+.sealed dt {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--ink-3);
 }
 
-.vault-fields dd {
+.sealed dd {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin: 2px 0 0;
+  margin: 3px 0 0;
 }
 
 .secret {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0.06em;
   overflow-wrap: anywhere;
   min-width: 0;
 }
@@ -5282,124 +1138,1156 @@ body {
   flex: none;
 }
 
-.vault-strip.open {
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-}
-
-.vault-fieldset {
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
-
-.sealed-inputs {
-  margin-top: 8px;
-}
-
 .cover-only {
   display: none;
 }
 
-.seg-4 {
-  font-size: var(--t-footnote);
+/* ---------- The review ---------- */
+
+.review-head {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
-.row-2.tight {
+.review-head > div {
+  flex: 1 1 15rem;
+  min-width: 0;
+}
+
+.checklist .check {
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.checklist .check:first-child {
+  border-top: 1px solid var(--rule-soft);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 11px 2px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.check-row:hover {
+  background: var(--rule-soft);
+}
+
+/* A tick in the margin, or an open circle waiting for one. */
+.check-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  color: var(--paper);
+  background: var(--thin);
+}
+
+.check-mark svg {
+  width: 13px;
+  height: 13px;
+}
+
+.check.ok .check-mark {
+  background: var(--covered);
+}
+
+.check.soft .check-mark {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--ink-4);
+}
+
+.check-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.check-words strong {
+  font-weight: 400;
+  font-size: 1.05rem;
+}
+
+.check-words small {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.check-row > svg:last-child {
+  flex: none;
+  color: var(--ink-4);
+}
+
+/* ---------- Tables ---------- */
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 10px calc(var(--pad) * -1) 0;
+  padding-inline: var(--pad);
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-small);
+}
+
+.ledger-table th,
+.ledger-table td {
+  padding: 8px 10px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.ledger-table thead th {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  font-weight: 620;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom-color: var(--rule);
+}
+
+.ledger-table tbody th {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  text-align: left;
+  font-weight: 400;
+}
+
+.ledger-table tbody th small {
+  font-size: var(--t-tiny);
+  font-style: italic;
+  color: var(--ink-4);
+}
+
+.ledger-table td {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ledger-table .total th,
+.ledger-table .total td {
+  border-bottom: 0;
+  border-top: 1px solid var(--rule);
+}
+
+/* ---------- Buttons and forms ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--pill);
+  background: var(--rule-soft);
+  color: var(--ink);
+  font-family: var(--hand);
+  font-size: var(--t-small);
+  font-weight: 560;
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
+  transition: background-color 0.2s var(--turn), transform 0.35s var(--settle);
+}
+
+.btn:hover {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 2px var(--shade);
+}
+
+.btn.primary:hover {
+  background: color-mix(in srgb, var(--accent) 86%, black);
+}
+
+.btn.ghost {
+  background: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn.small {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: var(--t-caption);
+}
+
+.btn.grow {
+  flex: 1 1 auto;
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.danger-text {
+  color: var(--short);
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ledger-btn {
+  justify-content: flex-start;
+  width: 100%;
+  gap: 10px;
+}
+
+.ledger-btn small {
+  margin-left: auto;
+  font-size: var(--t-tiny);
+  font-style: italic;
+  color: var(--ink-4);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.label {
+  font-family: var(--hand);
+  font-size: var(--t-tiny);
+  font-weight: 620;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.opt {
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+  text-transform: none;
+}
+
+input[type='text'],
+input[type='password'],
+input[type='number'],
+input[type='date'],
+input:not([type]),
+select,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1.5px solid var(--rule);
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-family: var(--book);
+  font-size: var(--t-body);
+  color: var(--ink);
+  transition: border-color 0.2s var(--turn), background-color 0.2s var(--turn);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.hint {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.field-error {
+  font-size: var(--t-caption);
+  color: var(--short);
+}
+
+.row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.row-inline {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.row-2.tight input {
+.row-inline input {
   width: 5.5em;
 }
 
 .unit {
+  font-style: italic;
   color: var(--ink-3);
-  font-size: var(--t-subhead);
 }
 
-.check {
+label.check {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  font-size: var(--t-subhead);
+  border: 0;
+  font-size: var(--t-small);
 }
 
-.check input {
+label.check input {
   margin-top: 3px;
   width: 20px;
   height: 20px;
+  min-height: 0;
   accent-color: var(--accent);
 }
 
+.levers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 14px;
+}
 
-/* ---------- Fold-specific ---------- */
+/* A segmented control, cut from the same sheet as the page. */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--pill);
+  background: var(--rule-soft);
+}
 
-/* On the cover screen a full account number never appears. A 5.8" screen is
-   read in a queue, on a train, over a shoulder — so the last four is all it
-   will give up, and the rest waits for the inner screen. Unfolding is the
-   gesture that asks for it. */
-@media (max-width: 519px) {
-  .vault-fields [data-action='reveal-secret'] {
+.seg.seg-4 {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(2, 1fr);
+  border-radius: var(--r-sm);
+}
+
+.seg label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: var(--pill);
+  font-family: var(--hand);
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color 0.25s var(--turn), color 0.25s var(--turn);
+}
+
+/* The input has to sit above its own label text, or the text swallows the
+   tap and nothing is ever selected. */
+.seg input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.seg label:has(input:checked) {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 2px var(--shade);
+}
+
+.swatches,
+.marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swatch-pick {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--c);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.2);
+}
+
+.swatch-pick input,
+.mark input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.swatch-pick:has(input:checked) {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--c);
+}
+
+.mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--rule-soft);
+  cursor: pointer;
+}
+
+.mark:has(input:checked) {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* ---------- Empty pages ---------- */
+
+.empty-page {
+  max-width: 38ch;
+  margin: 36px 0;
+}
+
+.empty-mark {
+  width: 88px;
+  height: 66px;
+  color: var(--ink-4);
+  margin-bottom: 14px;
+}
+
+.empty-page h2 {
+  font-size: 1.7rem;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.empty-page p {
+  color: var(--ink-2);
+}
+
+.facing-wait,
+.facing-empty,
+.facing-hint {
+  color: var(--ink-4);
+  font-style: italic;
+  max-width: 30ch;
+}
+
+.facing-wait {
+  padding-top: 18vh;
+}
+
+.facing-name {
+  font-size: 1.5rem;
+  color: var(--c, var(--ink));
+}
+
+.facing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.colophon {
+  max-width: 30ch;
+  margin: 16vh auto 0;
+  text-align: center;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.colophon-mark {
+  font-size: 2rem;
+  color: var(--ink-4);
+  margin-bottom: 10px;
+}
+
+.colophon p + p {
+  margin-top: 12px;
+}
+
+.colophon-rule {
+  height: 1px;
+  margin: 18px auto;
+  width: 60%;
+  background: var(--rule-soft);
+}
+
+.colophon-small {
+  font-size: var(--t-caption);
+  color: var(--ink-4);
+}
+
+.sheet-lede {
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.notice {
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--rule-soft);
+  font-size: var(--t-small);
+}
+
+.notice.warn {
+  color: var(--short);
+}
+
+/* ---------- Sheets, dialogs, toasts ---------- */
+
+dialog.sheet,
+dialog.confirm {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+}
+
+dialog::backdrop {
+  background: rgb(30 20 8 / 0.42);
+}
+
+dialog.sheet {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 92dvh;
+  background: var(--paper);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-raise);
+  animation: sheet-up 420ms var(--turn);
+  overflow: hidden;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px var(--pad) 10px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.sheet-head h2 {
+  font-size: 1.3rem;
+  font-weight: 400;
+}
+
+.sheet-body {
+  padding: 18px var(--pad);
+  overflow-y: auto;
+}
+
+.sheet-foot {
+  display: flex;
+  gap: 8px;
+  padding: 12px var(--pad) calc(12px + var(--safe-b));
+  border-top: 1px solid var(--rule-soft);
+  background: var(--paper-2);
+}
+
+.confirm {
+  display: grid;
+  place-items: center;
+  padding: var(--pad);
+}
+
+.confirm-panel {
+  width: min(32rem, 100%);
+  padding: 22px;
+  background: var(--paper);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-raise);
+  animation: sheet-in 320ms var(--settle);
+}
+
+.confirm-panel h2 {
+  font-size: 1.35rem;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.confirm-msg {
+  color: var(--ink-2);
+  margin-bottom: 14px;
+}
+
+.confirm-msg p + p {
+  margin-top: 8px;
+}
+
+.btn-row.end {
+  justify-content: flex-end;
+}
+
+.toasts {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(var(--index-h) + var(--safe-b) + 18px);
+  transform: translateX(-50%);
+  width: min(30rem, calc(100% - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-radius: var(--pill);
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: var(--shadow-raise);
+  pointer-events: auto;
+  animation: toast-in 360ms var(--settle);
+  font-size: var(--t-small);
+}
+
+.toast.error {
+  background: var(--short);
+  color: #fff;
+}
+
+.toast button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: var(--hand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- The spread ---------- */
+
+/* From 820px there is room for two pages, so there are two, with a spine
+   between them. That is the Fold opened flat, and every laptop window. */
+@media (min-width: 820px) {
+  .book {
+    grid-template-columns: minmax(0, 1fr) var(--spine-w) minmax(0, 23rem);
+    max-width: 80rem;
+    margin: 0 auto;
+    box-shadow: var(--shadow-page);
+  }
+
+  .recto {
+    display: block;
+    grid-column: 3;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  /* The facing page is already showing this; printing it twice on one
+     spread is the mistake a second page exists to avoid. */
+  [data-inline-detail] {
+    display: none;
+  }
+
+  /* The spine: a gutter shadow falling either side of the fold, darkest at
+     the fold itself, exactly as the middle of an open book is. */
+  .spine {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    background: linear-gradient(90deg, transparent, var(--shade) 40%, var(--gutter) 50%, var(--shade) 60%, transparent);
+    pointer-events: none;
+  }
+
+  .ribbon {
+    left: calc(50% - 46px);
+  }
+
+  .folio {
+    left: auto;
+    right: var(--pad);
+    transform: none;
+  }
+}
+
+/* A cursor reaches the top edge for free, so on a pointing device the
+   chapters move to the fore-edge as proper index tabs and the pages take the
+   height back. Touch screens keep them at the bottom, in the hand. */
+@media (pointer: fine) and (min-width: 820px) {
+  :root {
+    --index-h: 0px;
+  }
+
+  .thumb-index {
+    left: auto;
+    right: 0;
+    top: 50%;
+    bottom: auto;
+    width: 44px;
+    height: auto;
+    transform: translateY(-50%);
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 0;
+    background: none;
+  }
+
+  .thumb-index a {
+    margin: 0;
+    padding: 12px 4px;
+    border-radius: var(--r-sm) 0 0 var(--r-sm);
+    background: var(--paper-2);
+    box-shadow: inset 0 1px 0 var(--rule-soft), inset 0 -1px 0 var(--rule-soft), -1px 0 2px var(--shade);
+  }
+
+  .thumb-index a span {
+    writing-mode: vertical-rl;
+    letter-spacing: 0.12em;
+  }
+
+  .thumb-index a[aria-current='page'] {
+    transform: translateX(-6px);
+    background: var(--paper);
+  }
+
+  .thumb-index a:active {
+    transform: translateX(-3px) scale(0.98);
+  }
+
+  .leaf {
+    padding-bottom: 60px;
+  }
+
+  /* The tabs stand proud of the fore-edge, so the page stops short of them. */
+  .recto {
+    padding-right: 62px;
+  }
+
+  .toasts {
+    bottom: 22px;
+  }
+
+  .folio {
+    bottom: 16px;
+  }
+}
+
+/* Centred dialogs once there is room for them. */
+@media (min-width: 640px) {
+  dialog.sheet {
+    align-items: center;
+    padding: var(--pad);
+  }
+
+  .sheet-panel {
+    width: min(34rem, 100%);
+    max-height: 86dvh;
+    border-radius: var(--r-lg);
+    animation: sheet-in 340ms var(--settle);
+  }
+
+  .sheet-foot {
+    padding-bottom: 12px;
+  }
+}
+
+/* ---------- The fold ---------- */
+
+/* Book posture: the phone is half closed, the crease runs top to bottom, and
+   the book's spine *is* that crease. The page you are reading is on the left
+   leaf, the page you picked out of it on the right, and nothing is ever
+   printed across the fold. */
+@media (horizontal-viewport-segments: 2) {
+  :root {
+    --page-w: env(viewport-segment-width 0 0, 50vw);
+    --page2-left: env(viewport-segment-left 1 0, 50vw);
+    --page2-w: env(viewport-segment-width 1 0, 50vw);
+    --hinge: calc(var(--page2-left) - var(--page-w));
+  }
+
+  .book {
+    display: block;
+    max-width: none;
+    box-shadow: none;
+  }
+
+  .verso {
+    width: var(--page-w);
+    padding-right: 16px;
+  }
+
+  .recto {
+    display: block;
+    position: fixed;
+    z-index: 5;
+    top: 0;
+    left: var(--page2-left);
+    width: var(--page2-w);
+    height: 100dvh;
+    overflow-y: auto;
+    padding: calc(var(--safe-t) + var(--head-h) + 6px) var(--pad) calc(var(--safe-b) + 24px);
+  }
+
+  /* The gutter falls into the hinge itself. */
+  .spine {
+    position: fixed;
+    top: 0;
+    left: var(--page-w);
+    width: var(--hinge);
+    height: 100dvh;
+    background: linear-gradient(90deg, var(--shade), var(--gutter), var(--shade));
+  }
+
+  .ribbon {
+    left: calc(var(--page-w) - 28px);
+  }
+
+  /* The index, the running head and the folio belong to the left leaf: the
+     right one is the page you opened, and it keeps its whole height. */
+  .thumb-index,
+  .running-head {
+    right: auto;
+    width: var(--page-w);
+    left: 0;
+  }
+
+  .toasts {
+    left: calc(var(--page-w) / 2);
+  }
+
+  /* A sheet opens on the facing leaf, clear of the crease. */
+  dialog.sheet {
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 0 0 var(--page2-left);
+  }
+
+  .sheet-panel {
+    width: var(--page2-w);
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  /* An inline detail here would be a second copy of the facing page. */
+  [data-inline-detail] {
+    display: none;
+  }
+}
+
+/* Tabletop: the lower half lies flat under your hands, so that is where the
+   things you touch go; the upper half stays upright and keeps the reading. */
+@media (vertical-viewport-segments: 2) {
+  :root {
+    --bottom-h: env(viewport-segment-height 0 1, 50dvh);
+  }
+
+  .book {
+    display: block;
+  }
+
+  .recto {
+    display: none;
+  }
+
+  .leaf {
+    padding-bottom: calc(var(--index-h) + var(--safe-b) + 28px);
+  }
+
+  dialog.sheet {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .sheet-panel {
+    width: 100%;
+    height: var(--bottom-h);
+    max-height: none;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+
+  /* Confirmations stay above the crease, where the screen is upright. */
+  .toasts {
+    bottom: calc(var(--bottom-h) + 14px);
+  }
+}
+
+/* The cover screen will not show a secret in full. A 5.8" screen is read in
+   a queue, on a train, over a shoulder: the last four is all it gives up,
+   and unfolding is the gesture that asks for the rest. */
+@media (max-width: 560px) {
+  .sealed [data-action='reveal-secret'] {
     display: none;
   }
 
   .cover-only {
     display: block;
-    margin-top: 8px;
+    margin-top: 10px;
   }
 }
 
-/* Book posture: the list stays on the left leaf and the thing you picked
-   opens on the right one, so a plan and its five-year shape are readable at
-   once without either crossing the hinge. The inline copy is dropped,
-   because the facing page is already showing it. */
-@media (horizontal-viewport-segments: 2) {
-  .acct-inline,
-  [data-inline-detail] {
-    display: none;
-  }
+/* ---------- Motion ---------- */
 
-  .companion[data-pane='detail'] {
-    padding-top: calc(var(--safe-t) + 20px);
+/* Turning a page turns it: the leaf lifts at the spine and falls the other
+   way, and the page underneath is already there. Only the reading page is
+   named, so the index, the ribbon and the facing page stay put. */
+main {
+  view-transition-name: page;
+}
+
+::view-transition-group(page) {
+  animation-duration: 520ms;
+}
+
+::view-transition-old(page),
+::view-transition-new(page) {
+  mix-blend-mode: normal;
+  height: 100%;
+  overflow: clip;
+  transform-origin: left center;
+}
+
+::view-transition-old(page) {
+  animation: leaf-lift 260ms var(--turn) both;
+}
+
+::view-transition-new(page) {
+  animation: leaf-fall 470ms var(--turn) 110ms both;
+}
+
+:root[data-turn='back'] ::view-transition-old(page) {
+  animation-name: leaf-lift-back;
+}
+
+:root[data-turn='back'] ::view-transition-new(page) {
+  animation-name: leaf-fall-back;
+}
+
+@keyframes leaf-lift {
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-14deg) translateX(-4%);
   }
 }
 
-/* Tabletop: the lower half is the half lying flat under your hands, so the
-   controls go there and the results stay on the upright half — the shape of
-   a laptop, on a phone. */
-@media (vertical-viewport-segments: 2) {
-  main {
-    padding-bottom: calc(var(--bottom-h) + 24px);
-  }
-
-  [data-tabletop-bottom] {
-    position: fixed;
-    z-index: 15;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: var(--bottom-h);
-    margin: 0;
-    overflow-y: auto;
-    border-radius: var(--r-lg) var(--r-lg) 0 0;
-    box-shadow: 0 -8px 28px rgb(0 0 0 / 0.18);
-    animation: rise 420ms var(--spring) backwards;
-  }
-
-  /* The capsule would sit on top of the panel that now owns the lower half. */
-  .tabbar {
-    bottom: calc(var(--bottom-h) + var(--safe-b) + 12px);
+@keyframes leaf-fall {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(16deg) translateX(5%);
   }
 }
 
-/* Both folded postures: a leaf is phone-shaped, so the plan tiles go back to
-   a strip you flick rather than a grid that would squeeze them. */
-@media (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2) {
-  .plan-strip {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(196px, 1fr);
-    overflow-x: auto;
+@keyframes leaf-lift-back {
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(14deg) translateX(4%);
+  }
+}
+
+@keyframes leaf-fall-back {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-16deg) translateX(-5%);
+  }
+}
+
+/* Arriving without a page turn to play: the ink settles a block at a time. */
+main[data-turned] > * {
+  animation: settle 520ms var(--turn) backwards;
+}
+
+main[data-turned] > *:nth-child(2) { animation-delay: 60ms; }
+main[data-turned] > *:nth-child(3) { animation-delay: 120ms; }
+main[data-turned] > *:nth-child(4) { animation-delay: 180ms; }
+main[data-turned] > *:nth-child(n + 5) { animation-delay: 230ms; }
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* A figure is written, not faded in: the nib travels left to right. */
+@keyframes ink-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 -4% 0 0);
+  }
+}
+
+@keyframes ink-round {
+  from {
+    stroke-dasharray: 0 9999;
+  }
+}
+
+@keyframes fill-across {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes grow-up {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes rule-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* ---------- Motion that never stops ---------- */
+
+/* A book in a room is never quite still: light moves across the paper, the
+   ribbon stirs, a fleck travels the ring. All of it slow, none of it on
+   anything being read, and all of it stopped by the block below. */
+@keyframes grain-drift {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.06) translate3d(-1%, 1%, 0);
+  }
+  100% {
+    transform: scale(1.02) translate3d(1%, -1%, 0);
+  }
+}
+
+@keyframes ribbon-sway {
+  0%, 100% {
+    transform: rotate(-1.1deg);
+  }
+  50% {
+    transform: rotate(1.4deg);
+  }
+}
+
+@keyframes ring-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Motion preferences ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A finger needs more room than a cursor. Nothing in the layout moves; the
+   pad is invisible and only the pointer sees it. */
+@media (pointer: coarse) {
+  .btn.small {
+    position: relative;
+  }
+
+  .btn.small::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media print {
+  .thumb-index,
+  .ribbon,
+  .running-head,
+  .toasts,
+  .spine {
+    display: none !important;
+  }
+
+  .book {
+    box-shadow: none;
   }
 }

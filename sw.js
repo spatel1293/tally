@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v4.0.0';
+const VERSION = 'tally-v5.0.0';
 
 const FILES = [
   './',
@@ -22,28 +22,24 @@ const FILES = [
   './js/storage.js',
   './js/vault.js',
   './js/core/advisor.js',
-  './js/core/csv.js',
   './js/core/dates.js',
   './js/core/defaults.js',
+  './js/core/fund.js',
   './js/core/money.js',
   './js/core/plans.js',
-  './js/core/recurring.js',
-  './js/core/stats.js',
   './js/core/validate.js',
   './js/ui/charts.js',
   './js/ui/format.js',
   './js/ui/html.js',
   './js/ui/overlay.js',
   './js/ui/posture.js',
-  './js/views/activity.js',
-  './js/views/advisor.js',
-  './js/views/budgets.js',
-  './js/views/components.js',
+  './js/views/chrome.js',
   './js/views/forms.js',
-  './js/views/home.js',
-  './js/views/pages.js',
+  './js/views/fund.js',
+  './js/views/ledger.js',
+  './js/views/pots.js',
+  './js/views/review.js',
   './js/views/settings.js',
-  './js/views/txForm.js',
 ];
 
 self.addEventListener('install', (event) => {

@@ -1,11 +1,14 @@
 export const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-export const APP_VERSION = '4.0.0';
-// 3 added the savings-first fields: a plan's yield, share and account, and an
-// account's institution, role, rate, security and sealed vault. Older backups
-// still restore; the new fields take their defaults.
-export const BACKUP_FORMAT = 3;
+export const APP_VERSION = '5.0.0';
+// 4 is the fund: accounts carry a stated balance and its history, the monthly
+// surplus is two figures in settings rather than a ledger of transactions,
+// and spending is no longer logged at all. Older backups still restore — the
+// new fields take their defaults, and the collections version 5 no longer
+// reads (transactions, categories, repeating items) are carried through
+// untouched in `archive` so that nothing anyone recorded is ever thrown away.
+export const BACKUP_FORMAT = 4;
 
 export function makeId() {
   const c = globalThis.crypto;
@@ -25,66 +28,30 @@ export function makeId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// A vivid, system-colour-style palette for category identity in charts —
-// indigo, purple, teal, brown and the rest of the family, deliberately not
-// one muted "printer's ink" set. Still no strong red or green: those two
-// carry meaning about money elsewhere, and a category swatch must never be
-// mistaken for a signal.
+// Bookbinding inks: the colours of marbled endpapers and cloth boards, which
+// is what a pot's ribbon, rule and ring are drawn in. Deliberately no bright
+// red or green — those two mean money here (short, and covered), and a pot's
+// colour must never be mistaken for a verdict.
 export const PALETTE = [
-  '#007aff', '#5856d6', '#af52de', '#ff9500', '#ffcc00', '#d6336c',
-  '#30b0c7', '#32ade6', '#a2845e', '#8e8e93', '#667eea', '#0891b2',
+  '#1d4e6f', '#7b3f2e', '#3f5d43', '#6b4a7a', '#8a6a24', '#2f6b6b',
+  '#5b4636', '#44527a', '#8a4a5f', '#4a6572', '#6e5a2e', '#345b74',
 ];
 
-export const ICONS = [
-  '🛒', '🏠', '💡', '🚌', '🚗', '⛽', '🍜', '☕', '🍺', '🎬', '🎮', '🎵',
-  '🩺', '💊', '🏋️', '🔁', '📱', '💻', '🏦', '💰', '💼', '🎁', '👕', '✂️',
-  '🐾', '👶', '🎓', '📚', '✈️', '🏨', '🧾', '🛠️', '🧹', '🌱', '❤️', '📦',
-];
-
-// Same rule as PALETTE: no expense category is green or red, so a swatch is
-// never mistaken for money coming in or a budget blown. Income is the
-// exception, and green there means exactly what it says.
-const DEFAULT_CATEGORY_SPECS = [
-  ['Groceries', '🛒', '#30b0c7', 'expense'],
-  ['Rent / Housing', '🏠', '#007aff', 'expense'],
-  ['Utilities', '💡', '#ff9500', 'expense'],
-  ['Transportation', '🚌', '#af52de', 'expense'],
-  ['Dining Out', '🍜', '#d6336c', 'expense'],
-  ['Entertainment', '🎬', '#5856d6', 'expense'],
-  ['Health', '🩺', '#32ade6', 'expense'],
-  ['Subscriptions', '🔁', '#667eea', 'expense'],
-  ['Savings', '🏦', '#0891b2', 'expense'],
-  ['Other', '📦', '#8e8e93', 'expense'],
-  ['Income', '💼', '#0B7A3B', 'income'],
-];
-
-export function defaultCategories(idFn = makeId) {
-  return DEFAULT_CATEGORY_SPECS.map(([name, icon, color, type], order) => ({
-    id: idFn(),
-    name,
-    icon,
-    color,
-    type,
-    parentId: null,
-    order,
-    budget: null,
-  }));
-}
+export const PLAN_ICONS = ['🛟', '🏦', '✈️', '📈', '🏠', '🚗', '🎓', '🎁', '💍', '🛠️', '🌱', '❤️'];
 
 export const DEFAULT_SETTINGS = {
   currency: 'USD',
   locale: 'en-US',
   theme: 'system',
-  warnPercent: 80,
   backupReminderDays: 14,
   lastExportAt: null,
   lastChangeAt: null,
-  defaultAccountId: null,
-  csvDateOrder: 'MDY',
-  // How many months of essentials the safety net should cover.
+  // The two figures the whole fund is planned from. Stated, not derived:
+  // version 5 stopped logging spending, so the surplus is what you say it is.
+  monthlyIncome: 0,
+  monthlyOutgoings: 0,
+  // How many months of outgoings the safety net should cover.
   runwayTarget: 6,
-  // What a month costs, if you'd rather state it than have it derived.
-  essentialMonthly: null,
   vaultSalt: null,
   vaultCheck: null,
 };
@@ -124,7 +91,9 @@ export function newAccount(fields = {}) {
     reviewedAt: null,
     notes: '',
     vault: null,
-    openingBalance: 0,
+    balance: 0,
+    balanceAt: null,
+    history: [],
     ...fields,
   };
 }
@@ -133,4 +102,3 @@ export function roleForKind(kind) {
   return { checking: 'hub', credit: 'spending', cash: 'spending', savings: 'savings', brokerage: 'investing' }[kind] ?? 'other';
 }
 
-export const UNCATEGORIZED = '__uncategorized__';

@@ -1,34 +1,34 @@
 # Tally
 
-A personal savings and financial-records app that runs entirely in your
-browser. It tracks what you're saving toward, how many months of runway that
-buys you, and the records a financial planner would keep — which institution
-holds what, at what rate, with which login (sealed behind a passphrase). It
-also tracks spending, budgets and repeating transactions, in service of
-working out what's left over each month.
+A book for a wealth fund, kept entirely in your browser. It holds what the
+fund is worth, what it is for, and where it sits — and nothing else. There is
+no spending to log: what comes in and what goes out each month are two
+figures you write in once, and everything else follows from them.
 
-No backend, no accounts, no AI. Everything stays on the device unless you
-export it.
-
-> Continuing this project with Claude in VS Code? Open `START-HERE.md`.
+No backend, no accounts, no AI. Nothing leaves the device unless you export
+it, and account numbers and logins are sealed with a passphrase that is never
+stored anywhere.
 
 ## What's in it
 
-- **Plans** — a safety net, nest eggs, trips and investments. Each has a
-  target, an optional date, a share of each month's surplus and a yield, and
-  Tally works out when it lands and what it's worth in five years.
-- **Advisor** — the review a planner would do each quarter, as a checklist:
-  is the runway deep enough, does every login have a second step, has every
-  account been looked at in the last six months, does every spare dollar have
-  a job, is every dated plan on track, is there a backup.
-- **Accounts** — institution, what the account is *for*, its rate, its
-  security, when you last reviewed it, and the account number and login
-  **sealed with a passphrase** (AES-GCM, PBKDF2). The passphrase is never
-  stored; lose it and the sealed details are gone. The vault locks itself
-  after a few minutes and whenever the app leaves the screen, and the cover
-  screen never shows a full number.
-- **Spending** — transactions, budgets, categories, repeating items, CSV
-  import and export, and a year in review, all as before.
+- **The Fund** — what it is all worth, what it earns while you do nothing,
+  how many months of runway your safety net buys, and where each month's
+  surplus goes.
+- **Pots** — a safety net, nest eggs, trips and investments. Each has a
+  target, a share of the surplus and a yield, and the book works out when it
+  arrives and what it is worth in five years.
+- **Accounts** — institution, the job each account does, its rate, whether
+  the login has a second step, when you last reviewed it, and a balance you
+  write in whenever you read one. Every earlier reading is kept.
+- **The strongbox** — account numbers, routing numbers, usernames and
+  passwords, encrypted on the device (AES-GCM, PBKDF2). It shuts itself after
+  a few minutes and whenever the app leaves the screen, and the phone's cover
+  screen never shows a number in full.
+- **Review** — the look-over a planner would do each quarter, as a checklist
+  that answers to your own figures.
+
+On a Pixel Fold, half-closed, the crease becomes the spine: the chapter on
+one leaf, the thing you picked on the other.
 
 ## Run it
 
