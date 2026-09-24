@@ -67,13 +67,17 @@
   --ink: #241d14;
   --ink-2: #4a3f31;
   --ink-3: #6f6150;
-  --ink-4: #9c8c74;
+  /* The quietest ink that is still a word. Anything printed in it must pass
+     AA against the paper; anything quieter than this is a mark, not a word,
+     and uses --ink-faint. */
+  --ink-4: #6d5f4d;
+  --ink-faint: #9c8c74;
   --rule: rgb(78 62 40 / 0.26);
   --rule-soft: rgb(78 62 40 / 0.14);
 
   /* Three inks that mean money, one for the binding. */
   --covered: #2f6b3f;
-  --thin: #8a6a1f;
+  --thin: #7d6019;
   --short: #9c3323;
   --accent: #1d4e6f;
   --accent-ink: #f6efe0;
@@ -123,7 +127,8 @@
   --ink: #efe3cd;
   --ink-2: #d2c3a9;
   --ink-3: #a9987c;
-  --ink-4: #7d6e58;
+  --ink-4: #a2917a;
+  --ink-faint: #7d6e58;
   --rule: rgb(220 200 165 / 0.22);
   --rule-soft: rgb(220 200 165 / 0.12);
 
@@ -226,14 +231,20 @@ button {
   border: 0;
 }
 
+/* The first thing a keyboard reaches. It is off the page until focused, and
+   when it arrives it is a real target like anything else. */
 .skip {
   position: absolute;
   left: 8px;
-  top: -40px;
+  top: -60px;
   z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   background: var(--paper);
-  padding: 8px 12px;
+  padding: 8px 14px;
   border-radius: var(--r-sm);
+  box-shadow: 0 2px 10px var(--shade);
 }
 
 .skip:focus {
@@ -308,7 +319,12 @@ button {
   z-index: -1;
   pointer-events: none;
   opacity: var(--tooth);
-  mix-blend-mode: multiply;
+  /* soft-light, not multiply. Multiply can only ever darken, so the grain
+     dragged the whole page down — measured, it took the paper from #efe7d7
+     to #dbd3c5 and cost every secondary ink its contrast. soft-light lifts
+     and drops around the mid-tone instead, so the sheet keeps its value and
+     only its surface changes. */
+  mix-blend-mode: soft-light;
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='f' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23f)'/%3E%3C/svg%3E"),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
@@ -422,7 +438,10 @@ button {
   gap: 3px;
   padding: 6px 2px;
   margin-top: 10px;
-  color: var(--ink-3);
+  /* Navigation is read at a glance and set very small, so it takes a
+     stronger ink than body asides do — measured, --ink-3 left the labels at
+     4.42:1 against the paper, just under the line. */
+  color: var(--ink-2);
   text-decoration: none;
   font-family: var(--hand);
   font-size: 0.625rem;
@@ -529,7 +548,7 @@ button {
   align-items: center;
   gap: 14px;
   margin-top: 18px;
-  color: var(--ink-4);
+  color: var(--ink-faint);
 }
 
 .ornament::before,
@@ -739,7 +758,7 @@ button.ruled-row:hover {
   min-width: 16px;
   align-self: center;
   height: 1em;
-  background-image: radial-gradient(circle, var(--ink-4) 0.7px, transparent 0.8px);
+  background-image: radial-gradient(circle, var(--ink-faint) 0.7px, transparent 0.8px);
   background-size: 6px 6px;
   background-position: bottom;
   background-repeat: repeat-x;
@@ -772,7 +791,7 @@ button.ruled-row:hover {
 }
 
 .swatch-none {
-  background: repeating-linear-gradient(135deg, var(--ink-4) 0 3px, transparent 3px 6px);
+  background: repeating-linear-gradient(135deg, var(--ink-faint) 0 3px, transparent 3px 6px);
 }
 
 /* ---------- Ink drawings ---------- */
@@ -900,7 +919,7 @@ button.ruled-row:hover {
 }
 
 .bar-label {
-  fill: var(--ink-4);
+  fill: var(--ink-faint);
   font-family: var(--hand);
   font-size: 10px;
   letter-spacing: 0.08em;
@@ -931,7 +950,7 @@ button.ruled-row:hover {
 }
 
 .alloc-bar i.alloc-free {
-  background: repeating-linear-gradient(135deg, var(--ink-4) 0 4px, transparent 4px 8px);
+  background: repeating-linear-gradient(135deg, var(--ink-faint) 0 4px, transparent 4px 8px);
   opacity: 0.6;
 }
 
@@ -1103,10 +1122,20 @@ button.ruled-row:hover {
   background: linear-gradient(90deg, var(--rule-soft), transparent 70%);
 }
 
+/* An entry is a printed record, so its particulars get their own line under
+   the name rather than being squeezed into the column between the mark and
+   the figure. Laid out as a grid: the mark, the name and the figure share
+   the first line; the particulars run the full measure beneath them. The
+   body is display: contents so its two children become grid items directly,
+   which keeps the markup as it is. */
 .acct-open-btn {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'mark title figure'
+    '.    tags  tags';
+  align-items: start;
+  gap: 2px 14px;
   width: 100%;
   padding: 14px 2px;
   border: 0;
@@ -1115,6 +1144,12 @@ button.ruled-row:hover {
   font: inherit;
   text-align: left;
 }
+
+.acct-open-btn .acct-mark { grid-area: mark; }
+.acct-open-btn .acct-body { display: contents; }
+.acct-open-btn .acct-title { grid-area: title; }
+.acct-open-btn .acct-tags { grid-area: tags; }
+.acct-open-btn .acct-figure { grid-area: figure; }
 
 /* An institution's initial, stamped. */
 .acct-mark {
@@ -1158,26 +1193,44 @@ button.ruled-row:hover {
   color: var(--ink-3);
 }
 
+/* What an account is, set as a line of small caps rather than a row of
+   coloured pills. A pill is a chip of colour with a word inside it — the
+   thing this book most consistently has to be kept away from — and four of
+   them stacked took a quarter of a phone screen to say what one printed line
+   says. The parts are divided by a middle dot, the way a printed entry
+   divides its particulars, and only a verdict takes an ink of its own. */
 .acct-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 8px;
-  margin-top: 5px;
+  display: block;
+  margin-top: 4px;
+  line-height: 1.6;
 }
 
 .acct-tags .tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: inline;
+  white-space: nowrap;
   font-family: var(--hand);
   font-size: var(--t-tiny);
   font-style: normal;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
-  padding: 2px 7px;
-  border-radius: var(--pill);
-  background: var(--rule-soft);
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+/* A middle dot between the particulars, never before the first. It belongs
+   to the run of text, so it wraps with it. */
+.acct-tags .tag + .tag::before {
+  content: ' · ';
+  color: var(--ink-faint);
+  letter-spacing: 0;
+  white-space: normal;
+}
+
+.acct-tags .tag svg {
+  vertical-align: -1px;
+  margin-right: 2px;
 }
 
 .acct-tags .tag.good { color: var(--covered); }
@@ -1231,16 +1284,21 @@ button.ruled-row:hover {
   margin-bottom: 8px;
 }
 
+/* A note in the margin, not a card. A panel with a fill and a border is the
+   one piece of dashboard furniture that kept creeping back in here; a book
+   sets an aside off with a rule and a little air instead, and marks its
+   state with the colour of that rule rather than with a box. */
 .strongbox-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  margin: 12px 0;
-  padding: 10px 14px;
-  border-radius: var(--r-sm);
-  background: var(--paper-2);
-  box-shadow: inset 0 0 0 1px var(--rule-soft);
+  margin: 16px 0;
+  padding: 2px 0 12px 14px;
+  border-radius: 0;
+  background: none;
+  border-left: 2px solid var(--rule);
+  box-shadow: none;
 }
 
 .strongbox-note .marginal {
@@ -1248,8 +1306,11 @@ button.ruled-row:hover {
   flex: 1 1 16rem;
 }
 
+/* An open strongbox is the one state worth colouring, and it colours the
+   rule, not a panel. */
 .strongbox-note.open {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--covered) 45%, transparent);
+  border-left-color: color-mix(in srgb, var(--covered) 70%, transparent);
+  box-shadow: none;
 }
 
 .sealed > div {
@@ -1349,7 +1410,7 @@ button.ruled-row:hover {
 
 .check.soft .check-mark {
   background: none;
-  box-shadow: inset 0 0 0 1.5px var(--ink-4);
+  box-shadow: inset 0 0 0 1.5px var(--ink-faint);
 }
 
 .check-words {
@@ -1438,7 +1499,7 @@ button.ruled-row:hover {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 16px;
   border: 0;
   border-radius: var(--pill);
@@ -1726,7 +1787,7 @@ label.check input {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 8px;
   border-radius: 0;
   font-family: var(--hand);
@@ -2606,7 +2667,7 @@ p,
 }
 
 .alloc-bar i.alloc-free {
-  background: repeating-linear-gradient(135deg, var(--ink-4) 0 1.5px, transparent 1.5px 5px);
+  background: repeating-linear-gradient(135deg, var(--ink-faint) 0 1.5px, transparent 1.5px 5px);
   opacity: 0.5;
 }
 
@@ -3547,7 +3608,7 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '5.2.0';
+const APP_VERSION = '5.3.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the

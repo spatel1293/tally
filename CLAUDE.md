@@ -211,9 +211,21 @@ old "colour only means money" and "one accent hue" rules went with them.
   mean money — `--covered`, `--thin`, `--short` — and `--accent` is the
   binding. No bright red or green in the palette, so a pot's colour is never
   mistaken for a verdict.
+- **Colour must be legible ink.** Every token used for *words* passes WCAG AA
+  against the paper, measured from real pixels rather than from the tokens —
+  `--ink-4` is the quietest ink that is still a word, and `--ink-faint` is for
+  marks that are not words (leader dots, hatching, the fleuron). Don't print
+  text in `--ink-faint`.
+- **Texture must not cost contrast.** The grain is `soft-light`, never
+  `multiply`: multiply can only darken, and it dragged the sheet from #efe7d7
+  to #dbd3c5 and took every secondary ink below AA with it.
 - **Avoid:** cards with shadows, pill-shaped "chips" of colour, gradients as
   decoration, emoji as interface (a pot's mark is the one exception, and it
-  sits in a ruled circle), and anything that reads as a dashboard.
+  sits in a ruled circle), and anything that reads as a dashboard. Two of
+  these kept creeping back and are worth naming: notices as filled panels
+  (they are marginal notes with a rule), and an account's particulars as a
+  row of coloured pills (they are one line of small caps divided by middle
+  dots, on their own grid row so they have the full measure).
 
 ### What the Fold gets that nothing else does
 

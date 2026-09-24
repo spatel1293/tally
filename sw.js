@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v5.2.0';
+const VERSION = 'tally-v5.3.0';
 
 const FILES = [
   './',
