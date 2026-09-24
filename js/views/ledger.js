@@ -75,8 +75,22 @@ export function renderLedger() {
 }
 
 // Where the figures come from, if they come from anywhere but your hand.
+//
+// When nothing is connected this is an invitation rather than nothing at
+// all: this is the chapter someone looks in to connect an account, so the
+// door belongs here and not only in the endpapers.
 function bridgeNote() {
-  if (!bridgeConnected()) return '';
+  if (!bridgeConnected()) {
+    if (!vaultAvailable()) {
+      return html`<div class="strongbox-note">
+        <p class="marginal">Balances can be read for you, but not at this address: reading them needs the strongbox, and the strongbox needs an installed book or an https address. Open Tally from your home screen, or over https, and the offer appears here.</p>
+      </div>`;
+    }
+    return html`<div class="strongbox-note">
+      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you run. Nothing leaves this device until you say so.</p>
+      <button type="button" class="btn small" data-action="bridge-connect">${icons.sync}Connect a bridge</button>
+    </div>`;
+  }
   const following = state.accounts.filter((a) => a.link).length;
   const last = state.settings.bridgeAt;
   return html`<div class="strongbox-note${isUnlocked() ? ' open' : ''}">

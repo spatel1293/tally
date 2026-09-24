@@ -4,9 +4,9 @@ import { resetCharts, hydrateCharts } from './ui/charts.js';
 import { watchPosture } from './ui/posture.js';
 import { state, init, subscribe, checkDayChange, reload, saveAccount, describeError } from './store.js';
 import { isUnlocked, lock as lockVault, onVaultChange, open as openSealed, describeVaultError } from './vault.js';
-import { CHAPTERS, icons, ui } from './views/chrome.js';
+import { CHAPTERS, fleuron, icons, ui } from './views/chrome.js';
 import { money } from './ui/format.js';
-import { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
+import { openAccountForm, openBalanceForm, openBridgeForm, openBridgeMoveForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
 import { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } from './link.js';
 import { renderFund, fundFacingPage } from './views/fund.js';
 import { renderPots, potDetail, afterPotsMount, resetScenario } from './views/pots.js';
@@ -73,7 +73,7 @@ function facingForAccount() {
 // The last page of any book.
 function colophon() {
   return html`<div class="colophon">
-    <p class="colophon-mark" aria-hidden="true">❧</p>
+    ${fleuron()}
     <p>This book keeps one thing: what the fund is worth, what it is for, and where it sits.</p>
     ${bridgeConnected()
       ? html`<p>It is kept on this device. The one thing it reaches for is your own bridge, to read balances and nothing else; there is no account of ours to sign into, and the sealed pages open only with your passphrase.</p>`
@@ -356,6 +356,7 @@ const actions = {
       fail(err);
     }
   },
+  'bridge-move': () => openBridgeMoveForm(),
   'bridge-forget': async () => {
     const ok = await confirmDialog({
       title: 'Disconnect the bridge?',

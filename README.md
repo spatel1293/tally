@@ -57,8 +57,18 @@ around than host it.
 
 ### Install on a phone
 
-Open the HTTPS address in Chrome, then **⋮ → Add to Home screen**. After that
-it opens like any other app and works with no connection.
+This repository deploys itself: every push to `main` publishes the site
+through [.github/workflows/pages.yml](.github/workflows/pages.yml).
+
+On the phone, open the published https address in Chrome, then **⋮ → Add to
+Home screen**. After that it opens like any other app and works with no
+connection.
+
+It has to be **https**, not the LAN address `npm start` prints. The strongbox
+uses the browser's own encryption, which is only handed out on a secure
+address, so over plain http the sealed pages — and the bridge with them —
+cannot be set up at all. The book will say so rather than leaving you
+guessing.
 
 ### Shipping an update
 
@@ -112,17 +122,39 @@ nothing else: no token, no balance, no history.
 The bridge only needs to be running when you read balances. The rest of the
 book works with no connection at all.
 
-### Where to run it
+### Where to run it, and why it needs a certificate
+
+The book is served over **https**, and a browser will not let an https page
+call a plain `http://` address — it blocks it outright as mixed content. Tally
+refuses such an address too, because the token would otherwise travel in the
+clear. So a bridge your phone can reach needs a real certificate. A bridge on
+the same machine as the book (`http://localhost:7000`) is the one exception,
+and that only helps on the laptop.
+
+**Tailscale is the easy way**, and it is free. It gives the machine a stable
+name with a real certificate, and only your own devices can reach it — the
+bridge is never exposed to the internet.
+
+```sh
+tailscale up                      # once, on the laptop
+npm run bridge                    # in one terminal
+tailscale serve --bg 7000         # in another; prints the https address
+```
+
+Install Tailscale on the phone too and sign in with the same account, and the
+bridge is reachable from anywhere, not just at home. (MagicDNS and HTTPS
+certificates need to be on for your tailnet; both are switches in the
+Tailscale admin console, and `tailscale serve` will say so if they are not.)
 
 | Where | Good for |
 | --- | --- |
-| **Your laptop** | Simplest. `npm run bridge`, read balances, stop it. Works on the phone too while both are on the same Wi-Fi — use the machine's LAN address. |
-| **A Raspberry Pi or always-on machine at home** | Read balances from the phone any time you're home. |
-| **A free host tier** | Read balances from anywhere. It needs to serve HTTPS and let you store two files, and you must be comfortable putting the certificate there. |
+| **Laptop + `tailscale serve`** | The recommended setup. Stable address, real certificate, private to your devices, free, and the bridge only runs when you want it to. |
+| **A Raspberry Pi or always-on machine at home** | The same, but you never have to remember to start it. |
+| **A free host tier** | Read balances with nothing of your own switched on. It has to serve https and let you store two files, and you must be comfortable putting the certificate there. |
 
-Over a network it must be **https**. Tally refuses a plain-http bridge unless
-it is on the same machine (`localhost`), because the token would otherwise be
-readable on the way.
+If the address ever changes, you do **not** have to sign in to your banks
+again: **Endpapers → Connections → It has moved** re-points the book at the
+new address, keeping the token already sealed in the strongbox.
 
 ### Settings
 
@@ -135,7 +167,7 @@ All through the environment:
 | `TELLER_KEY` | Required. Path to `private_key.pem`. |
 | `TELLER_ENV` | `development` (the default: free, real banks, not billed), `sandbox` (fake banks, to try it out) or `production`. |
 | `PORT` | Default 7000. |
-| `HOST` | Default `0.0.0.0`, so your phone can reach it on the LAN. |
+| `HOST` | Default `127.0.0.1` — this machine only. There is no point exposing it on the LAN, because an https page cannot call a plain-http address anyway. Put it behind `tailscale serve` instead. |
 | `ALLOW_ORIGIN` | Default `*`. Set it to Tally's address to be stricter. |
 
 Try `TELLER_ENV=sandbox` first if you want to see the whole thing work

@@ -39,8 +39,27 @@ export const icons = {
   check: I(html`<path d="M5 12l5 5 9-10"/>`, 16),
 };
 
-// The bibliographic mark at the head of every chapter: a rule, the chapter
-// name in small caps, and its number — the way a printed book announces one.
+// A printer's ornament: a lozenge between two leaves, with the rule running
+// out to either side. It is drawn rather than typed, because a dingbat
+// character (❧, ❦) is substituted by an emoji font on some devices, and an
+// emoji is the one thing this interface will not have in it.
+export function fleuron() {
+  // The rules to either side are drawn by CSS, so they stretch with the
+  // measure while the ornament itself keeps its proportions.
+  return html`<div class="ornament" aria-hidden="true">
+    <svg class="fleuron" viewBox="0 0 48 12" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round">
+        <path d="M2 6C8 1.4 14 1.4 16 6C14 10.6 8 10.6 2 6Z" fill="currentColor" fill-opacity=".16"/>
+        <path d="M46 6C40 1.4 34 1.4 32 6C34 10.6 40 10.6 46 6Z" fill="currentColor" fill-opacity=".16"/>
+        <path d="M24 1.8L29.4 6L24 10.2L18.6 6Z" fill="currentColor" fill-opacity=".32"/>
+      </g>
+    </svg>
+  </div>`;
+}
+
+// The bibliographic mark at the head of every chapter: its number, its name,
+// what it is for, and an ornament to close the opening — the way a printed
+// book announces one.
 export function chapterHead(route, { actions = '' } = {}) {
   const chapter = CHAPTERS.find((c) => c.route === route);
   if (!chapter) return '';
@@ -51,6 +70,7 @@ export function chapterHead(route, { actions = '' } = {}) {
       ${actions ? html`<div class="chapter-actions">${actions}</div>` : ''}
     </div>
     <p class="chapter-blurb">${chapter.blurb}</p>
+    ${fleuron()}
   </header>`;
 }
 

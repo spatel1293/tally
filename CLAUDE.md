@@ -161,8 +161,32 @@ glass one — are all retired. Don't go back to any of them, and note that the
 old "colour only means money" and "one accent hue" rules went with them.
 
 - **It is paper.** Warm, low-contrast, slightly uneven: two very large faint
-  washes under everything, drifting slowly. Never black on white or white on
-  black. Night mode is a dark board with the same warm ink reversed out.
+  washes under everything, drifting slowly, **and a tooth over the top** —
+  fine fibre grain with a coarser mottle, both `feTurbulence` the app draws
+  itself into two data URIs (`.book::after`, `--tooth`). It multiplies into
+  the sheet by day and soft-lights the board at night. Never black on white
+  or white on black. Night mode is a dark board with the same warm ink
+  reversed out.
+- **It is imposed.** From 820px the two text blocks are mirrored: each sits
+  snug against the gutter with a wide margin at the fore-edge, so an opening
+  reads as one thing with a fold down it rather than two columns. The left
+  page's block is pushed right (`.leaf:not(.recto) > *`); the facing page is
+  `class="leaf recto"`, so **any `.leaf` rule hits it too** — mirror it
+  deliberately rather than by accident.
+- **Two sets of figures, never mixed.** Old-style (`oldstyle-nums`) in
+  running prose, where numerals sit in the line like lowercase; lining
+  tabular in anything that forms a column, so decimal points stack. The
+  distinction is what makes the text read as set rather than typed.
+- **Ornaments are drawn, not typed.** `fleuron()` in `chrome.js` is SVG
+  because a dingbat character (❧, ❦) gets substituted by an emoji font on
+  some devices. It closes every chapter opening and the colophon.
+- **The endpapers are marbled** — two combs of thinned ink under the grain,
+  scoped by `:root[data-chapter='settings']`, because that is what the inside
+  of a bound cover looks like.
+- **Controls are printed, not chromed.** A field is a ruled line you write on
+  with an ink stroke drawn under it on focus — not a filled well. A choice is
+  a strip of options along a rule with the one in force underlined in full
+  ink — not a track with a sliding thumb.
 - **It is set in a book face.** `--book` is the best serif the device already
   ships (Iowan Old Style, Palatino, Georgia, Noto Serif). `--hand` (Public
   Sans) is only for small caps and labels — the printed equivalent of a
@@ -226,6 +250,14 @@ thing twice on one spread is the mistake a second page exists to avoid.
 ### Motion
 
 - **Nothing snaps.** `--turn` is the page curve and `--settle` a real spring.
+- **Ink behaves like ink.** A button is a stamp pressed into the sheet: it
+  sinks 1px with an inset shadow and bleeds outward from the centre, and it
+  never scales, because paper does not scale.
+- **A page is set a line at a time.** Ruled rows cascade in on arrival rather
+  than appearing at once, and a chapter's ornamented rule draws outward from
+  its fleuron.
+- **The ribbon answers the turn.** Its endless sway is replaced for the
+  length of a page turn by a kick that settles back into it.
 - Figures are *written*: `ink-in` wipes a display figure left to right by
   clip-path, never by counting, so the number on screen is always the real
   one and a test can read it at any moment. Rings draw round, rules fill
@@ -274,6 +306,21 @@ thing twice on one spread is the mistake a second page exists to avoid.
   page when there are no accounts; the bridge and its offered list had to be
   lifted into that branch, or connecting a bridge to a fresh book led nowhere.
   Check both branches when adding anything to a chapter.
+- **A failed container-query unit takes the whole declaration with it.**
+  `.ink-ring` was `width: clamp(104px, 30cqi, 150px)`; when the `cqi` failed
+  to resolve the width fell back to `auto` and the ring grew to fill the page
+  — worst on Review, at every screen size, and it had been shipping that way.
+  Back any `cq`-based size with a plain `max-width`. Same family of bug as
+  the `color-mix()` over 100% one below.
+- **Never put `overflow: hidden` on `.btn`.** A coarse pointer gets an
+  invisible 44px tap pad through `.btn.small::after`, and clipping the button
+  clips the pad back to the size of the ink — silently shrinking every small
+  touch target. Contain effects by sizing them inside the box instead. The
+  layout audit catches this, which is what it is for.
+- **The ribbon sways, so its box moves.** It hangs in the outer margin, and
+  on a 360px page that margin is 20px — a 12px ribbon at `left: 4px` left
+  only 4px of air, and the sway spent it, colliding with the chapter title
+  intermittently. Leave real clearance and keep the rotation small.
 - **`pkill -f`:** never use it with a pattern that also appears in your own shell command; it kills the shell.
 - **German number format** puts a non-breaking space before `€`. Normalise whitespace in assertions.
 

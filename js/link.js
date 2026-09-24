@@ -97,6 +97,23 @@ export async function connectBridge(linkToken) {
   return { ok: true, offered: probe.accounts };
 }
 
+// The bridge has moved. The token is the hard part — it cost a sign-in at
+// each bank — and the book is holding it, so re-pointing at a new address
+// must never mean enrolling all over again. The new address is proved before
+// the old one is given up.
+export async function moveBridge(address) {
+  const base = parseBase(address);
+  if (!base.ok) return { ok: false, error: base.error };
+
+  const current = await credentials();
+  const probe = await read({ base: base.base, accessToken: current.accessToken });
+  if (!probe.ok) return { ok: false, error: probe.error };
+
+  const bridgeVault = await seal({ base: base.base, accessToken: current.accessToken });
+  await updateSettings({ bridgeVault, bridgeHost: new URL(base.base).host });
+  return { ok: true, offered: probe.accounts };
+}
+
 export async function forgetBridge() {
   await updateSettings({ bridgeVault: null, bridgeHost: '', bridgeAt: null });
 }

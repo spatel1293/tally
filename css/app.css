@@ -53,6 +53,7 @@
   --ribbon: #8c2f2a;
 
   --grain: 0.055;
+  --tooth: 0.5;
   --shade: rgb(60 44 22 / 0.13);
   --gutter: rgb(60 44 22 / 0.3);
   --shadow-page: 0 1px 2px rgb(60 44 22 / 0.1), 0 10px 30px rgb(60 44 22 / 0.1);
@@ -107,6 +108,7 @@
   --ribbon: #a9433c;
 
   --grain: 0.08;
+  --tooth: 0.34;
   --shade: rgb(0 0 0 / 0.45);
   --gutter: rgb(0 0 0 / 0.8);
   --shadow-page: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 34px rgb(0 0 0 / 0.45);
@@ -120,6 +122,8 @@
     --r: 12px;
     --r-lg: 18px;
     --pad: 30px;
+    --pad-outer: 62px;
+    --pad-gutter: 46px;
     --spine-w: 34px;
   }
 }
@@ -259,6 +263,33 @@ button {
     radial-gradient(110% 90% at 88% 92%, rgb(120 88 40 / var(--grain)), transparent 62%),
     var(--paper);
   animation: grain-drift 48s ease-in-out infinite alternate;
+}
+
+/* The tooth of the stock. Paper is made of fibres, and the difference
+   between a warm rectangle and a sheet you want to touch is almost entirely
+   this: a fine, irregular grain that catches the light, with a coarser
+   mottle over it for the way pulp never settles evenly.
+
+   Both are turbulence the app draws itself — no image is fetched, nothing is
+   downloaded, and the whole texture costs two data URIs. It multiplies into
+   the paper in daylight and lightens the board at night, because ink sinks
+   into fibre and lamplight sits on top of it. */
+.book::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--tooth);
+  mix-blend-mode: multiply;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='f' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23f)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 160px 160px, 600px 600px;
+}
+
+:root[data-theme='dark'] .book::after {
+  mix-blend-mode: soft-light;
 }
 
 .leaf {
@@ -406,8 +437,8 @@ button {
   position: fixed;
   z-index: 18;
   top: 0;
-  left: 4px;
-  width: 12px;
+  left: 2px;
+  width: 10px;
   height: 104px;
   pointer-events: none;
   transform-origin: top center;
@@ -463,13 +494,59 @@ button {
   max-width: 44ch;
 }
 
-/* The rule under a chapter's opening: printer's, hairline, full measure. */
-.chapter-head::after {
-  content: '';
-  display: block;
-  height: 1px;
+/* A chapter's opening closes with an ornamented rule: a hairline running in
+   from either side, broken in the middle by a printer's fleuron. The rules
+   draw outward from the ornament, so the opening finishes itself. */
+.ornament {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   margin-top: 18px;
-  background: linear-gradient(90deg, var(--rule), var(--rule-soft) 72%, transparent);
+  color: var(--ink-4);
+}
+
+.ornament::before,
+.ornament::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--rule) 45%, var(--rule));
+  transform-origin: right center;
+  animation: rule-out 900ms var(--turn) backwards;
+}
+
+.ornament::after {
+  background: linear-gradient(90deg, var(--rule), var(--rule) 55%, transparent);
+  transform-origin: left center;
+}
+
+.fleuron {
+  width: 48px;
+  height: 12px;
+  flex: none;
+  animation: ornament-set 900ms var(--settle) 120ms backwards;
+}
+
+@keyframes rule-out {
+  from {
+    opacity: 0;
+    transform: scaleX(0.1);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes ornament-set {
+  from {
+    opacity: 0;
+    transform: scale(0.4) rotate(-12deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
 }
 
 /* ---------- Sections ---------- */
@@ -673,10 +750,17 @@ button.ruled-row:hover {
 
 /* ---------- Ink drawings ---------- */
 
+/* The ring is a mark in the margin, not a gauge on a dashboard, so it is
+   capped in hard pixels as well as in container units. The clamp alone was
+   not holding — when the container unit fails to resolve the whole
+   declaration goes with it, the width falls back to auto, and the ring grows
+   to fill the page. The max-width is what actually guarantees the size. */
 .ink-ring {
   position: relative;
   flex: none;
   width: clamp(104px, 30cqi, 150px);
+  min-width: 104px;
+  max-width: 150px;
   aspect-ratio: 1;
 }
 
@@ -735,11 +819,14 @@ button.ruled-row:hover {
   margin-top: 3px;
 }
 
+/* How full a pot is, set as a printed rule rather than a bar: a hairline
+   running the whole measure with ink laid over the part that is filled. The
+   ends are square, because a rule has ends, not caps. */
 .rule {
   display: block;
-  height: 5px;
-  margin: 6px 0;
-  border-radius: 3px;
+  height: 3px;
+  margin: 8px 0 7px;
+  border-radius: 0;
   background: var(--rule-soft);
   overflow: hidden;
 }
@@ -747,7 +834,7 @@ button.ruled-row:hover {
 .rule-ink {
   display: block;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--c, var(--accent));
   transform-origin: left center;
   animation: fill-across 760ms var(--turn) backwards;
@@ -1389,14 +1476,53 @@ button.ruled-row:hover {
   margin-top: 14px;
 }
 
+/* A thing you can pick on the facing page is a line in a list, not a
+   capsule. It takes the page's own hairline, joins its name to its mark with
+   leader dots, and shows it is live by the ink deepening and the rule
+   thickening under the hand — the way a finger runs down a printed index. */
 .ledger-btn {
   justify-content: flex-start;
   width: 100%;
   gap: 10px;
+  min-height: 40px;
+  padding: 2px 2px 2px 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-family: var(--book);
+  font-size: var(--t-body);
+  font-weight: 400;
+  text-align: left;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule-soft);
+  transition: color 0.25s var(--turn), border-color 0.25s var(--turn), padding-left 0.3s var(--turn);
+}
+
+.ledger-btn::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 0;
+  min-width: 14px;
+  border-bottom: 1px dotted var(--rule);
+  opacity: 0.75;
+  margin-bottom: 0.28em;
+}
+
+.ledger-btn:hover {
+  background: none;
+  color: var(--ink);
+  border-bottom-color: var(--rule);
+  padding-left: 4px;
+}
+
+.ledger-btn:active {
+  transform: none;
+  padding-left: 6px;
 }
 
 .ledger-btn small {
-  margin-left: auto;
+  order: 3;
+  margin-left: 0;
   font-size: var(--t-tiny);
   font-style: italic;
   color: var(--ink-4);
@@ -1431,6 +1557,10 @@ button.ruled-row:hover {
   text-transform: none;
 }
 
+/* A field in a book is a ruled line you write on. No filled box, no rounded
+   well: the paper shows through and a single rule sits under the words.
+   Focus draws that rule in ink, from the left, the way you would underline
+   the line you are about to fill in. */
 input[type='text'],
 input[type='password'],
 input[type='number'],
@@ -1440,23 +1570,49 @@ select,
 textarea {
   width: 100%;
   min-height: 44px;
-  padding: 8px 12px;
+  padding: 8px 2px;
   border: 0;
-  border-bottom: 1.5px solid var(--rule);
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
   font-family: var(--book);
   font-size: var(--t-body);
   color: var(--ink);
-  transition: border-color 0.2s var(--turn), background-color 0.2s var(--turn);
+  transition: border-color 0.2s var(--turn);
+}
+
+select {
+  padding-right: 20px;
+}
+
+.field {
+  position: relative;
+}
+
+/* The ink stroke that runs under a field as it takes focus. */
+.field::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.5px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.35s var(--turn);
+  pointer-events: none;
+}
+
+.field:focus-within::after {
+  transform: scaleX(1);
 }
 
 input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-bottom-color: var(--accent);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-bottom-color: var(--rule);
 }
 
 textarea {
@@ -1519,34 +1675,56 @@ label.check input {
 }
 
 /* A segmented control, cut from the same sheet as the page. */
+/* Choices set as a printed strip: the options run along a rule, divided by
+   hairlines, and the one in force is the one printed in full ink with a
+   stroke under it. No track, no sliding thumb — a book marks a choice, it
+   does not animate a switch. */
 .seg {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--pill);
-  background: var(--rule-soft);
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  border-bottom: 1px solid var(--rule-soft);
 }
 
 .seg.seg-4 {
   grid-auto-flow: row;
   grid-template-columns: repeat(2, 1fr);
-  border-radius: var(--r-sm);
 }
 
 .seg label {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 8px;
-  border-radius: var(--pill);
+  border-radius: 0;
   font-family: var(--hand);
   font-size: var(--t-caption);
-  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
   cursor: pointer;
-  transition: background-color 0.25s var(--turn), color 0.25s var(--turn);
+  transition: color 0.25s var(--turn);
+}
+
+.seg label + label {
+  box-shadow: inset 1px 0 0 var(--rule-soft);
+}
+
+/* The stroke under the chosen one, drawn rather than slid. */
+.seg label::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -1px;
+  height: 2px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transition: transform 0.32s var(--turn);
 }
 
 /* The input has to sit above its own label text, or the text swallows the
@@ -1564,9 +1742,17 @@ label.check input {
 }
 
 .seg label:has(input:checked) {
-  background: var(--paper);
+  background: none;
   color: var(--ink);
-  box-shadow: 0 1px 2px var(--shade);
+  box-shadow: none;
+}
+
+.seg label:has(input:checked)::after {
+  transform: scaleX(1);
+}
+
+.seg label:hover {
+  color: var(--ink-2);
 }
 
 .swatches,
@@ -1662,8 +1848,12 @@ label.check input {
 .facing-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   margin-top: 10px;
+}
+
+.facing-actions .ledger-btn:last-child {
+  border-bottom-color: var(--rule);
 }
 
 .colophon {
@@ -1855,10 +2045,30 @@ dialog.sheet {
    between them. That is the Fold opened flat, and every laptop window. */
 @media (min-width: 820px) {
   .book {
-    grid-template-columns: minmax(0, 1fr) var(--spine-w) minmax(0, 23rem);
+    grid-template-columns: minmax(0, 1fr) var(--spine-w) minmax(0, 25rem);
     max-width: 80rem;
     margin: 0 auto;
     box-shadow: var(--shadow-page);
+  }
+
+  /* Imposition. On a spread the two text blocks are mirrored: each sits
+     snug against the gutter with a wide margin at the fore-edge, so the
+     opening reads as one thing with a fold down it rather than two columns
+     side by side. The left page's block is pushed to the right to meet the
+     spine; the right page's sits where it falls, against the same fold. */
+  .leaf {
+    padding-left: var(--pad-outer);
+    padding-right: var(--pad-gutter);
+  }
+
+  .leaf:not(.recto) > * {
+    margin-left: auto;
+    margin-right: 0;
+  }
+
+  .recto {
+    padding-left: var(--pad-gutter);
+    padding-right: var(--pad-outer);
   }
 
   .recto {
@@ -2272,10 +2482,10 @@ main[data-turned] > *:nth-child(n + 5) { animation-delay: 230ms; }
 
 @keyframes ribbon-sway {
   0%, 100% {
-    transform: rotate(-1.1deg);
+    transform: rotate(-0.8deg);
   }
   50% {
-    transform: rotate(1.4deg);
+    transform: rotate(0.9deg);
   }
 }
 
@@ -2286,6 +2496,263 @@ main[data-turned] > *:nth-child(n + 5) { animation-delay: 230ms; }
 }
 
 /* ---------- Motion preferences ---------- */
+
+
+/* ==========================================================================
+   The press
+   --------------------------------------------------------------------------
+   Everything below is the difference between a page that is set and a page
+   that is merely laid out: how the figures are cut, how ink behaves when it
+   is pressed into paper, and the small permanent movements a real book has.
+   ========================================================================== */
+
+/* ---------- Figures, cut two ways ---------- */
+
+/* A book uses two sets of numerals and never mixes them up. Old-style
+   figures have ascenders and descenders, so they sit in a line of prose the
+   way lowercase does — "across 5 accounts" reads as a sentence. Lining
+   tabular figures are all one height and one width, so a column of money
+   stacks with the decimal points under each other. Prose gets the first;
+   anything in a column gets the second. */
+body {
+  font-variant-ligatures: common-ligatures contextual;
+  font-kerning: normal;
+}
+
+p,
+li,
+.chapter-blurb,
+.marginal,
+.hand,
+.sheet-lede,
+.hint,
+.ruled-name,
+.display-note {
+  font-variant-numeric: oldstyle-nums proportional-nums;
+}
+
+.display-value,
+.ruled-value,
+.figure-value,
+.alloc-bar + .ruled-list .ruled-value,
+td,
+th,
+.bars text,
+input,
+.ring-figure {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Headings are set to break where the sense breaks, not where the box ends;
+   prose avoids leaving a single word alone on the last line. */
+h1,
+h2,
+.chapter-title,
+.display-figure {
+  text-wrap: balance;
+}
+
+p,
+.chapter-blurb,
+.marginal {
+  text-wrap: pretty;
+  hanging-punctuation: first last;
+}
+
+/* ---------- The rule of shares ---------- */
+
+/* Not a chart: a band of inks printed end to end, hairlined above and below
+   like a rule, with the unspoken-for part left as bare hatching. The
+   segments are divided by the paper showing through rather than by a gap. */
+.alloc-bar {
+  height: 10px;
+  gap: 0;
+  border-radius: 1px;
+  background: transparent;
+  box-shadow:
+    inset 0 0 0 1px var(--rule-soft),
+    inset 0 1px 2px rgb(0 0 0 / 0.07);
+}
+
+.alloc-bar i + i {
+  border-left: 1px solid var(--paper);
+}
+
+.alloc-bar i.alloc-free {
+  background: repeating-linear-gradient(135deg, var(--ink-4) 0 1.5px, transparent 1.5px 5px);
+  opacity: 0.5;
+}
+
+/* ---------- Ink under the hand ---------- */
+
+/* A button is a stamp pressed into the sheet: it sinks, the paper darkens
+   around it for an instant, and it comes back up. Nothing scales, because
+   paper does not scale. */
+/* No overflow clipping here: a coarse pointer gets an invisible 44px pad
+   through .btn.small::after, and clipping the button would cut the pad back
+   to the size of the ink — which is exactly the thumb-reach problem the pad
+   exists to solve. The bleed below is sized to stay inside the box instead. */
+.btn {
+  position: relative;
+  transition:
+    background-color 0.2s var(--turn),
+    transform 0.12s var(--turn),
+    box-shadow 0.2s var(--turn);
+}
+
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.16), inset 0 0 0 1px var(--rule-soft);
+}
+
+.btn.primary:active {
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.3);
+}
+
+/* The bleed: ink spreading out from where the finger landed. It is drawn
+   from the centre because a press has no coordinates, and it is gone before
+   anyone could study it. */
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at center, currentColor 0%, transparent 62%);
+  opacity: 0;
+  transform: scale(0.3);
+  pointer-events: none;
+}
+
+.btn:active::before {
+  animation: ink-bleed 520ms var(--turn);
+}
+
+@keyframes ink-bleed {
+  0% {
+    opacity: 0.2;
+    transform: scale(0.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* A line of the ledger answers the hand too: the rule under it darkens and
+   the leader dots close up, the way a finger tracking a column makes you
+   look harder at one line. */
+.ruled-row {
+  transition: color 0.22s var(--turn);
+}
+
+a.ruled-row:hover .ruled-leader,
+button.ruled-row:hover .ruled-leader {
+  opacity: 1;
+}
+
+.ruled-leader {
+  transition: opacity 0.25s var(--turn);
+}
+
+a.ruled-row:hover .ruled-value,
+button.ruled-row:hover .ruled-value {
+  color: var(--ink);
+}
+
+/* ---------- Setting a page, a line at a time ---------- */
+
+/* Arriving at a chapter, the rows come in one after another rather than all
+   at once — a page being set, not a screen being painted. */
+main[data-turned] .ruled-list .ruled {
+  animation: line-set 420ms var(--turn) backwards;
+}
+
+main[data-turned] .ruled-list .ruled:nth-child(1) { animation-delay: 40ms; }
+main[data-turned] .ruled-list .ruled:nth-child(2) { animation-delay: 85ms; }
+main[data-turned] .ruled-list .ruled:nth-child(3) { animation-delay: 130ms; }
+main[data-turned] .ruled-list .ruled:nth-child(4) { animation-delay: 175ms; }
+main[data-turned] .ruled-list .ruled:nth-child(5) { animation-delay: 220ms; }
+main[data-turned] .ruled-list .ruled:nth-child(n + 6) { animation-delay: 260ms; }
+
+@keyframes line-set {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- The thumb index ---------- */
+
+/* The chapter you are on is a tab pulled proud of the block, with the page's
+   own colour on it and a shadow where it leaves the edge. */
+.thumb-index a[aria-current='page'] {
+  box-shadow:
+    inset 0 1px 0 var(--rule-soft),
+    inset 1px 0 0 var(--rule-soft),
+    inset -1px 0 0 var(--rule-soft),
+    0 -2px 6px rgb(0 0 0 / 0.07);
+}
+
+/* ---------- Marbled endpapers ---------- */
+
+/* The endpapers of a bound book are marbled, so these are. Two combs of
+   thinned ink drawn across the sheet at slightly different angles, under the
+   same grain as every other page — enough to say "this is the inside of the
+   cover" and never enough to read through. */
+:root[data-chapter='settings'] .book::before {
+  background:
+    repeating-linear-gradient(101deg, transparent 0 22px, color-mix(in srgb, var(--ribbon) 30%, transparent) 22px 25px, transparent 25px 48px),
+    repeating-linear-gradient(94deg, transparent 0 31px, color-mix(in srgb, var(--accent) 26%, transparent) 31px 34px, transparent 34px 66px),
+    radial-gradient(120% 80% at 12% 8%, rgb(255 246 226 / var(--grain)), transparent 60%),
+    radial-gradient(110% 90% at 88% 92%, rgb(120 88 40 / var(--grain)), transparent 62%),
+    var(--paper);
+  background-blend-mode: soft-light, soft-light, normal, normal, normal;
+  animation: grain-drift 64s ease-in-out infinite alternate;
+}
+
+/* ---------- The ribbon answers the turn ---------- */
+
+/* Turning a leaf disturbs the ribbon lying against it. The sway is replaced
+   for the length of the turn by a kick that settles back into it, so the one
+   permanently moving thing on the page is also the one that reacts. */
+:root[data-turn] .ribbon {
+  animation: ribbon-kick 1100ms var(--settle);
+}
+
+@keyframes ribbon-kick {
+  0% {
+    transform: rotate(-0.8deg);
+  }
+  22% {
+    transform: rotate(3.2deg);
+  }
+  55% {
+    transform: rotate(-1.6deg);
+  }
+  78% {
+    transform: rotate(0.7deg);
+  }
+  100% {
+    transform: rotate(-0.8deg);
+  }
+}
+
+/* ---------- The turn ---------- */
+
+/* A leaf passing over the page beneath it throws a shadow, and the shadow
+   sweeps as the leaf falls. Without it the turn is a rotation; with it, it
+   is paper. */
+::view-transition-old(page) {
+  transform-origin: left center;
+}
+
+::view-transition-new(page) {
+  transform-origin: left center;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

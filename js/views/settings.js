@@ -223,7 +223,8 @@ export function renderSettings() {
             </div>`}`, { id: 'strongbox' })}
 
     ${section('Connections', html`${!vaultAvailable()
-      ? html`<p class="hand">A connection needs the installed book or an https address, because its credentials live in the strongbox.</p>`
+      ? html`<p class="hand">A connection needs the installed book or an <strong>https</strong> address, because the token it uses lives in the strongbox, and a browser only lends out the lock on a secure address.</p>
+          <p class="marginal">You are reading this over plain http — the address <code>npm start</code> prints for a phone is exactly that. Put the book on any https host and add it to your home screen, and this offer appears.</p>`
       : !bridgeConnected()
         ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Teller</strong> certificate and asks your banks for figures. Teller's free tier covers a hundred sign-ins and is never billed.</p>
             <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>node scripts/teller-proxy.js</code>; the README has the steps.</p>
@@ -236,6 +237,7 @@ export function renderSettings() {
             <p class="marginal">The token is sealed in the strongbox, so a read only works while that is open — and only while the bridge is running.</p>
             <div class="btn-row">
               <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
+              <button type="button" class="btn ghost" data-action="bridge-move">It has moved</button>
               <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
             </div>`}`, { id: 'connections' })}
 

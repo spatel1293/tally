@@ -31,7 +31,7 @@
 //   TELLER_ENV     "development" (the default: free, real banks, not billed),
 //                  "sandbox" (fake banks, for trying it out) or "production".
 //   PORT           default 7000.
-//   HOST           default 0.0.0.0, so your phone can reach it on the LAN.
+//   HOST           default 127.0.0.1. See the note on binding below.
 //   ALLOW_ORIGIN   default "*". Set it to Tally's address to be stricter.
 
 import { createServer } from 'node:http';
@@ -39,7 +39,12 @@ import { request as httpsRequest } from 'node:https';
 import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT || 7000);
-const HOST = process.env.HOST || '0.0.0.0';
+// Binds to this machine only. The book is served over https, and a browser
+// will not let an https page call a plain-http address, so exposing the
+// bridge on the LAN would achieve nothing except exposing it. Put it in
+// front of a real certificate instead — `tailscale serve` is the easy way,
+// and the README has the steps. Set HOST=0.0.0.0 to override.
+const HOST = process.env.HOST || '127.0.0.1';
 const APP_ID = process.env.TELLER_APP_ID || '';
 const ENVIRONMENT = process.env.TELLER_ENV || 'development';
 const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
@@ -291,6 +296,7 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  Tally bridge is running.\n`);
   console.log(`  Open        http://${where}:${PORT}/`);
   console.log(`  Environment ${ENVIRONMENT}${ENVIRONMENT === 'development' ? '  (free, real banks, not billed)' : ''}`);
-  if (HOST === '0.0.0.0') console.log(`  On the LAN  http://<this machine's IP>:${PORT}/`);
+  console.log(`\n  To reach it from your phone, put it behind a certificate:`);
+  console.log(`    tailscale serve --bg ${PORT}`);
   console.log(`\n  It holds your certificate and nothing else. Stop it with Ctrl-C.\n`);
 });
