@@ -26,7 +26,7 @@ export const BP = 10000;
 // How far ahead a projection will look before giving up. Ten years is longer
 // than any plan anyone sensibly makes, and it stops a tiny monthly amount
 // against a large target from looping for ever.
-export const PROJECTION_HORIZON = 120;
+const PROJECTION_HORIZON = 120;
 
 export function planKind(plan) {
   return plan.kind in PLAN_KINDS ? plan.kind : 'fund';

@@ -26,6 +26,11 @@ function bpOk(v) {
 // A sealed vault blob is opaque here: it's ciphertext, and only the owner's
 // passphrase can open it. All that's checked is that it has the right shape,
 // so a corrupt one is dropped rather than kept around to fail on every open.
+// A connection to an account at the bridge: an id and where it came from.
+function linkOk(v) {
+  return Boolean(v) && typeof v === 'object' && typeof v.accountId === 'string' && v.accountId.length > 0 && v.accountId.length <= 200;
+}
+
 function vaultOk(v) {
   return Boolean(v) && typeof v === 'object' && v.v === 1 && typeof v.iv === 'string' && typeof v.data === 'string' && v.iv.length <= 64 && v.data.length <= 20000;
 }
@@ -56,6 +61,16 @@ export function sanitizeAccount(a, index) {
     reviewedAt: isValidISODate(a.reviewedAt) ? a.reviewedAt : null,
     notes: str(a.notes, NOTE_MAX),
     vault: vaultOk(a.vault) ? { v: 1, iv: a.vault.iv, data: a.vault.data } : null,
+    // Which account at the bridge this entry follows. It holds no
+    // credential — the access URL that can read it is sealed in settings.
+    link: linkOk(a.link)
+      ? {
+          accountId: str(a.link.accountId, 200),
+          org: str(a.link.org, NAME_MAX),
+          lastFour: str(a.link.lastFour, 4),
+          lastSyncAt: typeof a.link.lastSyncAt === 'string' ? a.link.lastSyncAt.slice(0, 40) : null,
+        }
+      : null,
   };
 }
 
@@ -108,6 +123,11 @@ export function sanitizeSettings(s) {
   // accounts carry, so they travel with a backup. Neither is a secret.
   if (typeof s.vaultSalt === 'string' && /^[A-Za-z0-9+/=]{16,64}$/.test(s.vaultSalt)) out.vaultSalt = s.vaultSalt;
   if (vaultOk(s.vaultCheck)) out.vaultCheck = { v: 1, iv: s.vaultCheck.iv, data: s.vaultCheck.data };
+  // The bridge's access URL is a credential, so it is sealed like the rest.
+  // Its host and the time of the last sync are not, and are worth seeing.
+  if (vaultOk(s.bridgeVault)) out.bridgeVault = { v: 1, iv: s.bridgeVault.iv, data: s.bridgeVault.data };
+  if (typeof s.bridgeHost === 'string') out.bridgeHost = s.bridgeHost.slice(0, 120);
+  if (typeof s.bridgeAt === 'string') out.bridgeAt = s.bridgeAt.slice(0, 40);
   return out;
 }
 

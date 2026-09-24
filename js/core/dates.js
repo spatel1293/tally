@@ -36,6 +36,17 @@ export function todayISO(now = new Date()) {
   return toISO(now.getFullYear(), now.getMonth() + 1, now.getDate());
 }
 
+// The calendar day a timestamp falls on, in the reader's own timezone.
+// Slicing an ISO string instead gives the UTC day, which is a different day
+// for most of the evening in the Americas — the sort of bug that shows up as
+// "last read tomorrow".
+export function dayOf(timestamp, { now = () => new Date() } = {}) {
+  if (!timestamp) return null;
+  const d = typeof timestamp === 'number' ? new Date(timestamp) : new Date(String(timestamp));
+  if (Number.isNaN(d.getTime())) return null;
+  return todayISO(d);
+}
+
 export function addDays(iso, n) {
   const { y, m, d } = parseISO(iso);
   const t = new Date(Date.UTC(y, m - 1, d + n));

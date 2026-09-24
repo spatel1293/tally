@@ -5,9 +5,11 @@ import { storageEstimate } from '../storage.js';
 import { buildBackup, parseBackup } from '../core/validate.js';
 import { formatMoney } from '../core/money.js';
 import { APP_VERSION } from '../core/defaults.js';
+import { dayOf } from '../core/dates.js';
 import { money, date, timeAgo, plural } from '../ui/format.js';
 import { chapterHead, icons, ruledRow, section } from './chrome.js';
 import { vaultAvailable, vaultExists, isUnlocked } from '../vault.js';
+import { bridgeConnected } from '../link.js';
 
 const CURRENCIES = [
   ['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'],
@@ -112,7 +114,7 @@ export async function startRestore() {
   const hasData = state.accounts.length > 0 || state.goals.length > 0;
   const ok = await confirmDialog({
     title: 'Replace this book with that one?',
-    message: html`<p>The file${parsed.exportedAt ? ` from ${date(parsed.exportedAt.slice(0, 10))}` : ''} holds
+    message: html`<p>The file${parsed.exportedAt ? ` from ${date(dayOf(parsed.exportedAt))}` : ''} holds
       ${plural(d.accounts.length, 'account')} and ${plural(d.goals.length, 'pot')}.</p>
       ${parsed.carried ? html`<p>It also carries ${plural(parsed.carried, 'record')} from an older version that this one doesn’t read. They travel along untouched.</p>` : ''}
       ${hasData ? html`<p>Everything written in now will be replaced.</p>` : ''}
@@ -220,6 +222,23 @@ export function renderSettings() {
               <button type="button" class="btn ghost" data-action="vault-change">Change the passphrase</button>
             </div>`}`, { id: 'strongbox' })}
 
+    ${section('Connections', html`${!vaultAvailable()
+      ? html`<p class="hand">A connection needs the installed book or an https address, because its credentials live in the strongbox.</p>`
+      : !bridgeConnected()
+        ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Teller</strong> certificate and asks your banks for figures. Teller's free tier covers a hundred sign-ins and is never billed.</p>
+            <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>node scripts/teller-proxy.js</code>; the README has the steps.</p>
+            <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
+        : html`<ul class="plain-list ruled-list">
+              ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}
+              ${ruledRow('Last read', s.bridgeAt ? timeAgo(s.bridgeAt) : 'never')}
+              ${ruledRow('Accounts following it', String(state.accounts.filter((a) => a.link).length))}
+            </ul>
+            <p class="marginal">The token is sealed in the strongbox, so a read only works while that is open — and only while the bridge is running.</p>
+            <div class="btn-row">
+              <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
+              <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
+            </div>`}`, { id: 'connections' })}
+
     ${section('Copies', html`<p class="hand">${s.lastExportAt ? `Last copy saved ${timeAgo(s.lastExportAt)}.` : 'No copy saved yet.'} This device holds the only one otherwise.</p>
       <div class="btn-row">
         <button type="button" class="btn primary" data-action="export-json">Save a copy</button>
@@ -228,7 +247,7 @@ export function renderSettings() {
       ${archived ? html`<p class="marginal">The copy also carries ${plural(archived, 'record')} from the spending ledger this book no longer keeps. Nothing reads them; they are simply never thrown away.</p>` : ''}`, { id: 'copies' })}
 
     ${section('This device', html`<ul class="plain-list ruled-list">
-        ${ruledRow('Storage', storageText())}
+        ${ruledRow('Storage', storageText(), { wrap: true })}
         ${ruledRow('Room used', html`<span data-storage>counting…</span>`)}
         ${ruledRow('Accounts', String(state.accounts.length))}
         ${ruledRow('Pots', String(state.goals.length))}

@@ -63,6 +63,78 @@ const SAFE = ':root{--safe-t:48px !important;--safe-b:24px !important;}';
   // page.screenshot(). While folded, the click is dispatched in the page.
   const tap = (sel) => page.$eval(sel, (el) => el.click());
 
+
+  // Everything the page could do wrong with space, in one sweep: content
+  // clipped by its own box, anything reaching past the edge of the paper, a
+  // chapter tab too small for its label, the ribbon lying over words, and a
+  // touch target too small to hit. Run at every size and in both postures,
+  // because each of those is a different layout.
+  const sweep = (label) => page.evaluate((label) => {
+    const out = [];
+    const vw = document.documentElement.clientWidth;
+    const canScroll = (el) => {
+      const cs = getComputedStyle(el);
+      return ['auto', 'scroll'].includes(cs.overflowX) || ['auto', 'scroll'].includes(cs.overflowY);
+    };
+    const insideScroller = (el) => {
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) if (canScroll(p)) return true;
+      return false;
+    };
+    const name = (el) => {
+      const cls = typeof el.className === 'string' ? el.className.split(' ').filter(Boolean).slice(0, 2).join('.') : '';
+      return `${el.tagName.toLowerCase()}${cls ? '.' + cls : ''}`;
+    };
+    const textOf = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+
+    const over = document.documentElement.scrollWidth - vw;
+    if (over > 0) out.push(`${label}: the page runs ${over}px off the side`);
+
+    for (const el of document.querySelectorAll('.book *')) {
+      if (el instanceof SVGElement || el.closest('.sr-only')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width && !r.height) continue;
+      const clipped = canScroll(el) ? null : el;
+      if (clipped && ['hidden', 'clip'].includes(cs.overflowX) && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis') {
+        out.push(`${label}: ${name(el)} clips ${el.scrollWidth - el.clientWidth}px sideways — "${textOf(el)}"`);
+      }
+      if (clipped && ['hidden', 'clip'].includes(cs.overflowY) && el.scrollHeight > el.clientHeight + 1) {
+        out.push(`${label}: ${name(el)} clips ${el.scrollHeight - el.clientHeight}px off the bottom — "${textOf(el)}"`);
+      }
+      if (cs.position !== 'fixed' && !insideScroller(el)) {
+        if (r.right > vw + 1) out.push(`${label}: ${name(el)} reaches ${Math.round(r.right - vw)}px past the edge — "${textOf(el)}"`);
+        if (r.left < -1) out.push(`${label}: ${name(el)} starts ${Math.round(-r.left)}px off the left — "${textOf(el)}"`);
+      }
+    }
+
+    for (const span of document.querySelectorAll('.thumb-index a span')) {
+      if (span.scrollWidth > span.clientWidth + 1) out.push(`${label}: the tab "${span.textContent}" is too narrow for its label`);
+    }
+
+    const ribbon = document.querySelector('.ribbon')?.getBoundingClientRect();
+    if (ribbon?.height) {
+      for (const el of document.querySelectorAll('#main h1, #main h2, #main p, #main .btn')) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !textOf(el)) continue;
+        const clear = 3;
+        if (!(r.right < ribbon.left - clear || r.left > ribbon.right + clear || r.bottom < ribbon.top || r.top > ribbon.bottom)) {
+          out.push(`${label}: the ribbon lies over ${name(el)} — "${textOf(el)}"`);
+        }
+      }
+    }
+
+    if (matchMedia('(pointer: coarse)').matches) {
+      for (const el of document.querySelectorAll('#main button, #main a, .recto button, .recto a, .thumb-index a')) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height || el.closest('.ruled-row')) continue;
+        const padded = getComputedStyle(el, '::after').content !== 'none';
+        if (!padded && (r.height < 36 || r.width < 36)) out.push(`${label}: ${name(el)} is only ${Math.round(r.width)}×${Math.round(r.height)} to tap — "${textOf(el)}"`);
+      }
+    }
+    return out;
+  }, label);
+
   const fold = async ({ width, height, feature }) => {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 0, mobile: true, displayFeature: feature });
     await page.waitForTimeout(280);
@@ -72,7 +144,6 @@ const SAFE = ':root{--safe-t:48px !important;--safe-b:24px !important;}';
     await page.waitForTimeout(280);
   };
   const posture = () => page.evaluate(() => document.documentElement.dataset.posture);
-  const overflow = () => page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
 
   // Something to read.
   await page.goto(BASE);
@@ -188,23 +259,28 @@ const SAFE = ':root{--safe-t:48px !important;--safe-b:24px !important;}';
   expect(edge.vertical.startsWith('vertical'), 'set the way a thumb index is');
   await laptop.close();
 
-  // ---- Nothing runs off the page ----
-  for (const [name, size] of [['cover', { width: 412, height: 892 }], ['flat', { width: 841, height: 701 }], ['laptop', { width: 1280, height: 860 }]]) {
+  // ---- Nothing clipped, nothing off the page, at any size ----
+  for (const [name, size] of [['small phone', { width: 360, height: 780 }], ['cover', { width: 412, height: 892 }], ['flat', { width: 841, height: 701 }], ['flat rotated', { width: 701, height: 841 }], ['laptop', { width: 1280, height: 860 }]]) {
     await page.setViewportSize(size);
     for (const hash of ['#/', '#/pots', '#/ledger', '#/review', '#/settings']) {
       await page.goto(BASE + hash);
-      await page.waitForTimeout(220);
-      const over = await overflow();
-      if (over > 0) problems.push(`${name} ${hash} runs ${over}px off the page`);
+      await page.waitForTimeout(260);
+      if (hash === '#/pots' && (await shown('.pot-open'))) await page.click('.pot .pot-open');
+      if (hash === '#/ledger' && (await shown('.acct-open-btn'))) await page.click('.acct-open-btn');
+      await page.waitForTimeout(260);
+      problems.push(...await sweep(`${name} ${hash}`));
     }
   }
+  // Folded, both ways. Clicks and screenshots would unfold the phone, so
+  // the sweep only measures.
+  await page.setViewportSize({ width: 841, height: 701 });
   for (const [name, geom] of [['book', BOOK], ['tabletop', TABLETOP]]) {
-    await fold(geom);
-    for (const hash of ['#/', '#/pots', '#/ledger']) {
+    for (const hash of ['#/', '#/pots', '#/ledger', '#/review', '#/settings']) {
       await page.goto(BASE + hash);
-      await page.waitForTimeout(220);
-      const over = await overflow();
-      if (over > 0) problems.push(`${name} ${hash} runs ${over}px off the page`);
+      await fold(geom);
+      await page.waitForTimeout(260);
+      problems.push(...await sweep(`${name} ${hash}`));
+      await unfold();
     }
   }
   await unfold();

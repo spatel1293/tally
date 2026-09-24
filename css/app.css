@@ -215,6 +215,14 @@ button {
   padding: 0;
 }
 
+/* The one line that shows before the book has opened. */
+.boot {
+  padding: 22vh var(--pad) 0;
+  text-align: center;
+  font-style: italic;
+  color: var(--ink-3);
+}
+
 .muted {
   color: var(--ink-3);
 }
@@ -259,6 +267,14 @@ button {
   padding: calc(var(--safe-t) + var(--head-h) + 6px) var(--pad) calc(var(--index-h) + var(--safe-b) + 40px);
   container-type: inline-size;
   container-name: leaf;
+}
+
+/* One measure for the whole page. A book does not set some blocks to the
+   column and let others run to the edge of the paper; the lists and the
+   figures answer to the same line length as the prose, and what genuinely
+   needs more room (the five-year table) scrolls inside it. */
+.leaf > * {
+  max-width: var(--measure);
 }
 
 /* On one page the facing page is folded away, and what it carries opens
@@ -378,15 +394,21 @@ button {
 
 /* ---------- The ribbon ---------- */
 
-/* Sewn in at the head of the book, hanging down the page you are on. It
-   stirs a little, for ever, because a ribbon does. */
+/* Sewn in at the head of the book. It lives inside the spine, so on a
+   spread it hangs in the gutter — the one column of a book with no words in
+   it — and on a single page it hangs in the outer margin, clear of the
+   measure. It stirs a little, for ever, because a ribbon does. */
+.spine {
+  position: relative;
+}
+
 .ribbon {
   position: fixed;
   z-index: 18;
   top: 0;
-  left: calc(var(--pad) + 10px);
-  width: 15px;
-  height: 108px;
+  left: 4px;
+  width: 12px;
+  height: 104px;
   pointer-events: none;
   transform-origin: top center;
   animation: ribbon-sway 9s ease-in-out infinite;
@@ -575,7 +597,8 @@ button {
 .ruled-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   width: 100%;
   padding: 9px 2px;
   border: 0;
@@ -619,10 +642,20 @@ button.ruled-row:hover {
   opacity: 0.5;
 }
 
+/* A figure never wraps — a money amount broken across two lines reads as a
+   mistake. Prose in the value column may, and takes the whole width to do
+   it rather than running off the page. */
 .ruled-value {
   flex: none;
+  max-width: 100%;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
+}
+
+.ruled-value.wrap {
+  white-space: normal;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .swatch {
@@ -649,6 +682,7 @@ button.ruled-row:hover {
 
 .ink-ring svg {
   display: block;
+  overflow: hidden;
 }
 
 .ring-guide {
@@ -1853,7 +1887,9 @@ dialog.sheet {
   }
 
   .ribbon {
-    left: calc(50% - 46px);
+    position: absolute;
+    left: 50%;
+    margin-left: -7px;
   }
 
   .folio {
@@ -1992,7 +2028,9 @@ dialog.sheet {
   }
 
   .ribbon {
-    left: calc(var(--page-w) - 28px);
+    position: absolute;
+    left: 50%;
+    margin-left: -7px;
   }
 
   /* The index, the running head and the folio belong to the left leaf: the
@@ -2263,10 +2301,12 @@ main[data-turned] > *:nth-child(n + 5) { animation-delay: 230ms; }
 /* A finger needs more room than a cursor. Nothing in the layout moves; the
    pad is invisible and only the pointer sees it. */
 @media (pointer: coarse) {
-  .btn.small {
+  .btn.small,
+  .section-rule a {
     position: relative;
   }
 
+  .section-rule a::after,
   .btn.small::after {
     content: '';
     position: absolute;

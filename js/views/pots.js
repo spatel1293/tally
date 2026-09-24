@@ -53,7 +53,7 @@ export function renderPots() {
 
 // The part that moves when the levers move, mounted on its own so typing in
 // the fields doesn't rebuild the page under the cursor.
-export function potResults() {
+function potResults() {
   const monthly = scenarioMonthly();
   const plans = planOrder(state.goals);
   const projection = projectPlans(plans, { monthly, lumpSum: scenario.lumpSum, todayIso: state.today });
@@ -121,7 +121,7 @@ function potEntry(row, share, selected) {
   </li>`;
 }
 
-export function milestoneTable(plans, monthly, { years = 5 } = {}) {
+function milestoneTable(plans, monthly, { years = 5 } = {}) {
   const ordered = planOrder(plans);
   if (!ordered.length) return '';
   const m = milestones(ordered, monthly, { years });
@@ -164,7 +164,7 @@ export function potDetail(plan) {
     <ul class="plain-list ruled-list">
       ${ruledRow('Share of the surplus', plan.allocBp ? money(share) : '—', { sub: plan.allocBp ? percent(plan.allocBp / BP) : 'none set' })}
       ${ruledRow('Yield', plan.apyBp ? rate(plan.apyBp) : '—', { sub: planKind(plan) === 'invest' ? 'assumed' : 'a year' })}
-      ${ruledRow('Kept in', account ? account.name : 'Nowhere yet', { sub: account ? account.institution : 'say which account', tone: account ? '' : 'thin' })}
+      ${ruledRow('Kept in', account ? account.name : 'Nowhere yet', { sub: account ? account.institution : 'say which account', tone: account ? '' : 'thin', wrap: true })}
       ${plan.targetDate ? ruledRow('Wanted by', date(plan.targetDate), { sub: when ? `ready ${when}` : 'no date reachable', tone: row.onTime === false ? 'short' : row.onTime ? 'covered' : 'thin' }) : ''}
       ${ruledRow('In a year', money(years[11]))}
       ${ruledRow('In five years', money(years[59]))}

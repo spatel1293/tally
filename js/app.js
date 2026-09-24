@@ -1,11 +1,13 @@
 import { html, mount, $ } from './ui/html.js';
-import { toast } from './ui/overlay.js';
+import { toast, confirmDialog } from './ui/overlay.js';
 import { resetCharts, hydrateCharts } from './ui/charts.js';
 import { watchPosture } from './ui/posture.js';
 import { state, init, subscribe, checkDayChange, reload, saveAccount, describeError } from './store.js';
 import { isUnlocked, lock as lockVault, onVaultChange, open as openSealed, describeVaultError } from './vault.js';
 import { CHAPTERS, icons, ui } from './views/chrome.js';
-import { openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
+import { money } from './ui/format.js';
+import { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
+import { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } from './link.js';
 import { renderFund, fundFacingPage } from './views/fund.js';
 import { renderPots, potDetail, afterPotsMount, resetScenario } from './views/pots.js';
 import { renderLedger, accountDetail, sealedFields } from './views/ledger.js';
@@ -35,8 +37,7 @@ function renderShell() {
     $('#app'),
     html`<a class="skip" href="#main">Skip to the page</a>
     <div class="book">
-      <div class="spine" aria-hidden="true"></div>
-      <div class="ribbon" aria-hidden="true"><i></i></div>
+      <div class="spine" aria-hidden="true"><div class="ribbon"><i></i></div></div>
       <header class="running-head" data-running>
         <span class="running-title" data-running-title></span>
         <span class="running-fund" data-running-fund></span>
@@ -74,9 +75,11 @@ function colophon() {
   return html`<div class="colophon">
     <p class="colophon-mark" aria-hidden="true">❧</p>
     <p>This book keeps one thing: what the fund is worth, what it is for, and where it sits.</p>
-    <p>It runs entirely on this device. Nothing is sent anywhere, there is no account to sign into, and the sealed pages open only with your passphrase.</p>
+    ${bridgeConnected()
+      ? html`<p>It is kept on this device. The one thing it reaches for is your own bridge, to read balances and nothing else; there is no account of ours to sign into, and the sealed pages open only with your passphrase.</p>`
+      : html`<p>It runs entirely on this device. Nothing is sent anywhere, there is no account to sign into, and the sealed pages open only with your passphrase.</p>`}
     <p class="colophon-rule" aria-hidden="true"></p>
-    <p class="colophon-small">Set in the device’s book face. Written offline.</p>
+    <p class="colophon-small">Set in the device’s book face. ${bridgeConnected() ? html`Reads ${state.settings.bridgeHost || 'your bridge'}.` : 'Written offline.'}</p>
   </div>`;
 }
 
@@ -149,9 +152,7 @@ function paint(route, { keepScroll, turning }) {
 function renderFacing() {
   const el = $('[data-facing]');
   if (!el) return;
-  const route = currentRoute();
-  el.dataset.pane = route;
-  mount(el, ROUTES[route].facing?.() ?? '');
+  mount(el, ROUTES[currentRoute()].facing?.() ?? '');
   hydrateCharts(el);
   fillSealed(el);
 }
@@ -241,7 +242,7 @@ darkQuery.addEventListener?.('change', applyTheme);
 
 // ---------- Actions ----------
 
-const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
+const fail = (err) => toast(describeLinkError(err) ?? describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
 const actions = {
   'new-account': () => openAccountForm(),
@@ -313,6 +314,63 @@ const actions = {
       setTimeout(() => navigator.clipboard.writeText('').catch(() => {}), 30000);
     } catch {
       toast('This browser wouldn’t let the book use the clipboard.', { tone: 'error' });
+    }
+  },
+
+  'bridge-connect': () => openBridgeForm(),
+  // Reading the bridge writes only what actually moved, and says what it
+  // found — including the banks the bridge itself couldn't reach.
+  'bridge-sync': async (el) => {
+    if (!bridgeConnected()) return openBridgeForm();
+    el.disabled = true;
+    try {
+      const result = await syncNow();
+      if (!result.ok) {
+        toast(result.error, { tone: 'error', duration: 8000 });
+        return;
+      }
+      ui.offered = result.offered;
+      const moved = result.changed.length;
+      const trouble = [...result.problems.map((p) => p.message), ...result.errors];
+      if (trouble.length) toast(trouble[0], { tone: 'error', duration: 9000 });
+      else if (moved) toast(moved === 1 ? `${result.changed[0].name} is now ${money(result.changed[0].cents)}` : `${moved} balances written in`);
+      else if (result.updates.length) toast('Nothing has moved since the last reading.');
+      else if (result.offered.length) toast(`${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} offered — write them in from the Accounts chapter.`, { duration: 7000 });
+      else toast('The bridge has nothing to show.');
+      render({ keepScroll: true });
+    } catch (err) {
+      fail(err);
+    } finally {
+      el.disabled = false;
+    }
+  },
+  'adopt-account': async (el) => {
+    const offered = ui.offered[Number(el.dataset.index)];
+    if (!offered) return;
+    try {
+      await adoptAccount(offered);
+      ui.offered = ui.offered.filter((a) => a !== offered);
+      toast(`${offered.name} written in`);
+      render({ keepScroll: true });
+    } catch (err) {
+      fail(err);
+    }
+  },
+  'bridge-forget': async () => {
+    const ok = await confirmDialog({
+      title: 'Disconnect the bridge?',
+      message: html`<p>The book forgets the sealed token, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
+        <p>The sign-in at Teller is untouched — revoke it in your Teller dashboard if you want it gone for good.</p>`,
+      confirmLabel: 'Disconnect',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await forgetBridge();
+      ui.offered = [];
+      toast('Bridge disconnected');
+    } catch (err) {
+      fail(err);
     }
   },
 

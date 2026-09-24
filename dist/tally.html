@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Tally</title>
-  <meta name="description" content="A private, offline budgeting app. Track spending, budgets and recurring bills on your own device." />
-  <meta name="theme-color" content="#F2F2F7" />
+  <meta name="description" content="A private, offline book for a wealth fund: what it is worth, what it is for, and where it sits — kept on your own device." />
+  <meta name="theme-color" content="#efe7d7" />
   <meta name="color-scheme" content="light dark" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -20,6 +20,8 @@
       try { pref = localStorage.getItem('tally:theme') || 'system'; } catch (e) {}
       var dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
       document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', dark ? '#17130e' : '#efe7d7');
     })();
   </script>
   <style>
@@ -240,6 +242,14 @@ button {
   padding: 0;
 }
 
+/* The one line that shows before the book has opened. */
+.boot {
+  padding: 22vh var(--pad) 0;
+  text-align: center;
+  font-style: italic;
+  color: var(--ink-3);
+}
+
 .muted {
   color: var(--ink-3);
 }
@@ -284,6 +294,14 @@ button {
   padding: calc(var(--safe-t) + var(--head-h) + 6px) var(--pad) calc(var(--index-h) + var(--safe-b) + 40px);
   container-type: inline-size;
   container-name: leaf;
+}
+
+/* One measure for the whole page. A book does not set some blocks to the
+   column and let others run to the edge of the paper; the lists and the
+   figures answer to the same line length as the prose, and what genuinely
+   needs more room (the five-year table) scrolls inside it. */
+.leaf > * {
+  max-width: var(--measure);
 }
 
 /* On one page the facing page is folded away, and what it carries opens
@@ -403,15 +421,21 @@ button {
 
 /* ---------- The ribbon ---------- */
 
-/* Sewn in at the head of the book, hanging down the page you are on. It
-   stirs a little, for ever, because a ribbon does. */
+/* Sewn in at the head of the book. It lives inside the spine, so on a
+   spread it hangs in the gutter — the one column of a book with no words in
+   it — and on a single page it hangs in the outer margin, clear of the
+   measure. It stirs a little, for ever, because a ribbon does. */
+.spine {
+  position: relative;
+}
+
 .ribbon {
   position: fixed;
   z-index: 18;
   top: 0;
-  left: calc(var(--pad) + 10px);
-  width: 15px;
-  height: 108px;
+  left: 4px;
+  width: 12px;
+  height: 104px;
   pointer-events: none;
   transform-origin: top center;
   animation: ribbon-sway 9s ease-in-out infinite;
@@ -600,7 +624,8 @@ button {
 .ruled-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   width: 100%;
   padding: 9px 2px;
   border: 0;
@@ -644,10 +669,20 @@ button.ruled-row:hover {
   opacity: 0.5;
 }
 
+/* A figure never wraps — a money amount broken across two lines reads as a
+   mistake. Prose in the value column may, and takes the whole width to do
+   it rather than running off the page. */
 .ruled-value {
   flex: none;
+  max-width: 100%;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
+}
+
+.ruled-value.wrap {
+  white-space: normal;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .swatch {
@@ -674,6 +709,7 @@ button.ruled-row:hover {
 
 .ink-ring svg {
   display: block;
+  overflow: hidden;
 }
 
 .ring-guide {
@@ -1878,7 +1914,9 @@ dialog.sheet {
   }
 
   .ribbon {
-    left: calc(50% - 46px);
+    position: absolute;
+    left: 50%;
+    margin-left: -7px;
   }
 
   .folio {
@@ -2017,7 +2055,9 @@ dialog.sheet {
   }
 
   .ribbon {
-    left: calc(var(--page-w) - 28px);
+    position: absolute;
+    left: 50%;
+    margin-left: -7px;
   }
 
   /* The index, the running head and the folio belong to the left leaf: the
@@ -2288,10 +2328,12 @@ main[data-turned] > *:nth-child(n + 5) { animation-delay: 230ms; }
 /* A finger needs more room than a cursor. Nothing in the layout moves; the
    pad is invisible and only the pointer sees it. */
 @media (pointer: coarse) {
-  .btn.small {
+  .btn.small,
+  .section-rule a {
     position: relative;
   }
 
+  .section-rule a::after,
   .btn.small::after {
     content: '';
     position: absolute;
@@ -3038,7 +3080,7 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '5.0.0';
+const APP_VERSION = '5.1.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the
@@ -3091,6 +3133,11 @@ const DEFAULT_SETTINGS = {
   runwayTarget: 6,
   vaultSalt: null,
   vaultCheck: null,
+  // The bridge, if one is connected. `bridgeVault` holds the sealed address
+  // and token; the other two are only for showing what is connected.
+  bridgeVault: null,
+  bridgeHost: '',
+  bridgeAt: null,
 };
 
 const ACCOUNT_KINDS = {
@@ -3128,6 +3175,7 @@ function newAccount(fields = {}) {
     reviewedAt: null,
     notes: '',
     vault: null,
+    link: null,
     balance: 0,
     balanceAt: null,
     history: [],
@@ -3181,6 +3229,17 @@ function isValidISODate(s) {
 
 function todayISO(now = new Date()) {
   return toISO(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+
+// The calendar day a timestamp falls on, in the reader's own timezone.
+// Slicing an ISO string instead gives the UTC day, which is a different day
+// for most of the evening in the Americas — the sort of bug that shows up as
+// "last read tomorrow".
+function dayOf(timestamp, { now = () => new Date() } = {}) {
+  if (!timestamp) return null;
+  const d = typeof timestamp === 'number' ? new Date(timestamp) : new Date(String(timestamp));
+  if (Number.isNaN(d.getTime())) return null;
+  return todayISO(d);
 }
 
 function addDays(iso, n) {
@@ -3286,7 +3345,7 @@ function parseFlexibleDate(input, order = 'MDY') {
   return null;
 }
 
-return { pad2, toISO, parseISO, daysInMonth, isValidISODate, todayISO, addDays, addMonthsClamped, daysBetween, monthsBetween, monthKey, monthKeyAdd, monthRange, isInMonth, dayOfWeek, formatDate, formatMonth, parseFlexibleDate };
+return { pad2, toISO, parseISO, daysInMonth, isValidISODate, todayISO, dayOf, addDays, addMonthsClamped, daysBetween, monthsBetween, monthKey, monthKeyAdd, monthRange, isInMonth, dayOfWeek, formatDate, formatMonth, parseFlexibleDate };
 })();
 
 // js/core/money.js
@@ -3704,7 +3763,7 @@ function projectPlans(plans, { monthly = 0, lumpSum = 0, todayIso, horizon = PRO
   };
 }
 
-return { PLAN_KINDS, BP, PROJECTION_HORIZON, planKind, planProgress, requiredMonthly, growMonthly, allocate, projectGrowth, milestones, runway, safetyPlan, planOrder, projectPlans };
+return { PLAN_KINDS, BP, planKind, planProgress, requiredMonthly, growMonthly, allocate, projectGrowth, milestones, runway, safetyPlan, planOrder, projectPlans };
 })();
 
 // js/core/validate.js
@@ -3736,6 +3795,11 @@ function bpOk(v) {
 // A sealed vault blob is opaque here: it's ciphertext, and only the owner's
 // passphrase can open it. All that's checked is that it has the right shape,
 // so a corrupt one is dropped rather than kept around to fail on every open.
+// A connection to an account at the bridge: an id and where it came from.
+function linkOk(v) {
+  return Boolean(v) && typeof v === 'object' && typeof v.accountId === 'string' && v.accountId.length > 0 && v.accountId.length <= 200;
+}
+
 function vaultOk(v) {
   return Boolean(v) && typeof v === 'object' && v.v === 1 && typeof v.iv === 'string' && typeof v.data === 'string' && v.iv.length <= 64 && v.data.length <= 20000;
 }
@@ -3766,6 +3830,16 @@ function sanitizeAccount(a, index) {
     reviewedAt: isValidISODate(a.reviewedAt) ? a.reviewedAt : null,
     notes: str(a.notes, NOTE_MAX),
     vault: vaultOk(a.vault) ? { v: 1, iv: a.vault.iv, data: a.vault.data } : null,
+    // Which account at the bridge this entry follows. It holds no
+    // credential — the access URL that can read it is sealed in settings.
+    link: linkOk(a.link)
+      ? {
+          accountId: str(a.link.accountId, 200),
+          org: str(a.link.org, NAME_MAX),
+          lastFour: str(a.link.lastFour, 4),
+          lastSyncAt: typeof a.link.lastSyncAt === 'string' ? a.link.lastSyncAt.slice(0, 40) : null,
+        }
+      : null,
   };
 }
 
@@ -3818,6 +3892,11 @@ function sanitizeSettings(s) {
   // accounts carry, so they travel with a backup. Neither is a secret.
   if (typeof s.vaultSalt === 'string' && /^[A-Za-z0-9+/=]{16,64}$/.test(s.vaultSalt)) out.vaultSalt = s.vaultSalt;
   if (vaultOk(s.vaultCheck)) out.vaultCheck = { v: 1, iv: s.vaultCheck.iv, data: s.vaultCheck.data };
+  // The bridge's access URL is a credential, so it is sealed like the rest.
+  // Its host and the time of the last sync are not, and are worth seeing.
+  if (vaultOk(s.bridgeVault)) out.bridgeVault = { v: 1, iv: s.bridgeVault.iv, data: s.bridgeVault.data };
+  if (typeof s.bridgeHost === 'string') out.bridgeHost = s.bridgeHost.slice(0, 120);
+  if (typeof s.bridgeAt === 'string') out.bridgeAt = s.bridgeAt.slice(0, 40);
   return out;
 }
 
@@ -4316,12 +4395,113 @@ function describeVaultError(err) {
 return { vaultAvailable, vaultExists, isUnlocked, onVaultChange, lock, createVault, unlock, seal, open, changePassphrase, describeVaultError };
 })();
 
+// js/views/chrome.js
+const __m_js_views_chrome_js = (() => {
+const { html } = __m_js_ui_html_js;
+// Shared furniture for every page of the book: running heads, folios, the
+// ribbon, and the small marks that make a page look printed rather than
+// rendered. Nothing here knows about any one chapter.
+
+// UI state shared between chapters, not persisted.
+const ui = {
+  // What the facing page is showing. It is state rather than layout, so
+  // folding the phone never loses your place.
+  selectedPlan: null,
+  selectedAccount: null,
+  // What the last sync found that the book hasn't got yet. Not persisted:
+  // it is true only until the next sync.
+  offered: [],
+};
+
+const CHAPTERS = [
+  { route: 'fund', title: 'The Fund', folio: 'i', blurb: 'What it is all worth, and what it buys you' },
+  { route: 'pots', title: 'Pots', folio: 'ii', blurb: 'What the money is for' },
+  { route: 'ledger', title: 'Accounts', folio: 'iii', blurb: 'Where it sits, what it earns, who can reach it' },
+  { route: 'review', title: 'Review', folio: 'iv', blurb: 'The quarterly look-over, and the figures behind it' },
+  { route: 'settings', title: 'Endpapers', folio: 'v', blurb: 'Paper, copies and the strongbox' },
+];
+
+const I = (d, w = 20) => html`<svg viewBox="0 0 24 24" width="${w}" height="${w}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+
+const icons = {
+  fund: I(html`<path d="M3 9.5L12 4l9 5.5M5 10v9M9.5 10v9M14.5 10v9M19 10v9M3 19h18"/>`),
+  pots: I(html`<path d="M6 9h12l-1 10a2 2 0 01-2 2H9a2 2 0 01-2-2z"/><path d="M9 9V6.5A3 3 0 0112 4a3 3 0 013 2.5V9"/>`),
+  ledger: I(html`<path d="M5 4h12a2 2 0 012 2v14H7a2 2 0 01-2-2z"/><path d="M9 8h6M9 12h6M9 16h4"/>`),
+  review: I(html`<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>`),
+  settings: I(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>`),
+  plus: I(html`<path d="M12 5v14M5 12h14"/>`, 22),
+  chevron: I(html`<path d="M9 6l6 6-6 6"/>`, 18),
+  lock: I(html`<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>`, 16),
+  sync: I(html`<path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 5v6h-6"/>`, 16),
+  pen: I(html`<path d="M4 20l4-1 9-9-3-3-9 9z"/><path d="M14 7l3 3"/>`, 16),
+  check: I(html`<path d="M5 12l5 5 9-10"/>`, 16),
+};
+
+// The bibliographic mark at the head of every chapter: a rule, the chapter
+// name in small caps, and its number — the way a printed book announces one.
+function chapterHead(route, { actions = '' } = {}) {
+  const chapter = CHAPTERS.find((c) => c.route === route);
+  if (!chapter) return '';
+  return html`<header class="chapter-head">
+    <p class="chapter-number">Chapter ${chapter.folio}</p>
+    <div class="chapter-title-row">
+      <h1 class="chapter-title">${chapter.title}</h1>
+      ${actions ? html`<div class="chapter-actions">${actions}</div>` : ''}
+    </div>
+    <p class="chapter-blurb">${chapter.blurb}</p>
+  </header>`;
+}
+
+// A section of a page, set like one: a small-caps heading with a rule that
+// runs to the end of the measure.
+function section(title, body, { link = '', id = '' } = {}) {
+  return html`<section class="leaf-section"${id ? html` aria-labelledby="${id}"` : ''}>
+    <div class="section-rule">
+      <h2${id ? html` id="${id}"` : ''}>${title}</h2>
+      ${link}
+    </div>
+    ${body}
+  </section>`;
+}
+
+// A figure set on a ruled line, the way a ledger sets one: the name on the
+// left, leader dots across the gap, the amount hard right.
+function ruledRow(name, value, { sub = '', tone = '', href = '', action = '', id = '', wrap = false } = {}) {
+  const inner = html`<span class="ruled-name">${name}${sub ? html`<small>${sub}</small>` : ''}</span>
+    <span class="ruled-leader" aria-hidden="true"></span>
+    <span class="ruled-value ${tone}${wrap ? ' wrap' : ''}">${value}</span>`;
+  if (href) return html`<li class="ruled"><a class="ruled-row" href="${href}">${inner}</a></li>`;
+  if (action) return html`<li class="ruled"><button type="button" class="ruled-row" data-action="${action}" data-id="${id}">${inner}</button></li>`;
+  return html`<li class="ruled"><span class="ruled-row">${inner}</span></li>`;
+}
+
+// The figure a page is really about, set large in the display face.
+function displayFigure(value, label, { tone = '', note = '' } = {}) {
+  return html`<p class="display-figure ${tone}"><span class="display-value">${value}</span>${label ? html`<span class="display-label">${label}</span>` : ''}</p>
+    ${note ? html`<p class="display-note">${note}</p>` : ''}`;
+}
+
+function emptyPage({ title, body, actions = '' }) {
+  return html`<div class="empty-page">
+    <svg class="empty-mark" viewBox="0 0 80 60" aria-hidden="true">
+      <path d="M8 8h28v44H8zM44 8h28v44H44z" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M14 20h16M14 27h16M14 34h10M50 20h16M50 27h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+    </svg>
+    <h2>${title}</h2>
+    <p>${body}</p>
+    ${actions ? html`<div class="btn-row">${actions}</div>` : ''}
+  </div>`;
+}
+
+
+return { ui, CHAPTERS, icons, chapterHead, section, ruledRow, displayFigure, emptyPage };
+})();
+
 // js/ui/format.js
 const __m_js_ui_format_js = (() => {
 const { state } = __m_js_store_js;
 const { formatMoney } = __m_js_core_money_js;
 const { formatDate, formatMonth, daysBetween } = __m_js_core_dates_js;
-const { html } = __m_js_ui_html_js;
 function money(cents, opts = {}) {
   const { currency, locale } = state.settings;
   return formatMoney(cents, { currency, locale, ...opts });
@@ -4363,142 +4543,386 @@ function timeAgo(isoTimestamp) {
   return `on ${then.toLocaleDateString(state.settings.locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
-function accountById(id) {
-  return state.accounts.find((a) => a.id === id) ?? null;
-}
-
 function plural(n, one, many = `${one}s`) {
   return `${n.toLocaleString(state.settings.locale)} ${n === 1 ? one : many}`;
 }
 
-// A figure set the way a book sets one.
-function fig(cents, opts) {
-  return html`<span class="fig">${money(cents, opts)}</span>`;
-}
-
-return { money, date, monthLabel, relativeDay, percent, timeAgo, accountById, plural, fig };
+return { money, date, monthLabel, relativeDay, percent, timeAgo, plural };
 })();
 
-// js/views/chrome.js
-const __m_js_views_chrome_js = (() => {
-const { html } = __m_js_ui_html_js;
-const { state } = __m_js_store_js;
-const { money } = __m_js_ui_format_js;
-// Shared furniture for every page of the book: running heads, folios, the
-// ribbon, and the small marks that make a page look printed rather than
-// rendered. Nothing here knows about any one chapter.
+// js/core/link.js
+const __m_js_core_link_js = (() => {
+// Reading balances through a Teller bridge.
+//
+// Teller's free tier — the "development" environment — talks to real
+// institutions, is not billed, and allows 100 enrolments. It is the only
+// free way to read balances that exists. What it costs instead of money is a
+// small program: Teller requires a client certificate on every request
+// (mutual TLS), and a browser cannot present one, nor may the private key
+// ever live in a shipped app. Teller also serves no CORS headers at all, so
+// even with a certificate the browser would refuse the call.
+//
+// So the owner runs `scripts/teller-proxy.js` — the bridge. It holds the
+// certificate, asks Teller for balances, and answers this book. The path is
+//
+//     your bank  ->  Teller  ->  your bridge  ->  this device
+//
+// and nothing of ours sits anywhere on it. The book only ever talks to the
+// owner's own bridge.
+//
+// The access token is the credential, so it is sealed in the strongbox and a
+// read only works while that is open. The token is useless without the
+// certificate and the certificate is useless without the token — they are
+// deliberately kept in different places.
+//
+// Everything in this file is pure. `js/link.js` does the talking.
 
-// UI state shared between chapters, not persisted.
-const ui = {
-  // What the facing page is showing. It is state rather than layout, so
-  // folding the phone never loses your place.
-  selectedPlan: null,
-  selectedAccount: null,
-  // Which spread of a long chapter you are on.
-  page: 0,
-};
-
-const CHAPTERS = [
-  { route: 'fund', title: 'The Fund', folio: 'i', blurb: 'What it is all worth, and what it buys you' },
-  { route: 'pots', title: 'Pots', folio: 'ii', blurb: 'What the money is for' },
-  { route: 'ledger', title: 'Accounts', folio: 'iii', blurb: 'Where it sits, what it earns, who can reach it' },
-  { route: 'review', title: 'Review', folio: 'iv', blurb: 'The quarterly look-over' },
-  { route: 'settings', title: 'Endpapers', folio: 'v', blurb: 'Figures, backups and the vault' },
-];
-
-const I = (d, w = 20) => html`<svg viewBox="0 0 24 24" width="${w}" height="${w}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-
-const icons = {
-  fund: I(html`<path d="M3 9.5L12 4l9 5.5M5 10v9M9.5 10v9M14.5 10v9M19 10v9M3 19h18"/>`),
-  pots: I(html`<path d="M6 9h12l-1 10a2 2 0 01-2 2H9a2 2 0 01-2-2z"/><path d="M9 9V6.5A3 3 0 0112 4a3 3 0 013 2.5V9"/>`),
-  ledger: I(html`<path d="M5 4h12a2 2 0 012 2v14H7a2 2 0 01-2-2z"/><path d="M9 8h6M9 12h6M9 16h4"/>`),
-  review: I(html`<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>`),
-  settings: I(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>`),
-  plus: I(html`<path d="M12 5v14M5 12h14"/>`, 22),
-  prev: I(html`<path d="M15 5l-7 7 7 7"/>`, 22),
-  next: I(html`<path d="M9 5l7 7-7 7"/>`, 22),
-  chevron: I(html`<path d="M9 6l6 6-6 6"/>`, 18),
-  lock: I(html`<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>`, 16),
-  pen: I(html`<path d="M4 20l4-1 9-9-3-3-9 9z"/><path d="M14 7l3 3"/>`, 16),
-  check: I(html`<path d="M5 12l5 5 9-10"/>`, 16),
-};
-
-// The bibliographic mark at the head of every chapter: a rule, the chapter
-// name in small caps, and its number — the way a printed book announces one.
-function chapterHead(route, { actions = '' } = {}) {
-  const chapter = CHAPTERS.find((c) => c.route === route);
-  if (!chapter) return '';
-  return html`<header class="chapter-head">
-    <p class="chapter-number">Chapter ${chapter.folio}</p>
-    <div class="chapter-title-row">
-      <h1 class="chapter-title">${chapter.title}</h1>
-      ${actions ? html`<div class="chapter-actions">${actions}</div>` : ''}
-    </div>
-    <p class="chapter-blurb">${chapter.blurb}</p>
-  </header>`;
+// Teller reports money as a *decimal string* — "28575.02" — which is a gift:
+// it converts to exact cents with no floating point anywhere in the path.
+// Anything past two decimals is rounded, half away from zero, and a figure
+// too large to be a safe integer is refused rather than mangled.
+function centsFromDecimalString(text) {
+  const s = String(text ?? '').trim();
+  const m = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(s);
+  if (!m) return null;
+  const negative = m[1] === '-';
+  const frac = m[3] ?? '';
+  let cents = BigInt(m[2]) * 100n + BigInt((frac + '00').slice(0, 2));
+  if (frac.length > 2 && Number(frac[2]) >= 5) cents += 1n;
+  const value = Number(cents);
+  if (!Number.isSafeInteger(value)) return null;
+  return negative ? -value : value;
 }
 
-// A section of a page, set like one: a small-caps heading with a rule that
-// runs to the end of the measure.
-function section(title, body, { link = '', id = '', hue = '' } = {}) {
-  return html`<section class="leaf-section"${hue ? html` style="--ink-accent:${hue}"` : ''}${id ? html` aria-labelledby="${id}"` : ''}>
-    <div class="section-rule">
-      <h2${id ? html` id="${id}"` : ''}>${title}</h2>
-      ${link}
-    </div>
-    ${body}
-  </section>`;
+// The bridge's address. Plain http is allowed only on this machine: a bridge
+// running on your own laptop has nowhere to be overheard, but one reached
+// across a network carries a token and must be encrypted.
+function parseBase(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return { ok: false, error: 'That line doesn’t say where your bridge is.' };
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { ok: false, error: 'Your bridge’s address isn’t a web address.' };
+  }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
+    return { ok: false, error: 'A bridge reached over a network has to be https, or the token could be read on the way.' };
+  }
+  url.username = '';
+  url.password = '';
+  url.hash = '';
+  url.search = '';
+  return { ok: true, base: url.toString().replace(/\/+$/, '') };
 }
 
-// A figure set on a ruled line, the way a ledger sets one: the name on the
-// left, leader dots across the gap, the amount hard right.
-function ruledRow(name, value, { sub = '', tone = '', href = '', action = '', id = '' } = {}) {
-  const inner = html`<span class="ruled-name">${name}${sub ? html`<small>${sub}</small>` : ''}</span>
-    <span class="ruled-leader" aria-hidden="true"></span>
-    <span class="ruled-value ${tone}">${value}</span>`;
-  if (href) return html`<li class="ruled"><a class="ruled-row" href="${href}">${inner}</a></li>`;
-  if (action) return html`<li class="ruled"><button type="button" class="ruled-row" data-action="${action}" data-id="${id}">${inner}</button></li>`;
-  return html`<li class="ruled"><span class="ruled-row">${inner}</span></li>`;
+// Connecting is one paste. The bridge's sign-in page hands over a single
+// line carrying both where the bridge is and the token to use with it, so
+// the owner never has to copy two things and get one of them wrong.
+function decodeLinkToken(token, { decode = (s) => atob(s) } = {}) {
+  const trimmed = String(token ?? '').trim().replace(/\s+/g, '');
+  if (!trimmed) return { ok: false, error: 'Paste the line your bridge gave you after you signed in.' };
+  let text;
+  try {
+    text = decode(trimmed);
+  } catch {
+    return { ok: false, error: 'That doesn’t look like a bridge line. Copy it again from the bridge.' };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, error: 'That line is damaged. Copy it again from the bridge.' };
+  }
+  const base = parseBase(parsed?.u);
+  if (!base.ok) return base;
+  const accessToken = String(parsed?.t ?? '').trim();
+  if (!accessToken) return { ok: false, error: 'That line carries no token, so nothing could sign in with it.' };
+  return { ok: true, base: base.base, accessToken };
 }
 
-// The figure a page is really about, set large in the display face.
-function displayFigure(value, label, { tone = '', note = '' } = {}) {
-  return html`<p class="display-figure ${tone}"><span class="display-value">${value}</span>${label ? html`<span class="display-label">${label}</span>` : ''}</p>
-    ${note ? html`<p class="display-note">${note}</p>` : ''}`;
+// Teller says what kind of account it is, so nothing has to be guessed from
+// a name the way a source without types would force.
+function kindForTeller(account) {
+  if (String(account?.type ?? '').toLowerCase() === 'credit') return 'credit';
+  const subtype = String(account?.subtype ?? '').toLowerCase();
+  return {
+    checking: 'checking',
+    savings: 'savings',
+    money_market: 'savings',
+    certificate_of_deposit: 'savings',
+    treasury: 'brokerage',
+    sweep: 'brokerage',
+  }[subtype] ?? 'checking';
 }
 
-function emptyPage({ title, body, actions = '' }) {
-  return html`<div class="empty-page">
-    <svg class="empty-mark" viewBox="0 0 80 60" aria-hidden="true">
-      <path d="M8 8h28v44H8zM44 8h28v44H44z" fill="none" stroke="currentColor" stroke-width="1.4"/>
-      <path d="M14 20h16M14 27h16M14 34h10M50 20h16M50 27h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
-    </svg>
-    <h2>${title}</h2>
-    <p>${body}</p>
-    ${actions ? html`<div class="btn-row">${actions}</div>` : ''}
-  </div>`;
+function roleForTeller(account) {
+  const kind = kindForTeller(account);
+  return { credit: 'spending', brokerage: 'investing', savings: 'savings', checking: 'hub' }[kind] ?? 'other';
 }
 
-// Money, but set as a book sets money: the currency mark a little smaller
-// than the figure it belongs to.
-function figure(cents, opts = {}) {
-  return html`<span class="fig">${money(cents, opts)}</span>`;
+// What an account is worth, from the balances Teller returns beside it.
+//
+// `ledger` is everything in the account; `available` is that net of what
+// hasn't cleared. A book of record wants the ledger — the figure a statement
+// would print — and falls back to available only when there is no ledger.
+//
+// A credit card is money *owed*. Teller reports it as a positive figure, but
+// `fundTotal` simply adds every balance up, so a card written in as reported
+// would inflate the fund by what you owe on it. It is negated here, which is
+// also how anyone would write it in by hand.
+function balanceFromTeller(account) {
+  const balances = account?.balance ?? {};
+  const cents = centsFromDecimalString(balances.ledger) ?? centsFromDecimalString(balances.available);
+  if (cents == null) return null;
+  const owed = String(account?.type ?? '').toLowerCase() === 'credit';
+  return owed ? -Math.abs(cents) : cents;
 }
 
-function planIcon(plan) {
-  return html`<span class="pot-mark" style="--c:${plan.color}" aria-hidden="true">${plan.icon || ''}</span>`;
+// What the bridge calls an account, and which institution it came from.
+function accountFromTeller(account, { today = null } = {}) {
+  const cents = balanceFromTeller(account);
+  const institution = String(account?.institution?.name ?? '').slice(0, 60);
+  const lastFour = String(account?.last_four ?? '').trim().slice(0, 4);
+  return {
+    name: String(account?.name ?? 'Account').trim().slice(0, 60) || 'Account',
+    institution,
+    kind: kindForTeller(account),
+    role: roleForTeller(account),
+    balance: cents ?? 0,
+    // Teller's balances are live, so a reading is taken today by definition:
+    // there is no statement date to file it under.
+    balanceAt: cents == null ? null : today,
+    link: {
+      accountId: String(account?.id ?? ''),
+      org: institution,
+      lastFour,
+      lastSyncAt: null,
+    },
+  };
 }
 
-function accountInitial(account) {
-  return html`<span class="acct-mark" aria-hidden="true">${(account.institution || account.name).slice(0, 1).toUpperCase()}</span>`;
+// What a sync should change, and what it must leave alone.
+//
+// Only the balance and the date it was read are ever taken from the bridge.
+// The name you gave the account, the job you gave it, the rate you wrote
+// down, the pots kept in it and everything sealed in the strongbox stay
+// yours — a bank renaming "Individual" to "Individual Brokerage" must not
+// rewrite your book.
+//
+// `changed` says whether the figure actually moved, so a sync that finds
+// nothing new writes nothing at all.
+function planSync(accounts, tellerAccounts, { today, currency = 'USD' } = {}) {
+  const byId = new Map((tellerAccounts ?? []).map((a) => [String(a.id), a]));
+  const updates = [];
+  const problems = [];
+
+  for (const account of accounts) {
+    const id = account.link?.accountId;
+    if (!id) continue;
+    const found = byId.get(String(id));
+    if (!found) {
+      problems.push({ id: account.id, name: account.name, reason: 'gone', message: `${account.name} is no longer offered by the bridge.` });
+      continue;
+    }
+    if (String(found.status ?? '').toLowerCase() === 'closed') {
+      problems.push({ id: account.id, name: account.name, reason: 'closed', message: `${account.name} is closed at the institution, so its balance was left as it was.` });
+      continue;
+    }
+    const iso = String(found.currency ?? '').toUpperCase();
+    if (iso && iso !== String(currency).toUpperCase()) {
+      problems.push({ id: account.id, name: account.name, reason: 'currency', message: `${account.name} is reported in ${iso}, and this book is kept in ${currency}.` });
+      continue;
+    }
+    const cents = balanceFromTeller(found);
+    if (cents == null) {
+      problems.push({ id: account.id, name: account.name, reason: 'no-balance', message: `${account.name} came back without a balance.` });
+      continue;
+    }
+    updates.push({
+      id: account.id,
+      name: account.name,
+      cents,
+      date: today,
+      was: account.balance ?? 0,
+      changed: cents !== (account.balance ?? 0) || today !== account.balanceAt,
+    });
+  }
+
+  // Accounts the bridge offers that the book hasn't taken up yet. A closed
+  // one is never offered — there is nothing to follow.
+  const taken = new Set(accounts.map((a) => a.link?.accountId).filter(Boolean).map(String));
+  const offered = (tellerAccounts ?? []).filter(
+    (a) => !taken.has(String(a.id)) && String(a.status ?? '').toLowerCase() !== 'closed'
+  );
+
+  return { updates, problems, offered, changed: updates.filter((u) => u.changed) };
 }
 
-function lastRead(account) {
-  if (!account.balanceAt) return 'never read';
-  return account.balanceAt === state.today ? 'read today' : `read ${account.balanceAt}`;
+function isConnected(account) {
+  return Boolean(account?.link?.accountId);
 }
 
-return { ui, CHAPTERS, icons, chapterHead, section, ruledRow, displayFigure, emptyPage, figure, planIcon, accountInitial, lastRead };
+return { centsFromDecimalString, parseBase, decodeLinkToken, kindForTeller, roleForTeller, balanceFromTeller, accountFromTeller, planSync, isConnected };
+})();
+
+// js/link.js
+const __m_js_link_js = (() => {
+// Talking to the bridge.
+//
+// This is the only file in the book that makes a network request, and it
+// only ever makes one kind: asking the owner's own bridge for balances.
+// Teller itself is never contacted from here — it can't be, and shouldn't
+// be. See `js/core/link.js` for why the bridge exists at all.
+//
+// The access token is the whole credential, so it lives sealed in the
+// strongbox and is only ever held in memory for the length of a request.
+
+const { state, updateSettings, saveAccount, recordBalance } = __m_js_store_js;
+const { accountFromTeller, decodeLinkToken, parseBase, planSync } = __m_js_core_link_js;
+const { isUnlocked, open: openSealed, seal } = __m_js_vault_js;
+const TIMEOUT_MS = 45000;
+
+function bridgeConnected() {
+  return Boolean(state.settings.bridgeVault);
+}
+
+async function withTimeout(run) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Teller authenticates with the access token as an HTTP Basic username and
+// no password. The bridge passes that through to Teller unchanged, so it
+// never has to hold a token of its own.
+function authHeader(accessToken) {
+  return `Basic ${btoa(`${accessToken}:`)}`;
+}
+
+// One read of the bridge. It answers with every account the enrolment
+// covers, each with its balance already attached, so the phone makes one
+// request however many accounts there are.
+async function read({ base, accessToken }) {
+  let response;
+  try {
+    response = await withTimeout((signal) =>
+      fetch(`${base}/accounts`, { headers: { Authorization: authHeader(accessToken) }, signal })
+    );
+  } catch (err) {
+    if (err?.name === 'AbortError') return { ok: false, error: 'Your bridge didn’t answer in time. Banks can be slow; try again in a moment.' };
+    return { ok: false, error: 'Couldn’t reach your bridge. Check it is running and that this device can see it.' };
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, error: 'Your bridge turned that token down. Sign in at the bridge again for a new line.' };
+  }
+  if (response.status === 502 || response.status === 504) {
+    return { ok: false, error: 'Your bridge reached Teller but got nothing back. Try again in a moment.' };
+  }
+  if (!response.ok) return { ok: false, error: `Your bridge answered ${response.status}.` };
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, error: 'Your bridge sent something that wasn’t readable. Check it is the right address.' };
+  }
+
+  return {
+    ok: true,
+    accounts: Array.isArray(body?.accounts) ? body.accounts : [],
+    // A bank Teller couldn't reach is reported here rather than failing the
+    // whole read, so a sync can half-work and must say so.
+    errors: Array.isArray(body?.errors) ? body.errors.map(String) : [],
+  };
+}
+
+async function credentials() {
+  if (!bridgeConnected()) throw new Error('bridge-missing');
+  if (!isUnlocked()) throw new Error('vault-locked');
+  const opened = await openSealed(state.settings.bridgeVault);
+  const base = parseBase(opened?.base);
+  if (!base.ok) throw new Error('bridge-damaged');
+  return { base: base.base, accessToken: String(opened?.accessToken ?? '') };
+}
+
+// Connecting. The line is checked against the bridge before it is sealed,
+// so a bridge that isn't running says so now rather than the first time the
+// owner asks for figures.
+async function connectBridge(linkToken) {
+  const decoded = decodeLinkToken(linkToken);
+  if (!decoded.ok) return { ok: false, error: decoded.error };
+
+  const probe = await read(decoded);
+  if (!probe.ok) return { ok: false, error: probe.error };
+
+  const bridgeVault = await seal({ base: decoded.base, accessToken: decoded.accessToken });
+  await updateSettings({ bridgeVault, bridgeHost: new URL(decoded.base).host, bridgeAt: null });
+  return { ok: true, offered: probe.accounts };
+}
+
+async function forgetBridge() {
+  await updateSettings({ bridgeVault: null, bridgeHost: '', bridgeAt: null });
+}
+
+async function fetchBalances() {
+  return read(await credentials());
+}
+
+// One sync: read the bridge, work out what actually moved, and write only
+// that. A balance that hasn't changed is not a new reading, so the history
+// doesn't fill up with identical entries from a daily habit.
+async function syncNow() {
+  const result = await fetchBalances();
+  if (!result.ok) return result;
+
+  const plan = planSync(state.accounts, result.accounts, {
+    today: state.today,
+    currency: state.settings.currency,
+  });
+
+  const at = new Date().toISOString();
+  for (const update of plan.changed) {
+    await recordBalance(update.id, update.cents, update.date);
+  }
+  // Every followed account was looked at, whether or not it moved.
+  for (const update of plan.updates) {
+    const account = state.accounts.find((a) => a.id === update.id);
+    if (account?.link) await saveAccount({ link: { ...account.link, lastSyncAt: at } }, update.id);
+  }
+  await updateSettings({ bridgeAt: at });
+
+  return { ok: true, ...plan, errors: result.errors };
+}
+
+// Taking up an account the bridge offers that the book hasn't got yet.
+async function adoptAccount(tellerAccount) {
+  const fields = accountFromTeller(tellerAccount, { today: state.today });
+  const existing = state.accounts.find((a) => a.name.toLowerCase() === fields.name.toLowerCase() && !a.link);
+  // An account already written in by hand is claimed rather than duplicated.
+  return saveAccount(fields, existing?.id ?? null);
+}
+
+function describeLinkError(err) {
+  switch (err?.message) {
+    case 'bridge-missing':
+      return 'No bridge is connected yet. Connect one in the endpapers.';
+    case 'vault-locked':
+      return 'The strongbox holds the bridge’s token, so open it first.';
+    case 'bridge-damaged':
+      return 'What the book has sealed for the bridge no longer reads as an address. Connect the bridge again.';
+    default:
+      return null;
+  }
+}
+
+return { bridgeConnected, connectBridge, forgetBridge, fetchBalances, syncNow, adoptAccount, describeLinkError };
 })();
 
 // js/views/forms.js
@@ -4513,6 +4937,9 @@ const { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } = __m_j
 const { PLAN_KINDS, BP } = __m_js_core_plans_js;
 const { money, plural } = __m_js_ui_format_js;
 const { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open: openSealed, changePassphrase, describeVaultError } = __m_js_vault_js;
+const { connectBridge } = __m_js_link_js;
+const { ui } = __m_js_views_chrome_js;
+const { decodeLinkToken } = __m_js_core_link_js;
 const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
 function footerButtons({ saveLabel, deletable }) {
@@ -5014,7 +5441,59 @@ function openPlanAdjust(id) {
   });
 }
 
-return { passphraseDialog, openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust };
+// ---------- The bridge ----------
+
+// Connecting is one paste. The line is checked against the bridge before it
+// is sealed, so a bridge that isn't running says so here rather than the
+// first time the owner asks for figures.
+function openBridgeForm() {
+  const body = html`<form class="stack" novalidate autocomplete="off">
+    <p class="sheet-lede">Start your bridge, open it in a browser, and sign in to your banks. It hands you one line — paste it here.</p>
+    <label class="field">
+      <span class="label">The line from your bridge</span>
+      <textarea name="token" rows="4" spellcheck="false" placeholder="eyJ1IjoiaHR0cHM6Ly9icmlkZ2UuZXhhbXBsZSIsInQiOiJ0b2tlbl8…"></textarea>
+      <span class="hint">It carries where your bridge is and the token for the accounts you approved.</span>
+    </label>
+    ${errorSlot('token')}
+    <p class="hint">Your bank credentials stay with Teller and your bridge. This book never sees them, and never asks for them.</p>
+  </form>`;
+
+  openSheet({
+    title: 'Connect a bridge',
+    body,
+    footer: html`<button type="button" class="btn primary grow" data-save>Connect</button>`,
+    onMount(dialog, sheet) {
+      const form = $('form', dialog);
+      $('textarea[name="token"]', form).focus();
+      wireSave(dialog, form, async () => {
+        const token = formData(form).token.trim();
+        if (!token) return showErrors(form, { token: 'Paste the line your bridge gave you.' });
+
+        // Check the shape of the line first. It costs nothing, and it means a
+        // mis-paste is answered on the spot instead of behind a passphrase.
+        const decoded = decodeLinkToken(token);
+        if (!decoded.ok) return showErrors(form, { token: decoded.error });
+
+        // Sealing needs the strongbox, so ask for it before going near the
+        // bridge — there is no point spending a round trip to be told later.
+        if (!isUnlocked()) {
+          const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
+          if (!opened) return showErrors(form, { token: 'The token has to be sealed, so the strongbox must be open.' });
+        }
+
+        const result = await connectBridge(token);
+        if (!result.ok) return showErrors(form, { token: result.error });
+        ui.offered = result.offered;
+        sheet.close({ silent: true });
+        toast(result.offered.length
+          ? `Bridge connected. ${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} waiting in Accounts.`
+          : 'Bridge connected.', { duration: 7000 });
+      });
+    },
+  });
+}
+
+return { passphraseDialog, openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, openBridgeForm };
 })();
 
 // js/core/fund.js
@@ -5662,7 +6141,7 @@ function potDetail(plan) {
     <ul class="plain-list ruled-list">
       ${ruledRow('Share of the surplus', plan.allocBp ? money(share) : '—', { sub: plan.allocBp ? percent(plan.allocBp / BP) : 'none set' })}
       ${ruledRow('Yield', plan.apyBp ? rate(plan.apyBp) : '—', { sub: planKind(plan) === 'invest' ? 'assumed' : 'a year' })}
-      ${ruledRow('Kept in', account ? account.name : 'Nowhere yet', { sub: account ? account.institution : 'say which account', tone: account ? '' : 'thin' })}
+      ${ruledRow('Kept in', account ? account.name : 'Nowhere yet', { sub: account ? account.institution : 'say which account', tone: account ? '' : 'thin', wrap: true })}
       ${plan.targetDate ? ruledRow('Wanted by', date(plan.targetDate), { sub: when ? `ready ${when}` : 'no date reachable', tone: row.onTime === false ? 'short' : row.onTime ? 'covered' : 'thin' }) : ''}
       ${ruledRow('In a year', money(years[11]))}
       ${ruledRow('In five years', money(years[59]))}
@@ -5693,7 +6172,7 @@ function afterPotsMount(root) {
   });
 }
 
-return { scenario, resetScenario, renderPots, potResults, milestoneTable, potDetail, afterPotsMount };
+return { scenario, resetScenario, renderPots, potDetail, afterPotsMount };
 })();
 
 // js/views/ledger.js
@@ -5702,10 +6181,11 @@ const { html } = __m_js_ui_html_js;
 const { state } = __m_js_store_js;
 const { balanceHistory, fundTotal, reconcile, STALE_AFTER_DAYS, weightedApy } = __m_js_core_fund_js;
 const { ACCOUNT_KINDS, ACCOUNT_ROLES } = __m_js_core_defaults_js;
-const { daysBetween } = __m_js_core_dates_js;
+const { daysBetween, dayOf } = __m_js_core_dates_js;
 const { money, percent, date, relativeDay } = __m_js_ui_format_js;
 const { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } = __m_js_views_chrome_js;
 const { isUnlocked, vaultAvailable, vaultExists } = __m_js_vault_js;
+const { bridgeConnected } = __m_js_link_js;
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
 function reviewState(account) {
@@ -5739,12 +6219,17 @@ function renderLedger() {
   const head = chapterHead('ledger', {
     actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}New account</button>`,
   });
+  // An empty book still shows the bridge and anything it offers — otherwise
+  // connecting one on a fresh book leads nowhere.
   if (!state.accounts.length) {
-    return html`${head}${vaultNote()}${emptyPage({
-      title: 'No accounts written in',
-      body: 'Which institution holds what, what it pays, whether the login has a second step, and when you last looked at it. The numbers and passwords go in the strongbox, sealed.',
-      actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Write in an account</button>`,
-    })}`;
+    return html`${head}${vaultNote()}${bridgeNote()}
+      ${ui.offered.length
+        ? offeredNote()
+        : emptyPage({
+            title: 'No accounts written in',
+            body: 'Which institution holds what, what it pays, whether the login has a second step, and when you last looked at it. The numbers and passwords go in the strongbox, sealed.',
+            actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Write in an account</button>`,
+          })}`;
   }
 
   const total = fundTotal(state.accounts);
@@ -5755,6 +6240,8 @@ function renderLedger() {
   return html`${head}
     ${displayFigure(money(total), 'held', { note: `Earning ${rate(apy)} across the book.` })}
     ${vaultNote()}
+    ${bridgeNote()}
+    ${ui.offered.length ? offeredNote() : ''}
     <ul class="plain-list acct-list">
       ${state.accounts.map((a) => html`${accountEntry(a, recon.rows.find((r) => r.account.id === a.id), a.id === selected)}
         ${a.id === selected ? html`<li class="acct-open" data-inline-detail>${accountDetail(a)}</li>` : ''}`)}
@@ -5763,6 +6250,31 @@ function renderLedger() {
       ? section('Pots with no home', html`<p class="marginal">These aren’t claimed against any account, so the book can’t check them.</p>
           <ul class="plain-list ruled-list">${recon.homeless.map((p) => ruledRow(p.name, money(p.saved ?? 0), { action: 'edit-plan', id: p.id }))}</ul>`)
       : ''}`;
+}
+
+// Where the figures come from, if they come from anywhere but your hand.
+function bridgeNote() {
+  if (!bridgeConnected()) return '';
+  const following = state.accounts.filter((a) => a.link).length;
+  const last = state.settings.bridgeAt;
+  return html`<div class="strongbox-note${isUnlocked() ? ' open' : ''}">
+    <p class="marginal">${following
+      ? `${following === 1 ? 'One account follows' : `${following} accounts follow`} ${state.settings.bridgeHost || 'the bridge'}${last ? `, last read ${relativeDay(dayOf(last)).toLowerCase()}` : ''}.`
+      : `${state.settings.bridgeHost || 'A bridge'} is connected, but no account follows it yet.`}</p>
+    <button type="button" class="btn small primary" data-action="bridge-sync">${icons.sync}Read balances</button>
+  </div>`;
+}
+
+// Accounts the bridge offered that this book hasn't taken up.
+function offeredNote() {
+  return section('Offered by the bridge', html`<p class="marginal">These came back from the bridge and aren’t in the book yet.</p>
+    <ul class="plain-list ruled-list">
+      ${ui.offered.map((a, i) => ruledRow(
+        html`${a.name}`,
+        html`<button type="button" class="btn small" data-action="adopt-account" data-index="${i}">Write it in</button>`,
+        { sub: [a.institution?.name, a.last_four ? `····${a.last_four}` : ''].filter(Boolean).join(' · '), wrap: true }
+      ))}
+    </ul>`, { id: 'offered' });
 }
 
 function accountEntry(account, row, selected) {
@@ -5782,6 +6294,7 @@ function accountEntry(account, row, selected) {
           <i class="tag ${account.mfa ? 'good' : 'bad'}">${account.mfa ? 'two-step on' : 'no two-step'}</i>
           <i class="tag ${rev.stale ? 'bad' : ''}">${rev.text}</i>
           ${account.vault ? html`<i class="tag sealed">${icons.lock}sealed</i>` : ''}
+          ${account.link ? html`<i class="tag good">${icons.sync}follows the bridge</i>` : ''}
         </span>
       </span>
       <span class="acct-figure">
@@ -5815,17 +6328,23 @@ function accountDetail(account) {
       tone: balance < 0 ? 'short' : '',
     })}
     <div class="btn-row">
-      <button type="button" class="btn primary" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
+      ${account.link
+        ? html`<button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read from the bridge</button>`
+        : ''}
+      <button type="button" class="btn ${account.link ? '' : 'primary'}" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
       <button type="button" class="btn" data-action="mark-reviewed" data-id="${account.id}">${icons.check}Reviewed today</button>
       <button type="button" class="btn" data-action="edit-account" data-id="${account.id}">Edit</button>
     </div>
 
     <ul class="plain-list ruled-list">
-      ${ruledRow('Pays', account.apyBp ? `${rate(account.apyBp)} a year` : 'nothing', { sub: account.apyBp ? `about ${money(Math.round((balance * account.apyBp) / 10000))} a year at this balance` : '' })}
+      ${ruledRow('Pays', account.apyBp ? `${rate(account.apyBp)} a year` : 'nothing', { sub: account.apyBp ? `about ${money(Math.round((balance * account.apyBp) / 10000))} a year at this balance` : '', wrap: true })}
       ${ruledRow('Sign-in', account.mfa ? 'two-step on' : 'one step only', { tone: account.mfa ? 'covered' : 'short' })}
-      ${ruledRow('Last reviewed', rev.text, { tone: rev.stale ? 'thin' : '', sub: rev.stale ? 'rates move' : '' })}
+      ${ruledRow('Last reviewed', rev.text, { tone: rev.stale ? 'thin' : '', sub: rev.stale ? 'rates move' : '', wrap: true })}
+      ${account.link
+        ? ruledRow('Read from', account.link.org || state.settings.bridgeHost || 'the bridge', { sub: account.link.lastSyncAt ? `last ${relativeDay(dayOf(account.link.lastSyncAt)).toLowerCase()}` : 'not read yet', wrap: true })
+        : ''}
       ${held.length
-        ? ruledRow('Pots kept here', held.map((p) => p.name).join(', '), { sub: `${money(claimed)} claimed${claimed > balance ? ' — more than it holds' : `, ${money(balance - claimed)} spare`}`, tone: claimed > balance ? 'short' : '' })
+        ? ruledRow('Pots kept here', held.map((p) => p.name).join(', '), { sub: `${money(claimed)} claimed${claimed > balance ? ' — more than it holds' : `, ${money(balance - claimed)} spare`}`, tone: claimed > balance ? 'short' : '', wrap: true })
         : ruledRow('Pots kept here', 'none', { sub: 'nothing claims this money' })}
     </ul>
 
@@ -5952,6 +6471,7 @@ function renderReview() {
             ${recon.rows.map((r) => ruledRow(r.account.name, money(r.difference, { sign: true }), {
               sub: r.plans.length ? `${money(r.balance)} held, ${money(r.claimed)} claimed` : `${money(r.balance)} held, nothing claims it`,
               tone: r.short ? 'short' : r.difference === 0 ? 'covered' : '',
+              wrap: true,
             }))}
           </ul>`
       : html`<p class="hand">Write in an account and the book can check the sums.</p>`}`, { id: 'recon' })}
@@ -6033,7 +6553,7 @@ function reviewFacingPage() {
   </div>`;
 }
 
-return { currentReview, renderReview, afterReviewMount, reviewFacingPage };
+return { renderReview, afterReviewMount, reviewFacingPage };
 })();
 
 // js/views/settings.js
@@ -6045,9 +6565,11 @@ const { storageEstimate } = __m_js_storage_js;
 const { buildBackup, parseBackup } = __m_js_core_validate_js;
 const { formatMoney } = __m_js_core_money_js;
 const { APP_VERSION } = __m_js_core_defaults_js;
+const { dayOf } = __m_js_core_dates_js;
 const { money, date, timeAgo, plural } = __m_js_ui_format_js;
 const { chapterHead, icons, ruledRow, section } = __m_js_views_chrome_js;
 const { vaultAvailable, vaultExists, isUnlocked } = __m_js_vault_js;
+const { bridgeConnected } = __m_js_link_js;
 const CURRENCIES = [
   ['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'],
   ['NZD', 'New Zealand dollar'], ['JPY', 'Japanese yen'], ['CNY', 'Chinese yuan'], ['INR', 'Indian rupee'], ['MXN', 'Mexican peso'],
@@ -6151,7 +6673,7 @@ async function startRestore() {
   const hasData = state.accounts.length > 0 || state.goals.length > 0;
   const ok = await confirmDialog({
     title: 'Replace this book with that one?',
-    message: html`<p>The file${parsed.exportedAt ? ` from ${date(parsed.exportedAt.slice(0, 10))}` : ''} holds
+    message: html`<p>The file${parsed.exportedAt ? ` from ${date(dayOf(parsed.exportedAt))}` : ''} holds
       ${plural(d.accounts.length, 'account')} and ${plural(d.goals.length, 'pot')}.</p>
       ${parsed.carried ? html`<p>It also carries ${plural(parsed.carried, 'record')} from an older version that this one doesn’t read. They travel along untouched.</p>` : ''}
       ${hasData ? html`<p>Everything written in now will be replaced.</p>` : ''}
@@ -6259,6 +6781,23 @@ function renderSettings() {
               <button type="button" class="btn ghost" data-action="vault-change">Change the passphrase</button>
             </div>`}`, { id: 'strongbox' })}
 
+    ${section('Connections', html`${!vaultAvailable()
+      ? html`<p class="hand">A connection needs the installed book or an https address, because its credentials live in the strongbox.</p>`
+      : !bridgeConnected()
+        ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Teller</strong> certificate and asks your banks for figures. Teller's free tier covers a hundred sign-ins and is never billed.</p>
+            <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>node scripts/teller-proxy.js</code>; the README has the steps.</p>
+            <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
+        : html`<ul class="plain-list ruled-list">
+              ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}
+              ${ruledRow('Last read', s.bridgeAt ? timeAgo(s.bridgeAt) : 'never')}
+              ${ruledRow('Accounts following it', String(state.accounts.filter((a) => a.link).length))}
+            </ul>
+            <p class="marginal">The token is sealed in the strongbox, so a read only works while that is open — and only while the bridge is running.</p>
+            <div class="btn-row">
+              <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
+              <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
+            </div>`}`, { id: 'connections' })}
+
     ${section('Copies', html`<p class="hand">${s.lastExportAt ? `Last copy saved ${timeAgo(s.lastExportAt)}.` : 'No copy saved yet.'} This device holds the only one otherwise.</p>
       <div class="btn-row">
         <button type="button" class="btn primary" data-action="export-json">Save a copy</button>
@@ -6267,7 +6806,7 @@ function renderSettings() {
       ${archived ? html`<p class="marginal">The copy also carries ${plural(archived, 'record')} from the spending ledger this book no longer keeps. Nothing reads them; they are simply never thrown away.</p>` : ''}`, { id: 'copies' })}
 
     ${section('This device', html`<ul class="plain-list ruled-list">
-        ${ruledRow('Storage', storageText())}
+        ${ruledRow('Storage', storageText(), { wrap: true })}
         ${ruledRow('Room used', html`<span data-storage>counting…</span>`)}
         ${ruledRow('Accounts', String(state.accounts.length))}
         ${ruledRow('Pots', String(state.goals.length))}
@@ -6308,13 +6847,15 @@ return { exportJSON, startRestore, renderSettings, afterSettingsMount };
 // js/app.js
 const __m_js_app_js = (() => {
 const { html, mount, $ } = __m_js_ui_html_js;
-const { toast } = __m_js_ui_overlay_js;
+const { toast, confirmDialog } = __m_js_ui_overlay_js;
 const { resetCharts, hydrateCharts } = __m_js_ui_charts_js;
 const { watchPosture } = __m_js_ui_posture_js;
 const { state, init, subscribe, checkDayChange, reload, saveAccount, describeError } = __m_js_store_js;
 const { isUnlocked, lock: lockVault, onVaultChange, open: openSealed, describeVaultError } = __m_js_vault_js;
 const { CHAPTERS, icons, ui } = __m_js_views_chrome_js;
-const { openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
+const { money } = __m_js_ui_format_js;
+const { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
+const { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } = __m_js_link_js;
 const { renderFund, fundFacingPage } = __m_js_views_fund_js;
 const { renderPots, potDetail, afterPotsMount, resetScenario } = __m_js_views_pots_js;
 const { renderLedger, accountDetail, sealedFields } = __m_js_views_ledger_js;
@@ -6343,8 +6884,7 @@ function renderShell() {
     $('#app'),
     html`<a class="skip" href="#main">Skip to the page</a>
     <div class="book">
-      <div class="spine" aria-hidden="true"></div>
-      <div class="ribbon" aria-hidden="true"><i></i></div>
+      <div class="spine" aria-hidden="true"><div class="ribbon"><i></i></div></div>
       <header class="running-head" data-running>
         <span class="running-title" data-running-title></span>
         <span class="running-fund" data-running-fund></span>
@@ -6382,9 +6922,11 @@ function colophon() {
   return html`<div class="colophon">
     <p class="colophon-mark" aria-hidden="true">❧</p>
     <p>This book keeps one thing: what the fund is worth, what it is for, and where it sits.</p>
-    <p>It runs entirely on this device. Nothing is sent anywhere, there is no account to sign into, and the sealed pages open only with your passphrase.</p>
+    ${bridgeConnected()
+      ? html`<p>It is kept on this device. The one thing it reaches for is your own bridge, to read balances and nothing else; there is no account of ours to sign into, and the sealed pages open only with your passphrase.</p>`
+      : html`<p>It runs entirely on this device. Nothing is sent anywhere, there is no account to sign into, and the sealed pages open only with your passphrase.</p>`}
     <p class="colophon-rule" aria-hidden="true"></p>
-    <p class="colophon-small">Set in the device’s book face. Written offline.</p>
+    <p class="colophon-small">Set in the device’s book face. ${bridgeConnected() ? html`Reads ${state.settings.bridgeHost || 'your bridge'}.` : 'Written offline.'}</p>
   </div>`;
 }
 
@@ -6457,9 +6999,7 @@ function paint(route, { keepScroll, turning }) {
 function renderFacing() {
   const el = $('[data-facing]');
   if (!el) return;
-  const route = currentRoute();
-  el.dataset.pane = route;
-  mount(el, ROUTES[route].facing?.() ?? '');
+  mount(el, ROUTES[currentRoute()].facing?.() ?? '');
   hydrateCharts(el);
   fillSealed(el);
 }
@@ -6549,7 +7089,7 @@ darkQuery.addEventListener?.('change', applyTheme);
 
 // ---------- Actions ----------
 
-const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
+const fail = (err) => toast(describeLinkError(err) ?? describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
 const actions = {
   'new-account': () => openAccountForm(),
@@ -6621,6 +7161,63 @@ const actions = {
       setTimeout(() => navigator.clipboard.writeText('').catch(() => {}), 30000);
     } catch {
       toast('This browser wouldn’t let the book use the clipboard.', { tone: 'error' });
+    }
+  },
+
+  'bridge-connect': () => openBridgeForm(),
+  // Reading the bridge writes only what actually moved, and says what it
+  // found — including the banks the bridge itself couldn't reach.
+  'bridge-sync': async (el) => {
+    if (!bridgeConnected()) return openBridgeForm();
+    el.disabled = true;
+    try {
+      const result = await syncNow();
+      if (!result.ok) {
+        toast(result.error, { tone: 'error', duration: 8000 });
+        return;
+      }
+      ui.offered = result.offered;
+      const moved = result.changed.length;
+      const trouble = [...result.problems.map((p) => p.message), ...result.errors];
+      if (trouble.length) toast(trouble[0], { tone: 'error', duration: 9000 });
+      else if (moved) toast(moved === 1 ? `${result.changed[0].name} is now ${money(result.changed[0].cents)}` : `${moved} balances written in`);
+      else if (result.updates.length) toast('Nothing has moved since the last reading.');
+      else if (result.offered.length) toast(`${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} offered — write them in from the Accounts chapter.`, { duration: 7000 });
+      else toast('The bridge has nothing to show.');
+      render({ keepScroll: true });
+    } catch (err) {
+      fail(err);
+    } finally {
+      el.disabled = false;
+    }
+  },
+  'adopt-account': async (el) => {
+    const offered = ui.offered[Number(el.dataset.index)];
+    if (!offered) return;
+    try {
+      await adoptAccount(offered);
+      ui.offered = ui.offered.filter((a) => a !== offered);
+      toast(`${offered.name} written in`);
+      render({ keepScroll: true });
+    } catch (err) {
+      fail(err);
+    }
+  },
+  'bridge-forget': async () => {
+    const ok = await confirmDialog({
+      title: 'Disconnect the bridge?',
+      message: html`<p>The book forgets the sealed token, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
+        <p>The sign-in at Teller is untouched — revoke it in your Teller dashboard if you want it gone for good.</p>`,
+      confirmLabel: 'Disconnect',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await forgetBridge();
+      ui.offered = [];
+      toast('Bridge disconnected');
+    } catch (err) {
+      fail(err);
     }
   },
 
@@ -6809,8 +7406,8 @@ return {  };
 </script>
 </head>
 <body>
-  <div id="app" class="app">
-    <main id="main"><p class="boot">Loading your budget…</p></main>
+  <div id="app">
+    <p class="boot">Opening the book…</p>
   </div>
   <noscript><p class="boot">Tally needs JavaScript turned on to run.</p></noscript>
 </body>

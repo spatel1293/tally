@@ -1,7 +1,6 @@
 import { state } from '../store.js';
 import { formatMoney } from '../core/money.js';
 import { formatDate, formatMonth, daysBetween } from '../core/dates.js';
-import { html } from './html.js';
 
 export function money(cents, opts = {}) {
   const { currency, locale } = state.settings;
@@ -44,15 +43,6 @@ export function timeAgo(isoTimestamp) {
   return `on ${then.toLocaleDateString(state.settings.locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
-export function accountById(id) {
-  return state.accounts.find((a) => a.id === id) ?? null;
-}
-
 export function plural(n, one, many = `${one}s`) {
   return `${n.toLocaleString(state.settings.locale)} ${n === 1 ? one : many}`;
-}
-
-// A figure set the way a book sets one.
-export function fig(cents, opts) {
-  return html`<span class="fig">${money(cents, opts)}</span>`;
 }

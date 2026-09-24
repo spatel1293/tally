@@ -1,3 +1,8 @@
+> **Historical.** This describes Tally as a budgeting app, which it stopped
+> being in September 2026 — version 5 keeps a wealth fund and logs no
+> spending at all. Kept for the record; see `CLAUDE.md` and `README.md` for
+> what the app is now. Nothing here is a current requirement.
+
 # Task: make Tally my app on a Pixel Fold (1st gen) and my laptop
 
 The owner wants to use Tally every day on two devices: a **Google Pixel Fold (2023, first generation)** and a **laptop**. It should install like a real app on both, work offline, and look deliberate on the Fold's cover screen, its inner screen and the laptop.

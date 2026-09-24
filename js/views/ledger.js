@@ -2,10 +2,11 @@ import { html } from '../ui/html.js';
 import { state } from '../store.js';
 import { balanceHistory, fundTotal, reconcile, STALE_AFTER_DAYS, weightedApy } from '../core/fund.js';
 import { ACCOUNT_KINDS, ACCOUNT_ROLES } from '../core/defaults.js';
-import { daysBetween } from '../core/dates.js';
+import { daysBetween, dayOf } from '../core/dates.js';
 import { money, percent, date, relativeDay } from '../ui/format.js';
 import { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } from './chrome.js';
 import { isUnlocked, vaultAvailable, vaultExists } from '../vault.js';
+import { bridgeConnected } from '../link.js';
 
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
@@ -40,12 +41,17 @@ export function renderLedger() {
   const head = chapterHead('ledger', {
     actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}New account</button>`,
   });
+  // An empty book still shows the bridge and anything it offers — otherwise
+  // connecting one on a fresh book leads nowhere.
   if (!state.accounts.length) {
-    return html`${head}${vaultNote()}${emptyPage({
-      title: 'No accounts written in',
-      body: 'Which institution holds what, what it pays, whether the login has a second step, and when you last looked at it. The numbers and passwords go in the strongbox, sealed.',
-      actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Write in an account</button>`,
-    })}`;
+    return html`${head}${vaultNote()}${bridgeNote()}
+      ${ui.offered.length
+        ? offeredNote()
+        : emptyPage({
+            title: 'No accounts written in',
+            body: 'Which institution holds what, what it pays, whether the login has a second step, and when you last looked at it. The numbers and passwords go in the strongbox, sealed.',
+            actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Write in an account</button>`,
+          })}`;
   }
 
   const total = fundTotal(state.accounts);
@@ -56,6 +62,8 @@ export function renderLedger() {
   return html`${head}
     ${displayFigure(money(total), 'held', { note: `Earning ${rate(apy)} across the book.` })}
     ${vaultNote()}
+    ${bridgeNote()}
+    ${ui.offered.length ? offeredNote() : ''}
     <ul class="plain-list acct-list">
       ${state.accounts.map((a) => html`${accountEntry(a, recon.rows.find((r) => r.account.id === a.id), a.id === selected)}
         ${a.id === selected ? html`<li class="acct-open" data-inline-detail>${accountDetail(a)}</li>` : ''}`)}
@@ -64,6 +72,31 @@ export function renderLedger() {
       ? section('Pots with no home', html`<p class="marginal">These aren’t claimed against any account, so the book can’t check them.</p>
           <ul class="plain-list ruled-list">${recon.homeless.map((p) => ruledRow(p.name, money(p.saved ?? 0), { action: 'edit-plan', id: p.id }))}</ul>`)
       : ''}`;
+}
+
+// Where the figures come from, if they come from anywhere but your hand.
+function bridgeNote() {
+  if (!bridgeConnected()) return '';
+  const following = state.accounts.filter((a) => a.link).length;
+  const last = state.settings.bridgeAt;
+  return html`<div class="strongbox-note${isUnlocked() ? ' open' : ''}">
+    <p class="marginal">${following
+      ? `${following === 1 ? 'One account follows' : `${following} accounts follow`} ${state.settings.bridgeHost || 'the bridge'}${last ? `, last read ${relativeDay(dayOf(last)).toLowerCase()}` : ''}.`
+      : `${state.settings.bridgeHost || 'A bridge'} is connected, but no account follows it yet.`}</p>
+    <button type="button" class="btn small primary" data-action="bridge-sync">${icons.sync}Read balances</button>
+  </div>`;
+}
+
+// Accounts the bridge offered that this book hasn't taken up.
+function offeredNote() {
+  return section('Offered by the bridge', html`<p class="marginal">These came back from the bridge and aren’t in the book yet.</p>
+    <ul class="plain-list ruled-list">
+      ${ui.offered.map((a, i) => ruledRow(
+        html`${a.name}`,
+        html`<button type="button" class="btn small" data-action="adopt-account" data-index="${i}">Write it in</button>`,
+        { sub: [a.institution?.name, a.last_four ? `····${a.last_four}` : ''].filter(Boolean).join(' · '), wrap: true }
+      ))}
+    </ul>`, { id: 'offered' });
 }
 
 function accountEntry(account, row, selected) {
@@ -83,6 +116,7 @@ function accountEntry(account, row, selected) {
           <i class="tag ${account.mfa ? 'good' : 'bad'}">${account.mfa ? 'two-step on' : 'no two-step'}</i>
           <i class="tag ${rev.stale ? 'bad' : ''}">${rev.text}</i>
           ${account.vault ? html`<i class="tag sealed">${icons.lock}sealed</i>` : ''}
+          ${account.link ? html`<i class="tag good">${icons.sync}follows the bridge</i>` : ''}
         </span>
       </span>
       <span class="acct-figure">
@@ -116,17 +150,23 @@ export function accountDetail(account) {
       tone: balance < 0 ? 'short' : '',
     })}
     <div class="btn-row">
-      <button type="button" class="btn primary" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
+      ${account.link
+        ? html`<button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read from the bridge</button>`
+        : ''}
+      <button type="button" class="btn ${account.link ? '' : 'primary'}" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
       <button type="button" class="btn" data-action="mark-reviewed" data-id="${account.id}">${icons.check}Reviewed today</button>
       <button type="button" class="btn" data-action="edit-account" data-id="${account.id}">Edit</button>
     </div>
 
     <ul class="plain-list ruled-list">
-      ${ruledRow('Pays', account.apyBp ? `${rate(account.apyBp)} a year` : 'nothing', { sub: account.apyBp ? `about ${money(Math.round((balance * account.apyBp) / 10000))} a year at this balance` : '' })}
+      ${ruledRow('Pays', account.apyBp ? `${rate(account.apyBp)} a year` : 'nothing', { sub: account.apyBp ? `about ${money(Math.round((balance * account.apyBp) / 10000))} a year at this balance` : '', wrap: true })}
       ${ruledRow('Sign-in', account.mfa ? 'two-step on' : 'one step only', { tone: account.mfa ? 'covered' : 'short' })}
-      ${ruledRow('Last reviewed', rev.text, { tone: rev.stale ? 'thin' : '', sub: rev.stale ? 'rates move' : '' })}
+      ${ruledRow('Last reviewed', rev.text, { tone: rev.stale ? 'thin' : '', sub: rev.stale ? 'rates move' : '', wrap: true })}
+      ${account.link
+        ? ruledRow('Read from', account.link.org || state.settings.bridgeHost || 'the bridge', { sub: account.link.lastSyncAt ? `last ${relativeDay(dayOf(account.link.lastSyncAt)).toLowerCase()}` : 'not read yet', wrap: true })
+        : ''}
       ${held.length
-        ? ruledRow('Pots kept here', held.map((p) => p.name).join(', '), { sub: `${money(claimed)} claimed${claimed > balance ? ' — more than it holds' : `, ${money(balance - claimed)} spare`}`, tone: claimed > balance ? 'short' : '' })
+        ? ruledRow('Pots kept here', held.map((p) => p.name).join(', '), { sub: `${money(claimed)} claimed${claimed > balance ? ' — more than it holds' : `, ${money(balance - claimed)} spare`}`, tone: claimed > balance ? 'short' : '', wrap: true })
         : ruledRow('Pots kept here', 'none', { sub: 'nothing claims this money' })}
     </ul>
 

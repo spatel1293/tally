@@ -1,3 +1,8 @@
+> **Historical.** This describes Tally as a budgeting app, which it stopped
+> being in September 2026 — version 5 keeps a wealth fund and logs no
+> spending at all. Kept for the record; see `CLAUDE.md` and `README.md` for
+> what the app is now. Nothing here is a current requirement.
+
 # Original requirements (restated)
 
 This restates the brief Tally was built from. It is a faithful summary, not the verbatim text. Version 1.0.0 meets all of it. Keep these requirements intact while adapting the app.

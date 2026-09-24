@@ -8,6 +8,9 @@ import { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } from '
 import { PLAN_KINDS, BP } from '../core/plans.js';
 import { money, plural } from '../ui/format.js';
 import { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open as openSealed, changePassphrase, describeVaultError } from '../vault.js';
+import { connectBridge } from '../link.js';
+import { ui } from './chrome.js';
+import { decodeLinkToken } from '../core/link.js';
 
 const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
@@ -505,6 +508,58 @@ export function openPlanAdjust(id) {
         sheet.close({ silent: true });
         const after = state.goals.find((g) => g.id === id);
         toast(after && after.saved >= after.target ? `${plan.name} is full` : `${plan.name} now holds ${money(after?.saved ?? 0)}`);
+      });
+    },
+  });
+}
+
+// ---------- The bridge ----------
+
+// Connecting is one paste. The line is checked against the bridge before it
+// is sealed, so a bridge that isn't running says so here rather than the
+// first time the owner asks for figures.
+export function openBridgeForm() {
+  const body = html`<form class="stack" novalidate autocomplete="off">
+    <p class="sheet-lede">Start your bridge, open it in a browser, and sign in to your banks. It hands you one line — paste it here.</p>
+    <label class="field">
+      <span class="label">The line from your bridge</span>
+      <textarea name="token" rows="4" spellcheck="false" placeholder="eyJ1IjoiaHR0cHM6Ly9icmlkZ2UuZXhhbXBsZSIsInQiOiJ0b2tlbl8…"></textarea>
+      <span class="hint">It carries where your bridge is and the token for the accounts you approved.</span>
+    </label>
+    ${errorSlot('token')}
+    <p class="hint">Your bank credentials stay with Teller and your bridge. This book never sees them, and never asks for them.</p>
+  </form>`;
+
+  openSheet({
+    title: 'Connect a bridge',
+    body,
+    footer: html`<button type="button" class="btn primary grow" data-save>Connect</button>`,
+    onMount(dialog, sheet) {
+      const form = $('form', dialog);
+      $('textarea[name="token"]', form).focus();
+      wireSave(dialog, form, async () => {
+        const token = formData(form).token.trim();
+        if (!token) return showErrors(form, { token: 'Paste the line your bridge gave you.' });
+
+        // Check the shape of the line first. It costs nothing, and it means a
+        // mis-paste is answered on the spot instead of behind a passphrase.
+        const decoded = decodeLinkToken(token);
+        if (!decoded.ok) return showErrors(form, { token: decoded.error });
+
+        // Sealing needs the strongbox, so ask for it before going near the
+        // bridge — there is no point spending a round trip to be told later.
+        if (!isUnlocked()) {
+          const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
+          if (!opened) return showErrors(form, { token: 'The token has to be sealed, so the strongbox must be open.' });
+        }
+
+        const result = await connectBridge(token);
+        if (!result.ok) return showErrors(form, { token: result.error });
+        ui.offered = result.offered;
+        sheet.close({ silent: true });
+        toast(result.offered.length
+          ? `Bridge connected. ${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} waiting in Accounts.`
+          : 'Bridge connected.', { duration: 7000 });
       });
     },
   });

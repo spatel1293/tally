@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseAmount, formatMoney, centsToInput, centsToDecimalString, scaleCents, MAX_CENTS, isSupportedCurrency } from '../js/core/money.js';
 import {
-  addDays, addMonthsClamped, daysInMonth, isValidISODate, monthKeyAdd, monthRange, parseFlexibleDate, todayISO, daysBetween, formatMonth,
+  addDays, addMonthsClamped, dayOf, daysInMonth, isValidISODate, monthKeyAdd, monthRange, parseFlexibleDate, todayISO, daysBetween, formatMonth,
 } from '../js/core/dates.js';
 
 const cents = (s, locale) => {
@@ -193,5 +193,30 @@ describe('dates', () => {
     assert.equal(parseFlexibleDate('02/30/2024'), null);
     assert.equal(parseFlexibleDate('yesterday'), null);
     assert.equal(parseFlexibleDate(''), null);
+  });
+});
+
+// A timestamp is stored in UTC but read by someone in a timezone. Slicing the
+// ISO string gives the UTC day, which is already tomorrow for most of the
+// evening in the Americas — the bug that showed as "last read tomorrow".
+describe('dayOf', () => {
+  test('gives the calendar day the reader is in, not the UTC one', () => {
+    const stamp = '2026-09-24T02:57:00.000Z';
+    const expected = todayISO(new Date(stamp));
+    assert.equal(dayOf(stamp), expected);
+  });
+
+  test('agrees with todayISO for a timestamp taken now', () => {
+    const now = new Date();
+    assert.equal(dayOf(now.toISOString()), todayISO(now));
+  });
+
+  test('accepts epoch milliseconds too', () => {
+    const now = Date.now();
+    assert.equal(dayOf(now), todayISO(new Date(now)));
+  });
+
+  test('gives nothing for nothing', () => {
+    for (const bad of [null, undefined, '', 'not a date', NaN]) assert.equal(dayOf(bad), null);
   });
 });

@@ -11,7 +11,7 @@ import { chapterHead, displayFigure, icons, ruledRow, section } from './chrome.j
 const fmtMonths = (m) => (Number.isInteger(m) ? String(m) : m.toFixed(1));
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
-export function currentReview() {
+function currentReview() {
   return advisorReview({
     plans: state.goals,
     accounts: state.accounts,
@@ -59,6 +59,7 @@ export function renderReview() {
             ${recon.rows.map((r) => ruledRow(r.account.name, money(r.difference, { sign: true }), {
               sub: r.plans.length ? `${money(r.balance)} held, ${money(r.claimed)} claimed` : `${money(r.balance)} held, nothing claims it`,
               tone: r.short ? 'short' : r.difference === 0 ? 'covered' : '',
+              wrap: true,
             }))}
           </ul>`
       : html`<p class="hand">Write in an account and the book can check the sums.</p>`}`, { id: 'recon' })}
