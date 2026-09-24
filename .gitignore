@@ -1,3 +1,12 @@
 node_modules/
 .DS_Store
 dist/site/
+
+# Never commit a Teller client certificate. The private key is the whole
+# credential for reading your accounts, this repository is public, and a key
+# that has been pushed once must be treated as burnt and revoked. Keep the
+# two files from teller.zip here if you like — they will not be committed.
+teller/
+teller.zip
+*.pem
+*.key
