@@ -258,6 +258,17 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+// The address the outside world reaches this bridge on. Behind a proxy that
+// terminates TLS — `tailscale serve`, a tunnel, any real host — the socket
+// here is plain http, and only the forwarded headers know it was https. Get
+// this wrong and the bridge hands out a line saying http://, which the book
+// refuses outright, correctly, as a token it would have to send in the clear.
+function publicOrigin(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
+  const proto = (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || 'http';
+  return `${proto}://${host}`;
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `localhost:${PORT}`}`);
 
@@ -272,7 +283,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     // Whatever address this page was opened on is the address that works, so
     // the line it hands out points back at exactly that.
-    return res.end(signInPage(`${url.protocol}//${url.host}`));
+    return res.end(signInPage(publicOrigin(req)));
   }
 
   if (req.method === 'GET' && url.pathname === '/accounts') {
