@@ -1,7 +1,7 @@
 export const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-export const APP_VERSION = '5.3.0';
+export const APP_VERSION = '5.4.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the

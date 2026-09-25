@@ -80,7 +80,7 @@ let bridgeDown = false;
   await page.goto(BASE + '#/settings');
   await page.waitForSelector('[aria-labelledby=connections]');
   step('the endpapers offer a bridge');
-  expect((await text('[aria-labelledby=connections]')).toLowerCase().includes('teller'), 'the endpapers say what the bridge is for');
+  expect(/bridge/i.test(await text('[aria-labelledby=connections]')), 'the endpapers say what the bridge is for');
 
   // ---- Connecting ----
   step('pasting the line from the bridge');

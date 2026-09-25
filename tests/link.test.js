@@ -1,8 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  centsFromDecimalString, parseBase, decodeLinkToken, kindForTeller, roleForTeller,
-  balanceFromTeller, accountFromTeller, planSync, isConnected,
+  centsFromDecimalString, parseBase, decodeLinkToken, kindForBridge, roleForBridge,
+  balanceFromBridge, accountFromBridge, planSync, isConnected,
 } from '../js/core/link.js';
 import { newAccount } from '../js/core/defaults.js';
 import { fundTotal } from '../js/core/fund.js';
@@ -127,62 +127,69 @@ describe('decodeLinkToken', () => {
   });
 });
 
-describe('reading what Teller says an account is', () => {
+describe('reading what the bridge says an account is', () => {
   const at = (type, subtype) => ({ type, subtype });
 
-  test('takes the kind from the type Teller gives, rather than guessing at a name', () => {
-    assert.equal(kindForTeller(at('depository', 'checking')), 'checking');
-    assert.equal(kindForTeller(at('depository', 'savings')), 'savings');
-    assert.equal(kindForTeller(at('depository', 'money_market')), 'savings');
-    assert.equal(kindForTeller(at('depository', 'certificate_of_deposit')), 'savings');
-    assert.equal(kindForTeller(at('depository', 'treasury')), 'brokerage');
-    assert.equal(kindForTeller(at('depository', 'sweep')), 'brokerage');
-    assert.equal(kindForTeller(at('credit', 'credit_card')), 'credit');
+  test('takes the kind from the type the provider gives, rather than guessing at a name', () => {
+    assert.equal(kindForBridge(at('depository', 'checking')), 'checking');
+    assert.equal(kindForBridge(at('depository', 'savings')), 'savings');
+    assert.equal(kindForBridge(at('depository', 'money_market')), 'savings');
+    assert.equal(kindForBridge(at('depository', 'certificate_of_deposit')), 'savings');
+    // Providers spell the same thing differently; the subtype is normalised.
+    assert.equal(kindForBridge(at('depository', 'money market')), 'savings');
+    assert.equal(kindForBridge(at('depository', 'cd')), 'savings');
+    assert.equal(kindForBridge(at('investment', 'brokerage')), 'brokerage');
+    assert.equal(kindForBridge(at('investment', 'ira')), 'brokerage');
+    assert.equal(kindForBridge(at('investment', '401k')), 'brokerage');
+    assert.equal(kindForBridge(at('investment', 'roth')), 'brokerage');
+    assert.equal(kindForBridge(at('depository', 'treasury')), 'brokerage');
+    assert.equal(kindForBridge(at('depository', 'sweep')), 'brokerage');
+    assert.equal(kindForBridge(at('credit', 'credit_card')), 'credit');
   });
 
   test('falls back to checking for a subtype it has not met', () => {
-    assert.equal(kindForTeller(at('depository', 'something_new')), 'checking');
-    assert.equal(kindForTeller({}), 'checking');
+    assert.equal(kindForBridge(at('depository', 'something_new')), 'checking');
+    assert.equal(kindForBridge({}), 'checking');
   });
 
   test('gives each kind the job it usually does', () => {
-    assert.equal(roleForTeller(at('credit', 'credit_card')), 'spending');
-    assert.equal(roleForTeller(at('depository', 'treasury')), 'investing');
-    assert.equal(roleForTeller(at('depository', 'savings')), 'savings');
-    assert.equal(roleForTeller(at('depository', 'checking')), 'hub');
+    assert.equal(roleForBridge(at('credit', 'credit_card')), 'spending');
+    assert.equal(roleForBridge(at('depository', 'treasury')), 'investing');
+    assert.equal(roleForBridge(at('depository', 'savings')), 'savings');
+    assert.equal(roleForBridge(at('depository', 'checking')), 'hub');
   });
 });
 
-describe('balanceFromTeller', () => {
+describe('balanceFromBridge', () => {
   test('prefers the ledger, which is what a statement would print', () => {
-    assert.equal(balanceFromTeller({ balance: { ledger: '28575.02', available: '28000.00' } }), 2857502);
+    assert.equal(balanceFromBridge({ balance: { ledger: '28575.02', available: '28000.00' } }), 2857502);
   });
 
   test('falls back to available when there is no ledger', () => {
-    assert.equal(balanceFromTeller({ balance: { ledger: null, available: '28000.00' } }), 2800000);
+    assert.equal(balanceFromBridge({ balance: { ledger: null, available: '28000.00' } }), 2800000);
   });
 
   // The one that would quietly corrupt the fund: Teller reports a card as
   // what you owe, positively, and fundTotal simply adds balances up.
   test('a credit card is money owed, so it is negative in the book', () => {
-    assert.equal(balanceFromTeller({ type: 'credit', balance: { ledger: '310.25' } }), -31025);
-    assert.equal(balanceFromTeller({ type: 'credit', balance: { ledger: '-310.25' } }), -31025);
+    assert.equal(balanceFromBridge({ type: 'credit', balance: { ledger: '310.25' } }), -31025);
+    assert.equal(balanceFromBridge({ type: 'credit', balance: { ledger: '-310.25' } }), -31025);
   });
 
   test('linking a card lowers the fund rather than inflating it', () => {
-    const cash = newAccount({ id: 'a', name: 'Cash', balance: balanceFromTeller({ type: 'depository', balance: { ledger: '1000.00' } }) });
-    const card = newAccount({ id: 'b', name: 'Card', balance: balanceFromTeller({ type: 'credit', balance: { ledger: '250.00' } }) });
+    const cash = newAccount({ id: 'a', name: 'Cash', balance: balanceFromBridge({ type: 'depository', balance: { ledger: '1000.00' } }) });
+    const card = newAccount({ id: 'b', name: 'Card', balance: balanceFromBridge({ type: 'credit', balance: { ledger: '250.00' } }) });
     assert.equal(fundTotal([cash, card]), 75000);
   });
 
   test('gives nothing when there is no balance at all', () => {
-    assert.equal(balanceFromTeller({ balance: { ledger: null, available: null } }), null);
-    assert.equal(balanceFromTeller({}), null);
-    assert.equal(balanceFromTeller(null), null);
+    assert.equal(balanceFromBridge({ balance: { ledger: null, available: null } }), null);
+    assert.equal(balanceFromBridge({}), null);
+    assert.equal(balanceFromBridge(null), null);
   });
 });
 
-describe('accountFromTeller', () => {
+describe('accountFromBridge', () => {
   const sf = {
     id: 'acc_oiin624iajrg2mp2ea000',
     name: 'Individual',
@@ -196,7 +203,7 @@ describe('accountFromTeller', () => {
   };
 
   test('takes the figure, the bank and the bridge id', () => {
-    const made = accountFromTeller(sf, { today: '2026-09-23' });
+    const made = accountFromBridge(sf, { today: '2026-09-23' });
     assert.equal(made.name, 'Individual');
     assert.equal(made.institution, 'Wealthfront');
     assert.equal(made.balance, 11426551);
@@ -210,22 +217,22 @@ describe('accountFromTeller', () => {
 
   // Teller's balances are live, so there is no statement date to file under.
   test('a live balance is read today', () => {
-    assert.equal(accountFromTeller(sf, { today: '2026-09-23' }).balanceAt, '2026-09-23');
+    assert.equal(accountFromBridge(sf, { today: '2026-09-23' }).balanceAt, '2026-09-23');
   });
 
   test('leaves the date empty when there is no balance to date', () => {
-    const made = accountFromTeller({ ...sf, balance: {} }, { today: '2026-09-23' });
+    const made = accountFromBridge({ ...sf, balance: {} }, { today: '2026-09-23' });
     assert.equal(made.balance, 0);
     assert.equal(made.balanceAt, null);
   });
 
-  test('names an account Teller did not name', () => {
-    assert.equal(accountFromTeller({ id: 'x' }, {}).name, 'Account');
-    assert.equal(accountFromTeller({ id: 'x' }, {}).institution, '');
+  test('names an account the bridge did not name', () => {
+    assert.equal(accountFromBridge({ id: 'x' }, {}).name, 'Account');
+    assert.equal(accountFromBridge({ id: 'x' }, {}).institution, '');
   });
 
   test('fits the shape newAccount() makes, so a backup round trip is identical', () => {
-    const made = newAccount(accountFromTeller(sf, { today: '2026-09-23' }));
+    const made = newAccount(accountFromBridge(sf, { today: '2026-09-23' }));
     for (const key of Object.keys(newAccount())) assert.ok(key in made, `missing ${key}`);
     assert.equal(made.history.length, 0);
     assert.equal(made.vault, null);
@@ -234,7 +241,7 @@ describe('accountFromTeller', () => {
 
 describe('planSync', () => {
   const book = (over = {}) => newAccount({ id: 'a1', name: 'Brokerage', balance: 11426551, balanceAt: '2026-09-23', link: { accountId: 'acc_1', org: 'Wealthfront', lastFour: '4417', lastSyncAt: null }, ...over });
-  const teller = (over = {}) => ({ id: 'acc_1', name: 'Individual', currency: 'USD', type: 'depository', subtype: 'treasury', status: 'open', institution: { name: 'Wealthfront' }, balance: { ledger: '114265.51' }, ...over });
+  const bridge = (over = {}) => ({ id: 'acc_1', name: 'Individual', currency: 'USD', type: 'depository', subtype: 'treasury', status: 'open', institution: { name: 'Wealthfront' }, balance: { ledger: '114265.51' }, ...over });
   const opts = { today: '2026-09-23', currency: 'USD' };
 
   test('an account the book does not follow is left alone', () => {
@@ -244,7 +251,7 @@ describe('planSync', () => {
   });
 
   test('a moved balance is a change', () => {
-    const plan = planSync([book()], [teller({ balance: { ledger: '120000.00' } })], opts);
+    const plan = planSync([book()], [bridge({ balance: { ledger: '120000.00' } })], opts);
     assert.equal(plan.updates.length, 1);
     assert.equal(plan.changed.length, 1);
     assert.equal(plan.changed[0].cents, 12000000);
@@ -253,19 +260,19 @@ describe('planSync', () => {
   });
 
   test('a balance that has not moved is looked at but not written', () => {
-    const plan = planSync([book()], [teller()], opts);
+    const plan = planSync([book()], [bridge()], opts);
     assert.equal(plan.updates.length, 1);
     assert.equal(plan.changed.length, 0);
   });
 
   test('the same figure read on a new day is still a new reading', () => {
-    const plan = planSync([book({ balanceAt: '1999-01-01' })], [teller()], opts);
+    const plan = planSync([book({ balanceAt: '1999-01-01' })], [bridge()], opts);
     assert.equal(plan.changed.length, 1);
   });
 
   test('only the balance and its date are ever taken from the bridge', () => {
     const mine = book({ name: 'The long game', institution: 'My note', apyBp: 425, role: 'savings' });
-    const plan = planSync([mine], [teller({ name: 'Individual Brokerage', institution: { name: 'WEALTHFRONT INC' } })], opts);
+    const plan = planSync([mine], [bridge({ name: 'Individual Brokerage', institution: { name: 'WEALTHFRONT INC' } })], opts);
     assert.deepEqual(Object.keys(plan.updates[0]).sort(), ['cents', 'changed', 'date', 'id', 'name', 'was']);
     assert.equal(plan.updates[0].name, 'The long game');
   });
@@ -278,32 +285,32 @@ describe('planSync', () => {
   });
 
   test('an account closed at the bank keeps the figure it had', () => {
-    const plan = planSync([book()], [teller({ status: 'closed' })], opts);
+    const plan = planSync([book()], [bridge({ status: 'closed' })], opts);
     assert.equal(plan.updates.length, 0);
     assert.equal(plan.problems[0].reason, 'closed');
     assert.match(plan.problems[0].message, /left as it was/);
   });
 
   test('a closed account is never offered, because there is nothing to follow', () => {
-    const plan = planSync([], [teller({ status: 'closed' })], opts);
+    const plan = planSync([], [bridge({ status: 'closed' })], opts);
     assert.equal(plan.offered.length, 0);
   });
 
   test('a foreign currency is refused rather than mixed in', () => {
-    const plan = planSync([book()], [teller({ currency: 'EUR' })], opts);
+    const plan = planSync([book()], [bridge({ currency: 'EUR' })], opts);
     assert.equal(plan.updates.length, 0);
     assert.equal(plan.problems[0].reason, 'currency');
     assert.match(plan.problems[0].message, /EUR/);
   });
 
   test('an unreadable balance is a problem, not a zero', () => {
-    const plan = planSync([book()], [teller({ balance: {} })], opts);
+    const plan = planSync([book()], [bridge({ balance: {} })], opts);
     assert.equal(plan.updates.length, 0);
     assert.equal(plan.problems[0].reason, 'no-balance');
   });
 
   test('accounts the book has not taken up are offered', () => {
-    const plan = planSync([book()], [teller(), teller({ id: 'acc_2', name: 'Cash' })], opts);
+    const plan = planSync([book()], [bridge(), bridge({ id: 'acc_2', name: 'Cash' })], opts);
     assert.equal(plan.offered.length, 1);
     assert.equal(plan.offered[0].id, 'acc_2');
   });
@@ -315,13 +322,13 @@ describe('planSync', () => {
   });
 
   test('matches on the bridge id even when the ids are typed differently', () => {
-    const plan = planSync([book({ link: { accountId: 77, org: '', lastSyncAt: null } })], [teller({ id: '77', balance: { ledger: '1.00' } })], opts);
+    const plan = planSync([book({ link: { accountId: 77, org: '', lastSyncAt: null } })], [bridge({ id: '77', balance: { ledger: '1.00' } })], opts);
     assert.equal(plan.updates.length, 1);
   });
 
   test('a followed card writes in what is owed, not what is held', () => {
     const card = book({ id: 'c1', name: 'Card', balance: 0, link: { accountId: 'acc_c', org: 'Chase', lastSyncAt: null } });
-    const plan = planSync([card], [teller({ id: 'acc_c', type: 'credit', subtype: 'credit_card', balance: { ledger: '310.25' } })], opts);
+    const plan = planSync([card], [bridge({ id: 'acc_c', type: 'credit', subtype: 'credit_card', balance: { ledger: '310.25' } })], opts);
     assert.equal(plan.changed[0].cents, -31025);
   });
 });

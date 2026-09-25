@@ -1,15 +1,15 @@
 // Talking to the bridge.
 //
 // This is the only file in the book that makes a network request, and it
-// only ever makes one kind: asking the owner's own bridge for balances.
-// Teller itself is never contacted from here — it can't be, and shouldn't
-// be. See `js/core/link.js` for why the bridge exists at all.
+// only ever makes one kind: asking the owner's own bridge for balances. The
+// provider behind that bridge is never contacted from here — it can't be,
+// and shouldn't be. See `js/core/link.js` for why the bridge exists at all.
 //
 // The access token is the whole credential, so it lives sealed in the
 // strongbox and is only ever held in memory for the length of a request.
 
 import { state, updateSettings, saveAccount, recordBalance } from './store.js';
-import { accountFromTeller, decodeLinkToken, parseBase, planSync } from './core/link.js';
+import { accountFromBridge, decodeLinkToken, parseBase, planSync } from './core/link.js';
 import { isUnlocked, open as openSealed, seal } from './vault.js';
 
 const TIMEOUT_MS = 45000;
@@ -28,9 +28,9 @@ async function withTimeout(run) {
   }
 }
 
-// Teller authenticates with the access token as an HTTP Basic username and
-// no password. The bridge passes that through to Teller unchanged, so it
-// never has to hold a token of its own.
+// The access token travels as an HTTP Basic username with no password. The
+// bridge passes it through to the provider, so it never has to hold a token
+// of its own — it holds only the credentials, and the two are useless apart.
 function authHeader(accessToken) {
   return `Basic ${btoa(`${accessToken}:`)}`;
 }
@@ -53,7 +53,7 @@ async function read({ base, accessToken }) {
     return { ok: false, error: 'Your bridge turned that token down. Sign in at the bridge again for a new line.' };
   }
   if (response.status === 502 || response.status === 504) {
-    return { ok: false, error: 'Your bridge reached Teller but got nothing back. Try again in a moment.' };
+    return { ok: false, error: 'Your bridge reached your provider but got nothing back. Try again in a moment.' };
   }
   if (!response.ok) return { ok: false, error: `Your bridge answered ${response.status}.` };
 
@@ -67,8 +67,8 @@ async function read({ base, accessToken }) {
   return {
     ok: true,
     accounts: Array.isArray(body?.accounts) ? body.accounts : [],
-    // A bank Teller couldn't reach is reported here rather than failing the
-    // whole read, so a sync can half-work and must say so.
+    // A bank that couldn't be reached is reported here rather than failing
+    // the whole read, so a sync can half-work and must say so.
     errors: Array.isArray(body?.errors) ? body.errors.map(String) : [],
   };
 }
@@ -149,8 +149,8 @@ export async function syncNow() {
 }
 
 // Taking up an account the bridge offers that the book hasn't got yet.
-export async function adoptAccount(tellerAccount) {
-  const fields = accountFromTeller(tellerAccount, { today: state.today });
+export async function adoptAccount(bridgeAccount) {
+  const fields = accountFromBridge(bridgeAccount, { today: state.today });
   const existing = state.accounts.find((a) => a.name.toLowerCase() === fields.name.toLowerCase() && !a.link);
   // An account already written in by hand is claimed rather than duplicated.
   return saveAccount(fields, existing?.id ?? null);

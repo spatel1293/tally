@@ -1,17 +1,18 @@
-// Reading balances through a Teller bridge.
+// Reading balances through a bridge.
 //
-// Teller's free tier — the "development" environment — talks to real
-// institutions, is not billed, and allows 100 enrolments. It is the only
-// free way to read balances that exists. What it costs instead of money is a
-// small program: Teller requires a client certificate on every request
-// (mutual TLS), and a browser cannot present one, nor may the private key
-// ever live in a shipped app. Teller also serves no CORS headers at all, so
-// even with a certificate the browser would refuse the call.
+// The book speaks one shape, whoever is behind the bridge. It has been
+// SimpleFIN and Teller; it is Plaid now, on the free Limited Production
+// allowance, because Teller stopped letting anyone sign up. The bridge
+// normalises whatever the provider says into the shape below, so changing
+// provider never reaches the reader — and nothing in this file knows or
+// cares which one it is.
 //
-// So the owner runs `scripts/teller-proxy.js` — the bridge. It holds the
-// certificate, asks Teller for balances, and answers this book. The path is
+// A bridge is needed because every provider authenticates with a secret that
+// must never live in a shipped app, and none of them serve CORS headers to a
+// browser. So the secret lives in `scripts/plaid-bridge.js`, on a machine
+// the owner controls, and the phone talks only to that. The path is
 //
-//     your bank  ->  Teller  ->  your bridge  ->  this device
+//     your bank  ->  Plaid  ->  your bridge  ->  this device
 //
 // and nothing of ours sits anywhere on it. The book only ever talks to the
 // owner's own bridge.
@@ -23,8 +24,10 @@
 //
 // Everything in this file is pure. `js/link.js` does the talking.
 
-// Teller reports money as a *decimal string* — "28575.02" — which is a gift:
-// it converts to exact cents with no floating point anywhere in the path.
+// The bridge hands money over as a *decimal string* — "28575.02" — which is
+// what keeps floating point out of the path entirely. Plaid sends a JSON
+// number, which is a double; the bridge quotes those digits before parsing so
+// that the exact figure survives into integer cents.
 // Anything past two decimals is rounded, half away from zero, and a figure
 // too large to be a safe integer is refused rather than mangled.
 export function centsFromDecimalString(text) {
@@ -88,37 +91,39 @@ export function decodeLinkToken(token, { decode = (s) => atob(s) } = {}) {
   return { ok: true, base: base.base, accessToken };
 }
 
-// Teller says what kind of account it is, so nothing has to be guessed from
-// a name the way a source without types would force.
-export function kindForTeller(account) {
+// The provider says what kind of account it is, so nothing has to be guessed
+// from a name. Subtypes are normalised first, because providers spell the
+// same thing differently — "money market" and "money_market" are one thing.
+export function kindForBridge(account) {
   if (String(account?.type ?? '').toLowerCase() === 'credit') return 'credit';
-  const subtype = String(account?.subtype ?? '').toLowerCase();
-  return {
-    checking: 'checking',
-    savings: 'savings',
-    money_market: 'savings',
-    certificate_of_deposit: 'savings',
-    treasury: 'brokerage',
-    sweep: 'brokerage',
-  }[subtype] ?? 'checking';
+  const subtype = String(account?.subtype ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+  const saving = ['savings', 'money_market', 'certificate_of_deposit', 'cd', 'hsa', 'prepaid', 'cash_management'];
+  const invested = [
+    'treasury', 'sweep', 'brokerage', 'ira', 'roth', 'roth_401k', '401k', '401a', '403b', '457b', '529',
+    'retirement', 'pension', 'stock_plan', 'mutual_fund', 'sep_ira', 'simple_ira', 'rrsp', 'tfsa', 'trust',
+    'ugma', 'utma', 'variable_annuity', 'non_taxable_brokerage_account', 'thrift_savings_plan', 'profit_sharing_plan',
+  ];
+  if (saving.includes(subtype)) return 'savings';
+  if (invested.includes(subtype)) return 'brokerage';
+  return 'checking';
 }
 
-export function roleForTeller(account) {
-  const kind = kindForTeller(account);
+export function roleForBridge(account) {
+  const kind = kindForBridge(account);
   return { credit: 'spending', brokerage: 'investing', savings: 'savings', checking: 'hub' }[kind] ?? 'other';
 }
 
-// What an account is worth, from the balances Teller returns beside it.
+// What an account is worth, from the balances the bridge returns beside it.
 //
 // `ledger` is everything in the account; `available` is that net of what
 // hasn't cleared. A book of record wants the ledger — the figure a statement
 // would print — and falls back to available only when there is no ledger.
 //
-// A credit card is money *owed*. Teller reports it as a positive figure, but
+// A credit card is money *owed*. Providers report it as a positive figure, but
 // `fundTotal` simply adds every balance up, so a card written in as reported
 // would inflate the fund by what you owe on it. It is negated here, which is
 // also how anyone would write it in by hand.
-export function balanceFromTeller(account) {
+export function balanceFromBridge(account) {
   const balances = account?.balance ?? {};
   const cents = centsFromDecimalString(balances.ledger) ?? centsFromDecimalString(balances.available);
   if (cents == null) return null;
@@ -127,17 +132,17 @@ export function balanceFromTeller(account) {
 }
 
 // What the bridge calls an account, and which institution it came from.
-export function accountFromTeller(account, { today = null } = {}) {
-  const cents = balanceFromTeller(account);
+export function accountFromBridge(account, { today = null } = {}) {
+  const cents = balanceFromBridge(account);
   const institution = String(account?.institution?.name ?? '').slice(0, 60);
   const lastFour = String(account?.last_four ?? '').trim().slice(0, 4);
   return {
     name: String(account?.name ?? 'Account').trim().slice(0, 60) || 'Account',
     institution,
-    kind: kindForTeller(account),
-    role: roleForTeller(account),
+    kind: kindForBridge(account),
+    role: roleForBridge(account),
     balance: cents ?? 0,
-    // Teller's balances are live, so a reading is taken today by definition:
+    // These balances are live, so a reading is taken today by definition:
     // there is no statement date to file it under.
     balanceAt: cents == null ? null : today,
     link: {
@@ -159,8 +164,8 @@ export function accountFromTeller(account, { today = null } = {}) {
 //
 // `changed` says whether the figure actually moved, so a sync that finds
 // nothing new writes nothing at all.
-export function planSync(accounts, tellerAccounts, { today, currency = 'USD' } = {}) {
-  const byId = new Map((tellerAccounts ?? []).map((a) => [String(a.id), a]));
+export function planSync(accounts, bridgeAccounts, { today, currency = 'USD' } = {}) {
+  const byId = new Map((bridgeAccounts ?? []).map((a) => [String(a.id), a]));
   const updates = [];
   const problems = [];
 
@@ -181,7 +186,7 @@ export function planSync(accounts, tellerAccounts, { today, currency = 'USD' } =
       problems.push({ id: account.id, name: account.name, reason: 'currency', message: `${account.name} is reported in ${iso}, and this book is kept in ${currency}.` });
       continue;
     }
-    const cents = balanceFromTeller(found);
+    const cents = balanceFromBridge(found);
     if (cents == null) {
       problems.push({ id: account.id, name: account.name, reason: 'no-balance', message: `${account.name} came back without a balance.` });
       continue;
@@ -199,7 +204,7 @@ export function planSync(accounts, tellerAccounts, { today, currency = 'USD' } =
   // Accounts the bridge offers that the book hasn't taken up yet. A closed
   // one is never offered — there is nothing to follow.
   const taken = new Set(accounts.map((a) => a.link?.accountId).filter(Boolean).map(String));
-  const offered = (tellerAccounts ?? []).filter(
+  const offered = (bridgeAccounts ?? []).filter(
     (a) => !taken.has(String(a.id)) && String(a.status ?? '').toLowerCase() !== 'closed'
   );
 

@@ -226,8 +226,8 @@ export function renderSettings() {
       ? html`<p class="hand">A connection needs the installed book or an <strong>https</strong> address, because the token it uses lives in the strongbox, and a browser only lends out the lock on a secure address.</p>
           <p class="marginal">You are reading this over plain http — the address <code>npm start</code> prints for a phone is exactly that. Put the book on any https host and add it to your home screen, and this offer appears.</p>`
       : !bridgeConnected()
-        ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Teller</strong> certificate and asks your banks for figures. Teller's free tier covers a hundred sign-ins and is never billed.</p>
-            <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>node scripts/teller-proxy.js</code>; the README has the steps.</p>
+        ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Plaid</strong> credentials and asks your banks for figures. Plaid's free allowance covers 200 live readings, which at a quarterly look-over is years of them.</p>
+            <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>npm run bridge</code>; the README has the steps.</p>
             <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
         : html`<ul class="plain-list ruled-list">
               ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}

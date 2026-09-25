@@ -527,7 +527,7 @@ export function openBridgeForm() {
       <span class="hint">It carries where your bridge is and the token for the accounts you approved.</span>
     </label>
     ${errorSlot('token')}
-    <p class="hint">Your bank credentials stay with Teller and your bridge. This book never sees them, and never asks for them.</p>
+    <p class="hint">Your bank credentials stay with your provider and your bridge. This book never sees them, and never asks for them.</p>
   </form>`;
 
   openSheet({

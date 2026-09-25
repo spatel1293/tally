@@ -78,40 +78,46 @@ then upload. Open devices pick the new version up on their next launch.
 ## Connecting a bridge
 
 Balances can be read for you instead of typed in, for **£0/$0**, using
-[Teller](https://teller.io)'s free tier — its "development" environment talks
-to real banks, is never billed, and allows up to 100 sign-ins.
+[Plaid](https://plaid.com)'s free **Limited Production** allowance: 200 live
+API calls per product, against real banks, with self-serve signup.
 
-It costs a little setup instead of money. Teller requires a **client
-certificate** on every request, and a browser cannot present one — Teller also
-says a private key must never be shipped inside an app, and serves no CORS
-headers at all. So the certificate lives in a small program you run, called
-the **bridge**:
+Two hundred sounds small and is not, because a call covers a whole
+institution login rather than one account. With four institutions that is
+fifty readings — years, for a book you look over quarterly. When it runs out,
+readings stop and you type balances in again; nothing breaks and nothing is
+lost.
+
+It costs a little setup instead of money. Plaid authenticates with a client
+secret, which must never be shipped inside an app, and serves no CORS headers
+to a browser. So the secret lives in a small program you run, called the
+**bridge**:
 
 ```
-your bank  →  Teller  →  your bridge  →  this device
+your bank  →  Plaid  →  your bridge  →  this device
 ```
 
 Nothing of mine sits anywhere on that path. The bridge is one file,
-`scripts/teller-proxy.js`, with no dependencies. It holds your certificate and
-nothing else: no token, no balance, no history.
+`scripts/plaid-bridge.js`, with no dependencies. It holds your Plaid
+credentials and nothing else: no token, no balance, no history. The access
+token stays sealed in the book and arrives with each request, so the bridge
+alone can read nothing — and the credentials alone can read nothing either.
 
 ### Setting it up
 
-1. **Sign up at [teller.io](https://teller.io)** — free, no card. It gives you
-   an **application id** (`app_…`) and downloads **`teller.zip`**, which holds
-   `certificate.pem` and `private_key.pem`. Keep those two files private.
-2. **Start the bridge**, pointing it at them:
+1. **Sign up at [plaid.com](https://dashboard.plaid.com/signup)** — free, no
+   card. From **Team Settings → Keys** take your `client_id` and the secret
+   for the environment you want.
+2. **Start the bridge:**
 
    ```sh
-   TELLER_APP_ID=app_xxxxx \
-   TELLER_CERT=./teller/certificate.pem \
-   TELLER_KEY=./teller/private_key.pem \
-   npm run bridge
+   PLAID_CLIENT_ID=xxxx PLAID_SECRET=yyyy npm run bridge
    ```
 
-   It prints the address it is running on.
-3. **Open that address in a browser** and press *Sign in to a bank*. This page
-   — not Tally — runs Teller's sign-in. Do it once per institution.
+   Use `PLAID_ENV=sandbox` with your sandbox secret first if you want to
+   watch the whole thing work against fake banks. The sandbox is free and
+   unlimited.
+3. **Open the bridge in a browser** and press *Sign in to a bank*. That page
+   — not Tally — runs Plaid Link. Repeat per institution.
 4. **Copy the line it gives you**, open Tally, and go to **Endpapers →
    Connections → Connect a bridge**. Paste it and open the strongbox when
    asked.
@@ -121,6 +127,21 @@ nothing else: no token, no balance, no history.
 
 The bridge only needs to be running when you read balances. The rest of the
 book works with no connection at all.
+
+### Settings
+
+All through the environment:
+
+| Variable | Meaning |
+| --- | --- |
+| `PLAID_CLIENT_ID` | Required. Plaid dashboard, Team Settings → Keys. |
+| `PLAID_SECRET` | Required. The secret for the environment below. |
+| `PLAID_ENV` | `production` (the default; the free allowance lives here) or `sandbox` (fake banks, free and unlimited). |
+| `PLAID_PRODUCTS` | Comma separated, default `balance`. Plaid requires at least one product when a sign-in starts. If it rejects the list, its own message is printed and shown verbatim so you can see what it wants. |
+| `PORT` | Default 7000. |
+| `HOST` | Default `127.0.0.1` — this machine only. There is no point exposing it on the LAN, because an https page cannot call a plain-http address anyway. |
+| `PUBLIC_URL` | Override the address the bridge hands out. Rarely needed. |
+| `ALLOW_ORIGIN` | Default `*`. Set it to Tally's address to be stricter. |
 
 ### Where to run it, and why it needs a certificate
 
@@ -156,23 +177,6 @@ If the address ever changes, you do **not** have to sign in to your banks
 again: **Endpapers → Connections → It has moved** re-points the book at the
 new address, keeping the token already sealed in the strongbox.
 
-### Settings
-
-All through the environment:
-
-| Variable | Meaning |
-| --- | --- |
-| `TELLER_APP_ID` | Required. From your Teller dashboard. |
-| `TELLER_CERT` | Required. Path to `certificate.pem`. |
-| `TELLER_KEY` | Required. Path to `private_key.pem`. |
-| `TELLER_ENV` | `development` (the default: free, real banks, not billed), `sandbox` (fake banks, to try it out) or `production`. |
-| `PORT` | Default 7000. |
-| `HOST` | Default `127.0.0.1` — this machine only. There is no point exposing it on the LAN, because an https page cannot call a plain-http address anyway. Put it behind `tailscale serve` instead. |
-| `ALLOW_ORIGIN` | Default `*`. Set it to Tally's address to be stricter. |
-
-Try `TELLER_ENV=sandbox` first if you want to see the whole thing work
-without involving a real bank.
-
 ### What this does and does not do
 
 - **Only the balance and the date it was read** are ever taken from the
@@ -181,18 +185,21 @@ without involving a real bank.
   will not rewrite your book.
 - **A balance that hasn't moved is not a new reading**, so reading twice in a
   day doesn't fill the history with identical entries.
-- **Transactions are never requested.** The bridge asks Teller for the
-  `balance` product only, so Teller never even grants access to what you
-  spent. This app does not log spending and does not want the data.
-- **A credit card is written in as money owed.** Teller reports a card's
-  balance as a positive figure; the book negates it, so linking a card lowers
-  the fund by what you owe rather than inflating it.
+- **Transactions are never requested.** The bridge asks for the `balance`
+  product only, so access to what you spent is never granted in the first
+  place. This app does not log spending and does not want the data.
+- **A credit card is written in as money owed.** A card's balance is reported
+  as a positive figure; the book negates it, so linking a card lowers the fund
+  by what you owe rather than inflating it.
+- **No floating point ever touches a figure.** Plaid sends balances as JSON
+  numbers, which are doubles; the bridge quotes those digits before parsing,
+  so the exact amount survives into integer cents.
 - **The token is the credential**, so it is sealed in the strongbox. Reading
   balances only works while the strongbox is open. The token is useless
   without the certificate and the certificate is useless without the token —
   they are deliberately kept in different places.
 - **Disconnecting** forgets the token. Every balance it ever read stays in the
-  book. To revoke access for good, do that in your Teller dashboard.
+  book. To revoke access for good, do that in your Plaid dashboard.
 
 ## How your data is stored
 
@@ -298,7 +305,7 @@ Fold and laptop sizes, including both folded postures:
 - `book.cjs` — the spread, the crease, sheets on the facing leaf, safe areas,
   and a sweep for clipping and overflow at every size
 - `bridge.cjs` — connecting, reading, adopting and disconnecting a bridge,
-  against a stubbed one; no real bridge, Teller account or money involved
+  against a stubbed one; no real bridge, provider account or money involved
 - `zz-audit.cjs` — a layout audit over every chapter
 
 They also fail on any browser console error, or if a page becomes wider than
@@ -345,7 +352,7 @@ scripts/
   serve.js              Local server (npm start)
   build-single-file.js  Builds dist/tally.html
   browser-test.js       Runs the browser tests
-  teller-proxy.js       The bridge: holds your Teller certificate (npm run bridge)
+  plaid-bridge.js       The bridge: holds your Plaid credentials (npm run bridge)
 tests/                  Unit tests; tests/browser holds the browser tests
 dist/tally.html         The single-file build
 ```

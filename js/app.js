@@ -361,7 +361,7 @@ const actions = {
     const ok = await confirmDialog({
       title: 'Disconnect the bridge?',
       message: html`<p>The book forgets the sealed token, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
-        <p>The sign-in at Teller is untouched — revoke it in your Teller dashboard if you want it gone for good.</p>`,
+        <p>The sign-in at your provider is untouched — revoke it there if you want it gone for good.</p>`,
       confirmLabel: 'Disconnect',
       danger: true,
     });

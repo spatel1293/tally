@@ -30,9 +30,9 @@ and the Fold is the device to design for when the two disagree.
 - `npm test`: 129 unit tests with Node's built-in runner. No install needed.
 - `npm run test:browser`: 5 Playwright test files (`fund`, `strongbox`, `book`, `bridge`, `zz-audit`) at phone, Fold and laptop sizes, including both folded postures. `bridge` stubs the bridge with `page.route()`, so it never touches a real one or a Teller account. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
 - `npm run build`: rebuilds `dist/tally.html`, the single-file version.
-- `npm run bridge`: runs `scripts/teller-proxy.js`, the bridge. Needs
-  `TELLER_APP_ID`, `TELLER_CERT` and `TELLER_KEY`. Not part of the app and not
-  precached — it runs on the owner's machine, not in the browser.
+- `npm run bridge`: runs `scripts/plaid-bridge.js`, the bridge. Needs
+  `PLAID_CLIENT_ID` and `PLAID_SECRET`. Not part of the app and not precached
+  — it runs on the owner's machine, not in the browser.
 
 Run `npm test` and `npm run test:browser` before saying something works. If the browser tests can't run in this environment, say so plainly.
 
@@ -74,7 +74,7 @@ There is no framework and no build step. Plain ES modules load directly in the b
 - `css/app.css`: all styles.
 - `sw.js`: precaches every shipped file.
 - `scripts/`: `serve.js`, `build-single-file.js`, `browser-test.js`, and
-  `teller-proxy.js` — the bridge, which runs on the owner's machine rather
+  `plaid-bridge.js` — the bridge, which runs on the owner's machine rather
   than shipping with the app, so it is not in `sw.js`'s `FILES`.
 
 ## Rules that must not break
@@ -117,37 +117,42 @@ There is no framework and no build step. Plain ES modules load directly in the b
 14. **UI copy** is the book's voice: plain, active, unhurried. Things are
     "written in", not "saved"; the strongbox is "shut", not "locked out".
     Error messages say what to do next.
-15. **The bridge is the owner's, not ours.** Account connectivity is Teller's
-    **free tier** (`TELLER_ENV=development`: real banks, never billed, 100
-    enrolments), reached through `scripts/teller-proxy.js` — a bridge the
-    owner runs. The owner chose free over serverless in September 2026, having
-    previously chosen SimpleFIN; **don't quietly reintroduce a paid service.**
-    - **Why a bridge exists at all**, so nobody tries to delete it: Teller
-      requires a client certificate on every request (mTLS), which a browser
-      cannot present and which Teller forbids shipping inside an app; and
-      `api.teller.io` serves **no CORS headers** and 404s on `OPTIONS`. Both
-      were verified against the live API. There is no browser-only path.
+15. **The bridge is the owner's, not ours.** Account connectivity runs through
+    `scripts/plaid-bridge.js`, a bridge the owner runs. The provider behind it
+    has changed twice and will change again; **the book speaks one shape and
+    the bridge adapts the provider to it**, so nothing in `js/` knows which
+    provider is in use. Keep it that way.
+    - **History, so nobody re-treads it.** SimpleFIN was browser-callable but
+      costs ~$15/yr, and the owner will not pay (see the memory). Teller's
+      free tier was right but **self-serve signup no longer exists** — every
+      signup route 404s and the only auth link is a sign-in form. Plaid is
+      what is left that is both free and self-serve: **Limited Production**,
+      200 live API calls per product, billed per institution login rather than
+      per account.
+    - **Why a bridge exists at all**, so nobody tries to delete it: every
+      provider authenticates with a secret that must never be shipped in an
+      app, and none of them serve CORS headers to a browser. There is no
+      browser-only path. Verified against each one's live API.
     - `js/link.js` is the only file that makes a network request, and it only
-      ever talks to the owner's bridge — **never to `api.teller.io`**, which a
+      ever talks to the owner's bridge — **never to the provider**, which a
       browser test asserts. `js/core/link.js` is the only file that interprets
       what comes back.
     - The access token lives sealed in the vault (rule 7) and a read only
       works while the strongbox is open. The token is useless without the
-      certificate and vice versa — keep them in different places.
-    - The bridge asks Teller for the **`balance` product only**, so Teller
-      never grants access to transactions. This app does not log spending and
-      must never ask for it.
+      provider credentials and vice versa — keep them in different places.
+    - The bridge asks for the **`balance` product only**. This app does not log
+      spending and must never ask for transactions.
     - A sync may change **only** the balance and its date. Name, role, rate,
       pots and sealed details are the owner's; a bank renaming an account must
-      not rewrite the book. `planSync()` enforces this and a unit test pins the
-      shape.
+      not rewrite the book. `planSync()` enforces this and a unit test pins it.
     - A balance that hasn't moved is not a new reading (rule 8 still holds).
-      Teller's balances are live, so a reading is dated `state.today`.
-    - **A credit card is money owed.** Teller reports it positive and
-      `fundTotal()` simply adds balances up, so `balanceFromTeller()` negates
-      it. Undo that and linking a card silently inflates the fund.
-    - Money arrives as a decimal string and becomes cents through integer
-      arithmetic (`centsFromDecimalString`). Never `parseFloat` it.
+      These balances are live, so a reading is dated `state.today`.
+    - **A credit card is money owed.** It is reported positive and
+      `fundTotal()` adds balances up, so `balanceFromBridge()` negates it.
+      Undo that and linking a card silently inflates the fund.
+    - **Never let a float touch a figure.** Plaid sends balances as JSON
+      numbers, which are doubles; the bridge quotes the digits in the raw text
+      before parsing so `centsFromDecimalString` gets exact input.
     - Over a network the bridge must be https; plain http is allowed only on
       `localhost`, or the token travels in the clear. `parseBase()` enforces it.
 
@@ -296,15 +301,15 @@ thing twice on one spread is the mistake a second page exists to avoid.
 - **Safe-area insets only bite on the device.** A laptop reports zero, so anything that forgets them looks perfect in every emulator and collides with the status bar on the Fold. `book.cjs` redefines `--safe-t`/`--safe-b` with a `<style>` tag after load — the only way to reproduce an inset in Chromium.
 - **Claim both view-transition promises.** `startViewTransition()` returns `ready` as well as `finished`; a second turn starting before the first settles rejects `ready`, and an unclaimed rejection is reported as a page error.
 - **Android's "Remove animations" setting reports `prefers-reduced-motion: reduce`**, which switches off every animation here. If the paper looks static on the phone but moves in the browser, check that setting before changing code.
+- **Check you can actually sign up, not just that the API is good.** I probed
+  Teller's API exhaustively, built the whole integration on it, and only then
+  found it has no self-serve signup at all — every signup route 404s. Verify
+  the account exists before designing around the service.
 - **Don't assume an aggregator needs (or doesn't need) a server — probe it.**
-  One `curl` settled the architecture twice here. `api.teller.io` answers every
-  request with `Missing certificate` and sends no CORS headers at all, which is
-  why the bridge exists; SimpleFIN, by contrast, answered a browser directly.
-  Check before designing.
-- **Teller's balances are a second request per account.** `GET /accounts` does
-  not include them; each needs `GET /accounts/:id/balances`. The bridge fans
-  out and joins them so the phone makes one request however many accounts
-  there are — don't move that work into the app.
+  One `curl` settled the architecture repeatedly here: Teller answers every
+  request with `Missing certificate` and sends no CORS headers; SimpleFIN, by
+  contrast, answered a browser directly. Check before designing.
+- **`scripts/` is not shipped**, so nothing in it belongs in `sw.js`'s `FILES`.
 - **A browser won't fetch a URL with credentials in it.** If a service hands
   out `https://user:pass@host/…`, split the userinfo out and send it as a
   Basic `Authorization` header instead.
