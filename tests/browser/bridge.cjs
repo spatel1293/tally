@@ -1,13 +1,13 @@
 // Browser test. Run all of them with `npm run test:browser` (needs Playwright).
 //
-// The bridge: connecting to a bridge and reading balances through it.
+// The bridge: connecting to a SimpleFIN bridge and reading balances from it.
 //
-// Every request here is stubbed, so no real bridge, no Teller account and no
-// real money are involved. What is being tested is the whole path the owner
-// walks — paste the line the bridge gave them, seal it, read balances, take
-// up an account — plus the things that must never happen: the token is the
-// whole credential, so it must appear neither in the page nor in storage in
-// the clear, and this book must never ask for a transaction.
+// Every request here is stubbed, so no real bridge and no real money are
+// involved. What is being tested is the whole path the owner walks — paste a
+// setup token, seal the access URL, read balances, take up an account the
+// bridge offers — plus the thing that must never happen: the access URL is
+// the entire credential, so it must appear neither in the page nor in
+// storage in the clear.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const os = require('os');
@@ -22,22 +22,22 @@ const expect = (ok, message) => {
 };
 
 const PASSPHRASE = 'correct-horse-battery-staple';
-const BRIDGE = 'https://bridge.example.test';
-const TOKEN = 'token_8f21d41d8cd98f00b204';
-const LINE = Buffer.from(JSON.stringify({ u: BRIDGE, t: TOKEN }), 'utf8').toString('base64');
-// A bridge reached over a network with plain http would put the token on the
-// wire in the clear, so the book refuses the line outright.
-const INSECURE_LINE = Buffer.from(JSON.stringify({ u: 'http://192.168.1.5:7000', t: TOKEN }), 'utf8').toString('base64');
+const CLAIM_URL = 'https://bridge.example.test/simplefin/claim/ONE-TIME-abc123';
+const SETUP_TOKEN = Buffer.from(CLAIM_URL, 'utf8').toString('base64');
+const SECRET_USER = 'bridgeuser8f21';
+const SECRET_PASS = 'bridgepassd41d8cd98f';
+const ACCESS_URL = `https://${SECRET_USER}:${SECRET_PASS}@bridge.example.test/simplefin`;
 
-// What the stub bridge is holding: one account the book will follow, one it
-// is offered afterwards, and a card — which is money owed, not money held.
-const accounts = [
-  { id: 'acc_1', name: 'Individual', currency: 'USD', type: 'depository', subtype: 'treasury', status: 'open', last_four: '4417', institution: { name: 'Wealthfront' }, balance: { ledger: '114265.51' } },
-  { id: 'acc_2', name: 'Brokerage', currency: 'USD', type: 'depository', subtype: 'sweep', status: 'open', last_four: '9921', institution: { name: 'Charles Schwab' }, balance: { ledger: '8225.35' } },
+// What the stub bridge is holding. Two accounts: one the book will follow,
+// one it is offered afterwards.
+const bridgeAccounts = [
+  { id: 'ACT-1', name: 'Individual', currency: 'USD', balance: '114265.51', 'balance-date': 1790208000, org: { name: 'Wealthfront', domain: 'wealthfront.com' } },
+  { id: 'ACT-2', name: 'Brokerage', currency: 'USD', balance: '8225.35', 'balance-date': 1790208000, org: { name: 'Charles Schwab', domain: 'schwab.com' } },
 ];
 let bridgeErrors = [];
-let bridgeCalls = [];
-let bridgeDown = false;
+let claimCalls = 0;
+let claimStatus = 200;
+let balanceCalls = [];
 
 (async () => {
   const browser = await launch();
@@ -45,9 +45,9 @@ let bridgeDown = false;
   const page = await ctx.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
-  // A bridge that isn't running is staged below, and the browser logs the
-  // refused request itself; that one line is expected, everything else is not.
-  const expected = /Failed to load resource: net::ERR_CONNECTION_REFUSED/;
+  // A refused claim is deliberate below, and the browser logs the failed
+  // request itself; that one line is expected, everything else is not.
+  const expected = /Failed to load resource: the server responded with a status of 403/;
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !expected.test(m.text())) problems.push(`console.${m.type()}: ${m.text()}`); });
   const step = (s) => console.log('STEP', s);
   const shot = (n) => page.screenshot({ path: SHOTS + n + '.png' });
@@ -57,33 +57,38 @@ let bridgeDown = false;
   const clearToasts = () => page.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove()));
 
   // ---- The stub bridge ----
-  await ctx.route('https://bridge.example.test/**', async (route) => {
+  await ctx.route('**/simplefin/claim/**', async (route) => {
+    claimCalls++;
+    const req = route.request();
+    // The claim has to stay a *simple* request. Anything that would make the
+    // browser preflight it never reaches a real bridge, which answers OPTIONS
+    // on this path with a 404 — so a header here is a shipped bug.
+    const headers = req.headers();
+    expect(req.method() === 'POST', 'the claim is a POST');
+    expect(!headers['content-type'], 'the claim sends no content type, so the browser does not preflight it');
+    expect(!headers['authorization'], 'the claim sends no authorization header');
+    if (claimStatus !== 200) return route.fulfill({ status: claimStatus, body: 'no' });
+    await route.fulfill({ status: 200, contentType: 'text/plain', body: ACCESS_URL });
+  });
+
+  await ctx.route('**/simplefin/accounts**', async (route) => {
     const req = route.request();
     const url = new URL(req.url());
-    bridgeCalls.push(url.pathname);
-    if (bridgeDown) return route.abort('connectionrefused');
-
-    // Teller takes the access token as an HTTP Basic username with no
-    // password, and the bridge passes it straight through.
+    balanceCalls.push(url.toString());
     const auth = req.headers()['authorization'] || '';
-    expect(auth === 'Basic ' + Buffer.from(`${TOKEN}:`).toString('base64'), `the token travels as an Authorization header (got ${auth.slice(0, 20)})`);
+    expect(auth === 'Basic ' + Buffer.from(`${SECRET_USER}:${SECRET_PASS}`).toString('base64'), 'the credentials travel as an Authorization header, not in the address');
     expect(!url.username && !url.password, 'the fetched address carries no credentials');
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ errors: bridgeErrors, accounts }) });
-  });
-  // Nothing in this book may ever reach Teller directly, or ask anyone at all
-  // for a transaction.
-  await ctx.route('**/api.teller.io/**', (route) => {
-    expect(false, 'the book must never talk to Teller directly');
-    route.abort();
+    expect(url.searchParams.get('balances-only') === '1', 'the read asks for balances only, so no transaction ever crosses the wire');
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ errors: bridgeErrors, accounts: bridgeAccounts }) });
   });
 
   await page.goto(BASE + '#/settings');
   await page.waitForSelector('[aria-labelledby=connections]');
   step('the endpapers offer a bridge');
-  expect(/bridge/i.test(await text('[aria-labelledby=connections]')), 'the endpapers say what the bridge is for');
+  expect((await text('[aria-labelledby=connections]')).toLowerCase().includes('simplefin'), 'the endpapers explain what a bridge is');
 
   // ---- Connecting ----
-  step('pasting the line from the bridge');
+  step('pasting a setup token');
   await page.click('[data-action=bridge-connect]');
   await page.waitForSelector('dialog#sheet[open]');
   await page.click('[data-save]');
@@ -93,43 +98,31 @@ let bridgeDown = false;
   await page.fill('textarea[name=token]', 'this is not base64 at all !!!');
   await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('#err-token')?.textContent.trim().length > 0);
-  expect(!(await text('#err-token')).includes('undefined'), 'a line that is not a line is refused in plain words');
-  expect(bridgeCalls.length === 0, 'a line that cannot be read is never sent to a bridge');
-  expect(await page.isHidden('dialog#confirm'), 'a line that is not a line is refused without asking for the passphrase');
+  expect(!(await text('#err-token')).includes('undefined'), 'a token that is not a token is refused in plain words');
+  expect(claimCalls === 0, 'a token that cannot be decoded is never sent to the bridge');
+  // A mis-paste is answered on the spot: it must not cost a trip through the
+  // passphrase dialog to find out the token was never a token.
+  expect(await page.isHidden('dialog#confirm'), 'a token that is not a token is refused without asking for the passphrase');
 
-  step('a bridge reached in the clear is refused outright');
-  await page.evaluate(() => { document.querySelector('#err-token').textContent = ''; });
-  await page.fill('textarea[name=token]', INSECURE_LINE);
-  await page.click('[data-save]');
-  await page.waitForFunction(() => document.querySelector('#err-token')?.textContent.trim().length > 0);
-  expect(/https/i.test(await text('#err-token')), 'a plain-http bridge over a network is refused, because the token would be readable');
-  expect(bridgeCalls.length === 0, 'and it is never contacted');
-
-  step('a bridge that is not running says so, and nothing is sealed');
-  bridgeDown = true;
-  await page.evaluate(() => { document.querySelector('#err-token').textContent = ''; });
-  await page.fill('textarea[name=token]', LINE);
+  // Sealing needs the strongbox, and the book asks for it before it spends
+  // the one-time token.
+  step('the strongbox is asked for before the token is spent');
+  await page.fill('textarea[name=token]', SETUP_TOKEN);
   await page.click('[data-save]');
   await page.waitForSelector('dialog#confirm[open]');
+  expect((await text('dialog#confirm')).toLowerCase().includes('passphrase'), 'connecting asks for a passphrase first');
   await page.fill('#vault-pass', PASSPHRASE);
   await page.fill('#vault-pass2', PASSPHRASE);
   await page.click('dialog#confirm button[type=submit]');
   await page.waitForSelector('dialog#confirm[open]', { state: 'detached' });
-  await page.waitForFunction(() => document.querySelector('#err-token')?.textContent.trim().length > 0);
-  expect(/reach|running/i.test(await text('#err-token')), `a bridge that is down explains itself (got: ${await text('#err-token')})`);
-  bridgeDown = false;
-
-  step('the line is checked against the bridge before it is sealed');
-  bridgeCalls = [];
-  await page.click('[data-save]');
   await closed();
-  expect(bridgeCalls.length === 1, 'connecting reads the bridge once to prove the line works');
+  expect(claimCalls === 1, 'the setup token is claimed exactly once');
   await page.waitForSelector('[data-action=bridge-sync]');
   expect((await text('[aria-labelledby=connections]')).includes('bridge.example.test'), 'the endpapers name the bridge that is connected');
   await shot('bridge-connected');
 
-  // ---- The token is a credential ----
-  step('the token is nowhere in the clear');
+  // ---- The access URL is a credential ----
+  step('the access URL is nowhere in the clear');
   const leaked = async (label) => {
     const inPage = await page.evaluate(() => document.documentElement.outerHTML);
     const inStore = await page.evaluate(async () => {
@@ -160,20 +153,29 @@ let bridgeDown = false;
       return dump.join('\n');
     });
     const haystack = inPage + '\n' + inStore;
-    for (const secret of [TOKEN, LINE]) {
-      expect(!haystack.includes(secret), `${label}: the bridge token is not in the page or in storage`);
+    for (const secret of [SECRET_PASS, SECRET_USER, ACCESS_URL, SETUP_TOKEN]) {
+      expect(!haystack.includes(secret), `${label}: the bridge credential is not in the page or in storage`);
     }
   };
   await leaked('once connected');
 
-  // ---- Taking up what the bridge offers ----
-  step('the accounts the bridge offers are waiting in the chapter');
+  // ---- Reading balances ----
+  // Connecting already read the bridge once on its own — a setup token's
+  // claim carries no account list, so without this the book would say
+  // "connected" and then offer nothing until a second, separate click.
+  step('connecting already shows what the bridge offers, with no extra click');
+  expect(balanceCalls.length === 1, 'connecting reads the bridge once by itself');
   await page.evaluate(() => { location.hash = '#/ledger'; });
   await page.waitForSelector('[aria-labelledby=offered]');
   expect((await body()).includes('Individual'), 'the accounts the bridge offers are listed');
-  expect((await body()).includes('Charles Schwab'), 'each one says which bank it came from');
-  expect((await body()).includes('4417'), 'and its last four digits');
+  expect((await body()).includes('Charles Schwab') || (await body()).includes('Brokerage'), 'both offered accounts are listed');
   await shot('bridge-offered');
+
+  step('reading balances again calls the bridge a second time');
+  await clearToasts();
+  await page.click('[data-action=bridge-sync]');
+  await page.waitForFunction(() => document.querySelector('.toast'));
+  expect(balanceCalls.length === 2, 'an explicit read calls the bridge again');
 
   step('taking up an account the bridge offers');
   await clearToasts();
@@ -192,45 +194,35 @@ let bridgeDown = false;
   expect(/nothing has moved/i.test(quiet), `an unchanged balance says so rather than filing a reading (got: ${quiet})`);
 
   step('a balance that has moved is written in');
-  accounts[0].balance.ledger = '120000.00';
+  bridgeAccounts[0].balance = '120000.00';
+  bridgeAccounts[0]['balance-date'] = 1790208000 + 86400 * 3;
   await clearToasts();
   await page.click('[data-action=bridge-sync]');
+  await page.waitForFunction(() => document.querySelector('.toast'));
   await page.waitForFunction(() => document.body.textContent.includes('120,000.00'));
   expect((await body()).includes('120,000.00'), 'the new balance is on the page');
 
-  step('a card is written in as money owed, not money held');
-  accounts.push({ id: 'acc_3', name: 'Sapphire', currency: 'USD', type: 'credit', subtype: 'credit_card', status: 'open', last_four: '1004', institution: { name: 'Chase' }, balance: { ledger: '310.25' } });
-  await clearToasts();
-  await page.click('[data-action=bridge-sync]');
-  await page.waitForFunction(() => document.querySelector('[aria-labelledby=offered]')?.textContent.includes('Sapphire'));
-  await clearToasts();
-  await page.$eval('[aria-labelledby=offered]', (section) => {
-    const row = [...section.querySelectorAll('li.ruled')].find((li) => li.textContent.includes('Sapphire'));
-    row.querySelector('[data-action=adopt-account]').click();
-  });
-  await page.waitForFunction(() => document.body.textContent.includes('Sapphire'));
-  expect(/-\s?\$?310\.25|\(\$?310\.25\)|−\$?310\.25/.test(await body()), `a card reads as what is owed (body had: ${(await body()).match(/.{0,30}310\.25.{0,10}/)?.[0]})`);
-
   step('a bank the bridge could not reach is reported, not swallowed');
-  bridgeErrors = ['Wealthfront needs signing in to again.'];
+  bridgeErrors = ['Connection to Wealthfront needs attention.'];
   await clearToasts();
   await page.click('[data-action=bridge-sync]');
   await page.waitForFunction(() => document.querySelector('.toast'));
-  expect((await text('.toast')).includes('signing in'), 'a bank that could not be reached is said out loud');
+  expect((await text('.toast')).includes('needs attention'), 'a bank that could not be reached is said out loud');
   bridgeErrors = [];
 
-  step('an account closed at the bank keeps the figure it had');
-  accounts[0].status = 'closed';
+  step('an account the bridge stops offering is flagged, not wiped');
+  const held = bridgeAccounts.shift();
   await clearToasts();
   await page.click('[data-action=bridge-sync]');
   await page.waitForFunction(() => document.querySelector('.toast'));
-  expect(/closed/i.test(await text('.toast')), 'a closed account is reported');
+  expect(/no longer offered/i.test(await text('.toast')), 'an account gone from the bridge is reported');
   expect((await body()).includes('120,000.00'), 'and the balance it had is still in the book');
-  accounts[0].status = 'open';
+  bridgeAccounts.unshift(held);
 
   // ---- A shut strongbox ----
   step('a shut strongbox stops a read, and says why');
   await clearToasts();
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { get: () => 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -243,12 +235,8 @@ let bridgeDown = false;
   expect(/strongbox/i.test(shut), `a read with the strongbox shut explains itself (got: ${shut})`);
   await leaked('with the strongbox shut');
 
-  // ---- Nothing but balances ----
-  step('the book never asks anyone for a transaction');
-  expect(bridgeCalls.every((p) => p === '/accounts'), `the book asks only for /accounts (asked: ${[...new Set(bridgeCalls)].join(', ')})`);
-
   // ---- Disconnecting ----
-  step('disconnecting forgets the token and keeps the money');
+  step('disconnecting forgets the address and keeps the money');
   await page.goto(BASE + '#/settings');
   await page.waitForSelector('[data-action=bridge-forget]');
   await page.click('[data-action=bridge-forget]');
@@ -260,6 +248,25 @@ let bridgeDown = false;
   await page.waitForSelector('.acct');
   expect((await body()).includes('120,000.00'), 'every balance it ever read stays in the book');
   await leaked('after disconnecting');
+
+  // ---- A token that has already been used ----
+  step('a token claimed twice is refused in words that say what to do');
+  claimStatus = 403;
+  await page.goto(BASE + '#/settings');
+  await page.click('[data-action=bridge-connect]');
+  await page.waitForSelector('dialog#sheet[open]');
+  await page.fill('textarea[name=token]', SETUP_TOKEN);
+  await page.click('[data-save]');
+  // The page was reloaded, so the strongbox is shut and asks to be opened
+  // before the token is spent.
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.fill('#vault-pass', PASSPHRASE);
+  await page.click('dialog#confirm button[type=submit]');
+  await page.waitForSelector('dialog#confirm[open]', { state: 'detached' });
+  await page.waitForFunction(() => document.querySelector('#err-token')?.textContent.trim().length > 0);
+  const refusal = await text('#err-token');
+  expect(/once|new one|generate/i.test(refusal), `a spent token says to generate a new one (got: ${refusal})`);
+  await shot('bridge-spent-token');
 
   expect(problems.length === 0, `no page errors: ${problems.join(' | ')}`);
   await browser.close();

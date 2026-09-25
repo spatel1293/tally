@@ -3608,7 +3608,7 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '5.4.0';
+const APP_VERSION = '5.5.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the
@@ -5100,44 +5100,32 @@ return { money, date, monthLabel, relativeDay, percent, timeAgo, plural };
 
 // js/core/link.js
 const __m_js_core_link_js = (() => {
-// Reading balances through a bridge.
+// Reading balances from a SimpleFIN bridge.
 //
-// The book speaks one shape, whoever is behind the bridge. It has been
-// SimpleFIN and Teller; it is Plaid now, on the free Limited Production
-// allowance, because Teller stopped letting anyone sign up. The bridge
-// normalises whatever the provider says into the shape below, so changing
-// provider never reaches the reader — and nothing in this file knows or
-// cares which one it is.
+// SimpleFIN is the one aggregator that fits this book. The owner signs up
+// with the bridge themselves and connects their own banks there; the bridge
+// hands out an *access URL* that carries its own credentials; and the API is
+// a single authenticated GET that the bridge serves with CORS headers — so
+// the phone talks to it directly. There is no server of ours in the middle,
+// no client secret, and no account of ours anywhere: the path is
 //
-// A bridge is needed because every provider authenticates with a secret that
-// must never live in a shipped app, and none of them serve CORS headers to a
-// browser. So the secret lives in `scripts/plaid-bridge.js`, on a machine
-// the owner controls, and the phone talks only to that. The path is
+//     your bank  →  your SimpleFIN bridge  →  this device
 //
-//     your bank  ->  Plaid  ->  your bridge  ->  this device
-//
-// and nothing of ours sits anywhere on it. The book only ever talks to the
-// owner's own bridge.
-//
-// The access token is the credential, so it is sealed in the strongbox and a
-// read only works while that is open. The token is useless without the
-// certificate and the certificate is useless without the token — they are
-// deliberately kept in different places.
+// The access URL is the whole credential, so it is sealed in the strongbox
+// and a sync only works while that is open.
 //
 // Everything in this file is pure. `js/link.js` does the talking.
 
-// The bridge hands money over as a *decimal string* — "28575.02" — which is
-// what keeps floating point out of the path entirely. Plaid sends a JSON
-// number, which is a double; the bridge quotes those digits before parsing so
-// that the exact figure survives into integer cents.
-// Anything past two decimals is rounded, half away from zero, and a figure
-// too large to be a safe integer is refused rather than mangled.
+// SimpleFIN reports money as a *decimal string* — "114265.51" — which is a
+// gift: it converts to exact cents with no floating point anywhere in the
+// path. Anything past two decimals is rounded, half away from zero, and a
+// figure too large to be a safe integer is refused rather than mangled.
 function centsFromDecimalString(text) {
   const s = String(text ?? '').trim();
   const m = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(s);
   if (!m) return null;
   const negative = m[1] === '-';
-  const frac = m[3] ?? '';
+  const frac = m[2 + 1] ?? '';
   let cents = BigInt(m[2]) * 100n + BigInt((frac + '00').slice(0, 2));
   if (frac.length > 2 && Number(frac[2]) >= 5) cents += 1n;
   const value = Number(cents);
@@ -5145,68 +5133,59 @@ function centsFromDecimalString(text) {
   return negative ? -value : value;
 }
 
-// The bridge's address. Plain http is allowed only on this machine: a bridge
-// running on your own laptop has nowhere to be overheard, but one reached
-// across a network carries a token and must be encrypted.
-function parseBase(value) {
-  const raw = String(value ?? '').trim();
-  if (!raw) return { ok: false, error: 'That line doesn’t say where your bridge is.' };
+// `balance-date` is epoch seconds. A balance belongs to the day it was read
+// in the reader's own timezone, which is the day they would write down.
+function dateFromEpoch(seconds, { now = () => new Date() } = {}) {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return null;
+  const d = new Date(seconds * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// A setup token is base64 of the one-time claim URL.
+function decodeSetupToken(token, { decode = (s) => atob(s) } = {}) {
+  const trimmed = String(token ?? '').trim().replace(/\s+/g, '');
+  if (!trimmed) return { ok: false, error: 'Paste the setup token from your SimpleFIN bridge.' };
+  let url;
+  try {
+    url = decode(trimmed);
+  } catch {
+    return { ok: false, error: 'That doesn’t look like a setup token. Copy it again from the bridge.' };
+  }
+  if (!/^https:\/\/[^\s]+$/i.test(url)) {
+    return { ok: false, error: 'That token doesn’t decode to an https address, so it isn’t a setup token.' };
+  }
+  return { ok: true, claimUrl: url };
+}
+
+// An access URL carries its credentials in front of the host. A browser
+// refuses to fetch a URL written that way, so the two halves are separated
+// here and the credentials are sent as an Authorization header instead —
+// which is exactly the header the bridge allows through CORS.
+function parseAccessUrl(accessUrl) {
+  const raw = String(accessUrl ?? '').trim();
+  if (!/^https:\/\//i.test(raw)) return { ok: false, error: 'An access URL starts with https://.' };
   let url;
   try {
     url = new URL(raw);
   } catch {
-    return { ok: false, error: 'Your bridge’s address isn’t a web address.' };
+    return { ok: false, error: 'That isn’t a web address.' };
   }
-  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
-    return { ok: false, error: 'A bridge reached over a network has to be https, or the token could be read on the way.' };
-  }
+  if (!url.username) return { ok: false, error: 'That access URL has no credentials in it, so nothing could sign in with it.' };
+  const username = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
   url.username = '';
   url.password = '';
-  url.hash = '';
-  url.search = '';
-  return { ok: true, base: url.toString().replace(/\/+$/, '') };
+  const base = url.toString().replace(/\/+$/, '');
+  return { ok: true, base, username, password };
 }
 
-// Connecting is one paste. The bridge's sign-in page hands over a single
-// line carrying both where the bridge is and the token to use with it, so
-// the owner never has to copy two things and get one of them wrong.
-function decodeLinkToken(token, { decode = (s) => atob(s) } = {}) {
-  const trimmed = String(token ?? '').trim().replace(/\s+/g, '');
-  if (!trimmed) return { ok: false, error: 'Paste the line your bridge gave you after you signed in.' };
-  let text;
-  try {
-    text = decode(trimmed);
-  } catch {
-    return { ok: false, error: 'That doesn’t look like a bridge line. Copy it again from the bridge.' };
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return { ok: false, error: 'That line is damaged. Copy it again from the bridge.' };
-  }
-  const base = parseBase(parsed?.u);
-  if (!base.ok) return base;
-  const accessToken = String(parsed?.t ?? '').trim();
-  if (!accessToken) return { ok: false, error: 'That line carries no token, so nothing could sign in with it.' };
-  return { ok: true, base: base.base, accessToken };
-}
-
-// The provider says what kind of account it is, so nothing has to be guessed
-// from a name. Subtypes are normalised first, because providers spell the
-// same thing differently — "money market" and "money_market" are one thing.
 function kindForBridge(account) {
-  if (String(account?.type ?? '').toLowerCase() === 'credit') return 'credit';
-  const subtype = String(account?.subtype ?? '').toLowerCase().replace(/[\s-]+/g, '_');
-  const saving = ['savings', 'money_market', 'certificate_of_deposit', 'cd', 'hsa', 'prepaid', 'cash_management'];
-  const invested = [
-    'treasury', 'sweep', 'brokerage', 'ira', 'roth', 'roth_401k', '401k', '401a', '403b', '457b', '529',
-    'retirement', 'pension', 'stock_plan', 'mutual_fund', 'sep_ira', 'simple_ira', 'rrsp', 'tfsa', 'trust',
-    'ugma', 'utma', 'variable_annuity', 'non_taxable_brokerage_account', 'thrift_savings_plan', 'profit_sharing_plan',
-  ];
-  if (saving.includes(subtype)) return 'savings';
-  if (invested.includes(subtype)) return 'brokerage';
+  const name = `${account?.name ?? ''} ${account?.org?.name ?? ''}`.toLowerCase();
+  if (/credit|card|visa|mastercard|amex/.test(name)) return 'credit';
+  if (/broker|invest|stock|ira|401|roth|securities|portfolio|wealthfront|betterment|robinhood|schwab|fidelity|vanguard|e\*?trade|merrill|ameritrade|sofi invest/.test(name)) return 'brokerage';
+  if (/saving|reserve|cash|money market/.test(name)) return 'savings';
   return 'checking';
 }
 
@@ -5215,42 +5194,21 @@ function roleForBridge(account) {
   return { credit: 'spending', brokerage: 'investing', savings: 'savings', checking: 'hub' }[kind] ?? 'other';
 }
 
-// What an account is worth, from the balances the bridge returns beside it.
-//
-// `ledger` is everything in the account; `available` is that net of what
-// hasn't cleared. A book of record wants the ledger — the figure a statement
-// would print — and falls back to available only when there is no ledger.
-//
-// A credit card is money *owed*. Providers report it as a positive figure, but
-// `fundTotal` simply adds every balance up, so a card written in as reported
-// would inflate the fund by what you owe on it. It is negated here, which is
-// also how anyone would write it in by hand.
-function balanceFromBridge(account) {
-  const balances = account?.balance ?? {};
-  const cents = centsFromDecimalString(balances.ledger) ?? centsFromDecimalString(balances.available);
-  if (cents == null) return null;
-  const owed = String(account?.type ?? '').toLowerCase() === 'credit';
-  return owed ? -Math.abs(cents) : cents;
-}
-
 // What the bridge calls an account, and which institution it came from.
-function accountFromBridge(account, { today = null } = {}) {
-  const cents = balanceFromBridge(account);
-  const institution = String(account?.institution?.name ?? '').slice(0, 60);
-  const lastFour = String(account?.last_four ?? '').trim().slice(0, 4);
+// SimpleFIN's `org` is the bank; its `name` is the account at that bank.
+function accountFromBridge(sfAccount, { today = null } = {}) {
+  const cents = centsFromDecimalString(sfAccount?.balance);
+  const read = dateFromEpoch(sfAccount?.['balance-date']);
   return {
-    name: String(account?.name ?? 'Account').trim().slice(0, 60) || 'Account',
-    institution,
-    kind: kindForBridge(account),
-    role: roleForBridge(account),
+    name: String(sfAccount?.name ?? 'Account').trim().slice(0, 60) || 'Account',
+    institution: String(sfAccount?.org?.name ?? sfAccount?.org?.domain ?? '').slice(0, 60),
+    kind: kindForBridge(sfAccount),
+    role: roleForBridge(sfAccount),
     balance: cents ?? 0,
-    // These balances are live, so a reading is taken today by definition:
-    // there is no statement date to file it under.
-    balanceAt: cents == null ? null : today,
+    balanceAt: cents == null ? null : read ?? today,
     link: {
-      accountId: String(account?.id ?? ''),
-      org: institution,
-      lastFour,
+      accountId: String(sfAccount?.id ?? ''),
+      org: String(sfAccount?.org?.name ?? sfAccount?.org?.domain ?? '').slice(0, 60),
       lastSyncAt: null,
     },
   };
@@ -5266,8 +5224,8 @@ function accountFromBridge(account, { today = null } = {}) {
 //
 // `changed` says whether the figure actually moved, so a sync that finds
 // nothing new writes nothing at all.
-function planSync(accounts, bridgeAccounts, { today, currency = 'USD' } = {}) {
-  const byId = new Map((bridgeAccounts ?? []).map((a) => [String(a.id), a]));
+function planSync(accounts, sfAccounts, { today, currency = 'USD' } = {}) {
+  const byId = new Map((sfAccounts ?? []).map((a) => [String(a.id), a]));
   const updates = [];
   const problems = [];
 
@@ -5279,36 +5237,30 @@ function planSync(accounts, bridgeAccounts, { today, currency = 'USD' } = {}) {
       problems.push({ id: account.id, name: account.name, reason: 'gone', message: `${account.name} is no longer offered by the bridge.` });
       continue;
     }
-    if (String(found.status ?? '').toLowerCase() === 'closed') {
-      problems.push({ id: account.id, name: account.name, reason: 'closed', message: `${account.name} is closed at the institution, so its balance was left as it was.` });
-      continue;
-    }
     const iso = String(found.currency ?? '').toUpperCase();
     if (iso && iso !== String(currency).toUpperCase()) {
       problems.push({ id: account.id, name: account.name, reason: 'currency', message: `${account.name} is reported in ${iso}, and this book is kept in ${currency}.` });
       continue;
     }
-    const cents = balanceFromBridge(found);
+    const cents = centsFromDecimalString(found.balance);
     if (cents == null) {
       problems.push({ id: account.id, name: account.name, reason: 'no-balance', message: `${account.name} came back without a balance.` });
       continue;
     }
+    const date = dateFromEpoch(found['balance-date']) ?? today;
     updates.push({
       id: account.id,
       name: account.name,
       cents,
-      date: today,
+      date,
       was: account.balance ?? 0,
-      changed: cents !== (account.balance ?? 0) || today !== account.balanceAt,
+      changed: cents !== (account.balance ?? 0) || date !== account.balanceAt,
     });
   }
 
-  // Accounts the bridge offers that the book hasn't taken up yet. A closed
-  // one is never offered — there is nothing to follow.
+  // Accounts the bridge offers that the book hasn't taken up yet.
   const taken = new Set(accounts.map((a) => a.link?.accountId).filter(Boolean).map(String));
-  const offered = (bridgeAccounts ?? []).filter(
-    (a) => !taken.has(String(a.id)) && String(a.status ?? '').toLowerCase() !== 'closed'
-  );
+  const offered = (sfAccounts ?? []).filter((a) => !taken.has(String(a.id)));
 
   return { updates, problems, offered, changed: updates.filter((u) => u.changed) };
 }
@@ -5317,28 +5269,34 @@ function isConnected(account) {
   return Boolean(account?.link?.accountId);
 }
 
-return { centsFromDecimalString, parseBase, decodeLinkToken, kindForBridge, roleForBridge, balanceFromBridge, accountFromBridge, planSync, isConnected };
+return { centsFromDecimalString, dateFromEpoch, decodeSetupToken, parseAccessUrl, kindForBridge, roleForBridge, accountFromBridge, planSync, isConnected };
 })();
 
 // js/link.js
 const __m_js_link_js = (() => {
-// Talking to the bridge.
+// Talking to the SimpleFIN bridge.
 //
 // This is the only file in the book that makes a network request, and it
-// only ever makes one kind: asking the owner's own bridge for balances. The
-// provider behind that bridge is never contacted from here — it can't be,
-// and shouldn't be. See `js/core/link.js` for why the bridge exists at all.
+// only ever makes two:
 //
-// The access token is the whole credential, so it lives sealed in the
-// strongbox and is only ever held in memory for the length of a request.
+//   1. once, to claim a setup token for an access URL;
+//   2. thereafter, to read balances from that access URL.
+//
+// Both go straight from this device to the owner's own bridge. The access
+// URL is the whole credential, so it lives sealed in the strongbox and is
+// only ever held in memory for the length of a request.
 
 const { state, updateSettings, saveAccount, recordBalance } = __m_js_store_js;
-const { accountFromBridge, decodeLinkToken, parseBase, planSync } = __m_js_core_link_js;
+const { accountFromBridge, decodeSetupToken, parseAccessUrl, planSync } = __m_js_core_link_js;
 const { isUnlocked, open: openSealed, seal } = __m_js_vault_js;
-const TIMEOUT_MS = 45000;
+const TIMEOUT_MS = 30000;
 
 function bridgeConnected() {
   return Boolean(state.settings.bridgeVault);
+}
+
+function authHeader(username, password) {
+  return `Basic ${btoa(`${username}:${password}`)}`;
 }
 
 async function withTimeout(run) {
@@ -5351,103 +5309,93 @@ async function withTimeout(run) {
   }
 }
 
-// The access token travels as an HTTP Basic username with no password. The
-// bridge passes it through to the provider, so it never has to hold a token
-// of its own — it holds only the credentials, and the two are useless apart.
-function authHeader(accessToken) {
-  return `Basic ${btoa(`${accessToken}:`)}`;
-}
-
-// One read of the bridge. It answers with every account the enrolment
-// covers, each with its balance already attached, so the phone makes one
-// request however many accounts there are.
-async function read({ base, accessToken }) {
-  let response;
-  try {
-    response = await withTimeout((signal) =>
-      fetch(`${base}/accounts`, { headers: { Authorization: authHeader(accessToken) }, signal })
-    );
-  } catch (err) {
-    if (err?.name === 'AbortError') return { ok: false, error: 'Your bridge didn’t answer in time. Banks can be slow; try again in a moment.' };
-    return { ok: false, error: 'Couldn’t reach your bridge. Check it is running and that this device can see it.' };
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    return { ok: false, error: 'Your bridge turned that token down. Sign in at the bridge again for a new line.' };
-  }
-  if (response.status === 502 || response.status === 504) {
-    return { ok: false, error: 'Your bridge reached your provider but got nothing back. Try again in a moment.' };
-  }
-  if (!response.ok) return { ok: false, error: `Your bridge answered ${response.status}.` };
-
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    return { ok: false, error: 'Your bridge sent something that wasn’t readable. Check it is the right address.' };
-  }
-
-  return {
-    ok: true,
-    accounts: Array.isArray(body?.accounts) ? body.accounts : [],
-    // A bank that couldn't be reached is reported here rather than failing
-    // the whole read, so a sync can half-work and must say so.
-    errors: Array.isArray(body?.errors) ? body.errors.map(String) : [],
-  };
-}
-
-async function credentials() {
-  if (!bridgeConnected()) throw new Error('bridge-missing');
-  if (!isUnlocked()) throw new Error('vault-locked');
-  const opened = await openSealed(state.settings.bridgeVault);
-  const base = parseBase(opened?.base);
-  if (!base.ok) throw new Error('bridge-damaged');
-  return { base: base.base, accessToken: String(opened?.accessToken ?? '') };
-}
-
-// Connecting. The line is checked against the bridge before it is sealed,
-// so a bridge that isn't running says so now rather than the first time the
-// owner asks for figures.
-async function connectBridge(linkToken) {
-  const decoded = decodeLinkToken(linkToken);
+// Claiming is a bare POST: no body, no content type, no custom headers.
+// That matters — anything else makes it a preflighted request, and the
+// bridge answers the preflight for this path with a 404, so the browser
+// blocks it before it is ever sent.
+async function claimSetupToken(token) {
+  const decoded = decodeSetupToken(token);
   if (!decoded.ok) return { ok: false, error: decoded.error };
 
-  const probe = await read(decoded);
-  if (!probe.ok) return { ok: false, error: probe.error };
+  let response;
+  try {
+    response = await withTimeout((signal) => fetch(decoded.claimUrl, { method: 'POST', signal }));
+  } catch (err) {
+    return { ok: false, error: err?.name === 'AbortError' ? 'The bridge didn’t answer in time. Try again.' : 'Couldn’t reach the bridge. Check the connection and try again.' };
+  }
+  if (response.status === 403) return { ok: false, error: 'The bridge refused that token. A setup token can only be claimed once — generate a new one.' };
+  if (!response.ok) return { ok: false, error: `The bridge answered ${response.status}. Generate a new setup token and try again.` };
 
-  const bridgeVault = await seal({ base: decoded.base, accessToken: decoded.accessToken });
-  await updateSettings({ bridgeVault, bridgeHost: new URL(decoded.base).host, bridgeAt: null });
-  return { ok: true, offered: probe.accounts };
+  const accessUrl = (await response.text()).trim();
+  const parsed = parseAccessUrl(accessUrl);
+  if (!parsed.ok) return { ok: false, error: `The bridge sent something unexpected back: ${parsed.error}` };
+  return { ok: true, accessUrl, base: parsed.base };
 }
 
-// The bridge has moved. The token is the hard part — it cost a sign-in at
-// each bank — and the book is holding it, so re-pointing at a new address
-// must never mean enrolling all over again. The new address is proved before
-// the old one is given up.
-async function moveBridge(address) {
-  const base = parseBase(address);
-  if (!base.ok) return { ok: false, error: base.error };
-
-  const current = await credentials();
-  const probe = await read({ base: base.base, accessToken: current.accessToken });
-  if (!probe.ok) return { ok: false, error: probe.error };
-
-  const bridgeVault = await seal({ base: base.base, accessToken: current.accessToken });
-  await updateSettings({ bridgeVault, bridgeHost: new URL(base.base).host });
-  return { ok: true, offered: probe.accounts };
+// Seals the access URL into the strongbox. Nothing else in the book ever
+// writes it down, and it never leaves this device except back to the bridge
+// it came from.
+async function saveBridge(accessUrl) {
+  const parsed = parseAccessUrl(accessUrl);
+  if (!parsed.ok) throw new Error(parsed.error);
+  const bridgeVault = await seal({ accessUrl });
+  await updateSettings({ bridgeVault, bridgeHost: new URL(parsed.base).host, bridgeAt: null });
+  return parsed;
 }
 
 async function forgetBridge() {
   await updateSettings({ bridgeVault: null, bridgeHost: '', bridgeAt: null });
 }
 
+async function accessUrl() {
+  if (!bridgeConnected()) throw new Error('bridge-missing');
+  if (!isUnlocked()) throw new Error('vault-locked');
+  const opened = await openSealed(state.settings.bridgeVault);
+  return String(opened?.accessUrl ?? '');
+}
+
+// Reading balances. `balances-only` keeps the transactions this book has no
+// use for from ever crossing the wire.
 async function fetchBalances() {
-  return read(await credentials());
+  const parsed = parseAccessUrl(await accessUrl());
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+
+  let response;
+  try {
+    response = await withTimeout((signal) =>
+      fetch(`${parsed.base}/accounts?balances-only=1`, {
+        headers: { Authorization: authHeader(parsed.username, parsed.password) },
+        signal,
+      })
+    );
+  } catch (err) {
+    return { ok: false, error: err?.name === 'AbortError' ? 'The bridge didn’t answer in time.' : 'Couldn’t reach the bridge.' };
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, error: 'The bridge turned that access URL down. It may have been revoked — connect the bridge again.' };
+  }
+  if (!response.ok) return { ok: false, error: `The bridge answered ${response.status}.` };
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, error: 'The bridge sent something that wasn’t readable.' };
+  }
+
+  return {
+    ok: true,
+    accounts: Array.isArray(body?.accounts) ? body.accounts : [],
+    // SimpleFIN reports a bank it couldn't reach here rather than failing
+    // the whole call, so a sync can half-work and must say so.
+    errors: Array.isArray(body?.errors) ? body.errors.map(String) : [],
+  };
 }
 
 // One sync: read the bridge, work out what actually moved, and write only
 // that. A balance that hasn't changed is not a new reading, so the history
-// doesn't fill up with identical entries from a daily habit.
+// doesn't fill up with identical entries from a nightly habit.
 async function syncNow() {
   const result = await fetchBalances();
   if (!result.ok) return result;
@@ -5461,7 +5409,7 @@ async function syncNow() {
   for (const update of plan.changed) {
     await recordBalance(update.id, update.cents, update.date);
   }
-  // Every followed account was looked at, whether or not it moved.
+  // Every connected account was looked at, whether or not it moved.
   for (const update of plan.updates) {
     const account = state.accounts.find((a) => a.id === update.id);
     if (account?.link) await saveAccount({ link: { ...account.link, lastSyncAt: at } }, update.id);
@@ -5472,8 +5420,8 @@ async function syncNow() {
 }
 
 // Taking up an account the bridge offers that the book hasn't got yet.
-async function adoptAccount(bridgeAccount) {
-  const fields = accountFromBridge(bridgeAccount, { today: state.today });
+async function adoptAccount(sfAccount) {
+  const fields = accountFromBridge(sfAccount, { today: state.today });
   const existing = state.accounts.find((a) => a.name.toLowerCase() === fields.name.toLowerCase() && !a.link);
   // An account already written in by hand is claimed rather than duplicated.
   return saveAccount(fields, existing?.id ?? null);
@@ -5484,15 +5432,13 @@ function describeLinkError(err) {
     case 'bridge-missing':
       return 'No bridge is connected yet. Connect one in the endpapers.';
     case 'vault-locked':
-      return 'The strongbox holds the bridge’s token, so open it first.';
-    case 'bridge-damaged':
-      return 'What the book has sealed for the bridge no longer reads as an address. Connect the bridge again.';
+      return 'The strongbox holds the bridge’s credentials, so open it first.';
     default:
       return null;
   }
 }
 
-return { bridgeConnected, connectBridge, moveBridge, forgetBridge, fetchBalances, syncNow, adoptAccount, describeLinkError };
+return { bridgeConnected, claimSetupToken, saveBridge, forgetBridge, fetchBalances, syncNow, adoptAccount, describeLinkError };
 })();
 
 // js/views/forms.js
@@ -5507,9 +5453,9 @@ const { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } = __m_j
 const { PLAN_KINDS, BP } = __m_js_core_plans_js;
 const { money, plural } = __m_js_ui_format_js;
 const { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open: openSealed, changePassphrase, describeVaultError } = __m_js_vault_js;
-const { connectBridge, moveBridge } = __m_js_link_js;
+const { claimSetupToken, saveBridge, syncNow } = __m_js_link_js;
 const { ui } = __m_js_views_chrome_js;
-const { decodeLinkToken } = __m_js_core_link_js;
+const { decodeSetupToken } = __m_js_core_link_js;
 const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
 function footerButtons({ saveLabel, deletable }) {
@@ -6013,19 +5959,21 @@ function openPlanAdjust(id) {
 
 // ---------- The bridge ----------
 
-// Connecting is one paste. The line is checked against the bridge before it
-// is sealed, so a bridge that isn't running says so here rather than the
-// first time the owner asks for figures.
+// Connecting is two small steps, not one: a setup token is claimed for an
+// access URL, and that URL is what gets sealed. Splitting them means a typo
+// in the token is caught before anything touches the strongbox, and a
+// claimed-but-unsealed URL is never left stranded if something goes wrong
+// in between.
 function openBridgeForm() {
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <p class="sheet-lede">Start your bridge, open it in a browser, and sign in to your banks. It hands you one line — paste it here.</p>
+    <p class="sheet-lede">At <strong>simplefin.org</strong> you connect your own banks and generate a <em>setup token</em>. Paste it here once; the book turns it into a sealed address that can read balances and nothing else.</p>
     <label class="field">
-      <span class="label">The line from your bridge</span>
-      <textarea name="token" rows="4" spellcheck="false" placeholder="eyJ1IjoiaHR0cHM6Ly9icmlkZ2UuZXhhbXBsZSIsInQiOiJ0b2tlbl8…"></textarea>
-      <span class="hint">It carries where your bridge is and the token for the accounts you approved.</span>
+      <span class="label">Setup token</span>
+      <textarea name="token" rows="4" spellcheck="false" placeholder="aHR0cHM6Ly9iZXRhLWJyaWRnZS5zaW1wbGVmaW4ub3JnL3NpbXBsZWZpbi9jbGFpbS8…"></textarea>
+      <span class="hint">A long line of letters and numbers. It works once, so if this fails, generate another.</span>
     </label>
     ${errorSlot('token')}
-    <p class="hint">Your bank credentials stay with your provider and your bridge. This book never sees them, and never asks for them.</p>
+    <p class="hint">Your bank credentials stay at the bridge — this book never sees them, and never asks for them.</p>
   </form>`;
 
   openSheet({
@@ -6037,25 +5985,30 @@ function openBridgeForm() {
       $('textarea[name="token"]', form).focus();
       wireSave(dialog, form, async () => {
         const token = formData(form).token.trim();
-        if (!token) return showErrors(form, { token: 'Paste the line your bridge gave you.' });
+        if (!token) return showErrors(form, { token: 'Paste the setup token from your bridge.' });
 
-        // Check the shape of the line first. It costs nothing, and it means a
-        // mis-paste is answered on the spot instead of behind a passphrase.
-        const decoded = decodeLinkToken(token);
+        // Check the shape of the token first. It costs nothing, and it means
+        // a mis-paste is answered on the spot instead of behind a passphrase.
+        const decoded = decodeSetupToken(token);
         if (!decoded.ok) return showErrors(form, { token: decoded.error });
 
-        // Sealing needs the strongbox, so ask for it before going near the
-        // bridge — there is no point spending a round trip to be told later.
+        // Sealing needs the strongbox, so ask for it before spending the
+        // token — a token claimed and then not sealed is a token wasted.
         if (!isUnlocked()) {
           const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
-          if (!opened) return showErrors(form, { token: 'The token has to be sealed, so the strongbox must be open.' });
+          if (!opened) return showErrors(form, { token: 'The address has to be sealed, so the strongbox must be open.' });
         }
 
-        const result = await connectBridge(token);
-        if (!result.ok) return showErrors(form, { token: result.error });
-        ui.offered = result.offered;
+        const claimed = await claimSetupToken(token);
+        if (!claimed.ok) return showErrors(form, { token: claimed.error });
+        await saveBridge(claimed.accessUrl);
+
+        // The claim itself doesn't list accounts, so one read of the bridge
+        // finishes the job: it is what fills in what there is to offer.
+        const result = await syncNow();
+        ui.offered = result.ok ? result.offered : [];
         sheet.close({ silent: true });
-        toast(result.offered.length
+        toast(result.ok && result.offered.length
           ? `Bridge connected. ${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} waiting in Accounts.`
           : 'Bridge connected.', { duration: 7000 });
       });
@@ -6063,43 +6016,7 @@ function openBridgeForm() {
   });
 }
 
-// Re-pointing a bridge that has moved, keeping the token already sealed.
-function openBridgeMoveForm() {
-  const body = html`<form class="stack" novalidate autocomplete="off">
-    <p class="sheet-lede">If your bridge is running somewhere new, give the book the new address. What you signed in to at each bank stays as it is — nothing has to be done again.</p>
-    <label class="field">
-      <span class="label">Where the bridge is now</span>
-      <input name="address" inputmode="url" spellcheck="false" placeholder="https://your-machine.ts.net" value="${state.settings.bridgeHost ? `https://${state.settings.bridgeHost}` : ''}" />
-      <span class="hint">It has to be https, unless the bridge is on this very machine.</span>
-    </label>
-    ${errorSlot('address')}
-  </form>`;
-
-  openSheet({
-    title: 'The bridge has moved',
-    body,
-    footer: html`<button type="button" class="btn primary grow" data-save>Point the book at it</button>`,
-    onMount(dialog, sheet) {
-      const form = $('form', dialog);
-      $('input[name="address"]', form).focus();
-      wireSave(dialog, form, async () => {
-        const address = formData(form).address.trim();
-        if (!address) return showErrors(form, { address: 'Give the address your bridge is running on.' });
-        if (!isUnlocked()) {
-          const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
-          if (!opened) return showErrors(form, { address: 'The token is in the strongbox, so it must be open.' });
-        }
-        const result = await moveBridge(address);
-        if (!result.ok) return showErrors(form, { address: result.error });
-        ui.offered = result.offered;
-        sheet.close({ silent: true });
-        toast('The book is reading from the new address.');
-      });
-    },
-  });
-}
-
-return { passphraseDialog, openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, openBridgeForm, openBridgeMoveForm };
+return { passphraseDialog, openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, openBridgeForm };
 })();
 
 // js/core/fund.js
@@ -6871,7 +6788,7 @@ function bridgeNote() {
       </div>`;
     }
     return html`<div class="strongbox-note">
-      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you run. Nothing leaves this device until you say so.</p>
+      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you connect your banks to. Nothing leaves this device until you say so.</p>
       <button type="button" class="btn small" data-action="bridge-connect">${icons.sync}Connect a bridge</button>
     </div>`;
   }
@@ -6892,7 +6809,7 @@ function offeredNote() {
       ${ui.offered.map((a, i) => ruledRow(
         html`${a.name}`,
         html`<button type="button" class="btn small" data-action="adopt-account" data-index="${i}">Write it in</button>`,
-        { sub: [a.institution?.name, a.last_four ? `····${a.last_four}` : ''].filter(Boolean).join(' · '), wrap: true }
+        { sub: a.org?.name ?? '', wrap: true }
       ))}
     </ul>`, { id: 'offered' });
 }
@@ -7405,18 +7322,17 @@ function renderSettings() {
       ? html`<p class="hand">A connection needs the installed book or an <strong>https</strong> address, because the token it uses lives in the strongbox, and a browser only lends out the lock on a secure address.</p>
           <p class="marginal">You are reading this over plain http — the address <code>npm start</code> prints for a phone is exactly that. Put the book on any https host and add it to your home screen, and this offer appears.</p>`
       : !bridgeConnected()
-        ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Plaid</strong> credentials and asks your banks for figures. Plaid's free allowance covers 200 live readings, which at a quarterly look-over is years of them.</p>
-            <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>npm run bridge</code>; the README has the steps.</p>
+        ? html`<p class="hand">Tally can read your balances from a <strong>SimpleFIN</strong> bridge. You connect your banks at the bridge; the bridge gives you one address that can read balances and nothing else; this book keeps that address sealed and asks it for figures.</p>
+            <p class="marginal">Nothing of mine sits in the middle: your bank talks to your bridge, and your bridge talks to this device. No account here, no server here, and the book still works with the aeroplane mode on.</p>
             <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
         : html`<ul class="plain-list ruled-list">
               ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}
               ${ruledRow('Last read', s.bridgeAt ? timeAgo(s.bridgeAt) : 'never')}
               ${ruledRow('Accounts following it', String(state.accounts.filter((a) => a.link).length))}
             </ul>
-            <p class="marginal">The token is sealed in the strongbox, so a read only works while that is open — and only while the bridge is running.</p>
+            <p class="marginal">The address is sealed in the strongbox, so a sync only works while that is open.</p>
             <div class="btn-row">
               <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
-              <button type="button" class="btn ghost" data-action="bridge-move">It has moved</button>
               <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
             </div>`}`, { id: 'connections' })}
 
@@ -7476,7 +7392,7 @@ const { state, init, subscribe, checkDayChange, reload, saveAccount, describeErr
 const { isUnlocked, lock: lockVault, onVaultChange, open: openSealed, describeVaultError } = __m_js_vault_js;
 const { CHAPTERS, fleuron, icons, ui } = __m_js_views_chrome_js;
 const { money } = __m_js_ui_format_js;
-const { openAccountForm, openBalanceForm, openBridgeForm, openBridgeMoveForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
+const { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
 const { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } = __m_js_link_js;
 const { renderFund, fundFacingPage } = __m_js_views_fund_js;
 const { renderPots, potDetail, afterPotsMount, resetScenario } = __m_js_views_pots_js;
@@ -7825,12 +7741,11 @@ const actions = {
       fail(err);
     }
   },
-  'bridge-move': () => openBridgeMoveForm(),
   'bridge-forget': async () => {
     const ok = await confirmDialog({
       title: 'Disconnect the bridge?',
-      message: html`<p>The book forgets the sealed token, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
-        <p>The sign-in at your provider is untouched — revoke it there if you want it gone for good.</p>`,
+      message: html`<p>The book forgets the sealed address, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
+        <p>The connection at the bridge itself is untouched — revoke it there if you want it gone for good.</p>`,
       confirmLabel: 'Disconnect',
       danger: true,
     });

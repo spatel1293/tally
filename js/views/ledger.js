@@ -87,7 +87,7 @@ function bridgeNote() {
       </div>`;
     }
     return html`<div class="strongbox-note">
-      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you run. Nothing leaves this device until you say so.</p>
+      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you connect your banks to. Nothing leaves this device until you say so.</p>
       <button type="button" class="btn small" data-action="bridge-connect">${icons.sync}Connect a bridge</button>
     </div>`;
   }
@@ -108,7 +108,7 @@ function offeredNote() {
       ${ui.offered.map((a, i) => ruledRow(
         html`${a.name}`,
         html`<button type="button" class="btn small" data-action="adopt-account" data-index="${i}">Write it in</button>`,
-        { sub: [a.institution?.name, a.last_four ? `····${a.last_four}` : ''].filter(Boolean).join(' · '), wrap: true }
+        { sub: a.org?.name ?? '', wrap: true }
       ))}
     </ul>`, { id: 'offered' });
 }

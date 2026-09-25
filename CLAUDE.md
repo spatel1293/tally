@@ -28,11 +28,8 @@ and the Fold is the device to design for when the two disagree.
 
 - `npm start`: local server on http://localhost:5173. It also prints a LAN address for the phone; that address is plain HTTP, so install and offline mode won't work there, but layouts will.
 - `npm test`: 129 unit tests with Node's built-in runner. No install needed.
-- `npm run test:browser`: 5 Playwright test files (`fund`, `strongbox`, `book`, `bridge`, `zz-audit`) at phone, Fold and laptop sizes, including both folded postures. `bridge` stubs the bridge with `page.route()`, so it never touches a real one or a Teller account. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
+- `npm run test:browser`: 5 Playwright test files (`fund`, `strongbox`, `book`, `bridge`, `zz-audit`) at phone, Fold and laptop sizes, including both folded postures. `bridge` stubs the SimpleFIN bridge with `page.route()`, so it never touches a real one or costs anything. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
 - `npm run build`: rebuilds `dist/tally.html`, the single-file version.
-- `npm run bridge`: runs `scripts/plaid-bridge.js`, the bridge. Needs
-  `PLAID_CLIENT_ID` and `PLAID_SECRET`. Not part of the app and not precached
-  — it runs on the owner's machine, not in the browser.
 
 Run `npm test` and `npm run test:browser` before saying something works. If the browser tests can't run in this environment, say so plainly.
 
@@ -49,9 +46,9 @@ There is no framework and no build step. Plain ES modules load directly in the b
     against balances, the history of readings, what has gone stale.
   - `advisor.js` — the quarterly review as a computed checklist. Takes a
     `money` formatter as an argument so core stays free of locale.
-  - `link.js` — reading a bridge: exact cents from decimal strings, decoding
-    the line the bridge hands out, mapping Teller's account types, and
-    `planSync()`, which decides what a sync may change.
+  - `link.js` — reading a SimpleFIN bridge: exact cents from decimal
+    strings, setup-token decoding, access-URL parsing, and `planSync()`,
+    which decides what a sync may change.
   - `defaults.js` — `newAccount()` is the one shape an account has;
     `validate.js` sanitises and parses backups.
 - `js/link.js`: the bridge. The only file in the app that makes a network
@@ -73,9 +70,9 @@ There is no framework and no build step. Plain ES modules load directly in the b
   page, `data-action` click delegation, keyboard, paper theme, service worker.
 - `css/app.css`: all styles.
 - `sw.js`: precaches every shipped file.
-- `scripts/`: `serve.js`, `build-single-file.js`, `browser-test.js`, and
-  `plaid-bridge.js` — the bridge, which runs on the owner's machine rather
-  than shipping with the app, so it is not in `sw.js`'s `FILES`.
+- `scripts/`: `serve.js`, `build-single-file.js`, `browser-test.js`. There
+  is no local bridge script — SimpleFIN is reachable straight from the
+  browser, so nothing runs on the owner's machine at all.
 
 ## Rules that must not break
 
@@ -111,50 +108,61 @@ There is no framework and no build step. Plain ES modules load directly in the b
     book face is whichever serif the device already has. Anything that leaves
     the device must be the owner's explicit choice. There is **exactly one**
     runtime request the app can make, and it is that choice: reading balances
-    from a bridge the owner runs themselves (rule 15). No other third party is
-    ever contacted — not even Teller, which the bridge talks to on the app's
-    behalf. Don't add a second one.
+    from a SimpleFIN bridge the owner signed up for themselves (rule 15). No
+    other third party is ever contacted. Don't add a second one.
 14. **UI copy** is the book's voice: plain, active, unhurried. Things are
     "written in", not "saved"; the strongbox is "shut", not "locked out".
     Error messages say what to do next.
-15. **The bridge is the owner's, not ours.** Account connectivity runs through
-    `scripts/plaid-bridge.js`, a bridge the owner runs. The provider behind it
-    has changed twice and will change again; **the book speaks one shape and
-    the bridge adapts the provider to it**, so nothing in `js/` knows which
-    provider is in use. Keep it that way.
-    - **History, so nobody re-treads it.** SimpleFIN was browser-callable but
-      costs ~$15/yr, and the owner will not pay (see the memory). Teller's
-      free tier was right but **self-serve signup no longer exists** — every
-      signup route 404s and the only auth link is a sign-in form. Plaid is
-      what is left that is both free and self-serve: **Limited Production**,
-      200 live API calls per product, billed per institution login rather than
-      per account.
-    - **Why a bridge exists at all**, so nobody tries to delete it: every
-      provider authenticates with a secret that must never be shipped in an
-      app, and none of them serve CORS headers to a browser. There is no
-      browser-only path. Verified against each one's live API.
+15. **Account connectivity is SimpleFIN, paid, at the owner's explicit
+    instruction — don't swap it for a "free" alternative without asking.**
+    This took three tries and is settled:
+    - **SimpleFIN** (where this landed) is directly callable from a browser —
+      no server, no client secret, no developer account, nothing of ours in
+      the middle — for a flat **$1.50/mo or $15/yr** paid straight to the
+      bridge. The owner's instruction, verbatim: "switch to simple fin,
+      FINALIZE EVERYTHING. I will pay the flat rate."
+    - **Teller** looked free and was tried first, and its API is genuinely
+      good, but it has **no self-serve signup any more** — every signup route
+      404s and the only auth link on the site is a sign-in form with no way
+      to create an account. Verified directly; don't re-attempt it without
+      checking that has changed.
+    - **Plaid** was tried after Teller as the free-and-self-serve option:
+      `dashboard.plaid.com/signup` does work, and its **Limited Production**
+      allowance is real (200 live calls per product). But requesting
+      production access — even for the narrowest possible scope, `auth` +
+      `balance` alone, nothing else — routes through a "Submit request" screen
+      that demands a payment method and agreement to a **real, metered pricing
+      schedule** (Balance $0.10/call, Auth $1.50 one-time, and so on) before
+      it will hand out a working secret. The owner's rule is genuinely zero
+      cost (see the memory on not paying for services), so this was a dead
+      end regardless of how the marketing page reads. If revisiting this,
+      verify against the actual dashboard request flow, not the pricing page.
+    - Given the choice was between "free in theory, paid in the dashboard's
+      actual flow" (Plaid) and "paid outright, but small, flat, and honest
+      about it" (SimpleFIN), the owner chose to just pay SimpleFIN. Don't
+      re-open this by chasing a free option again without asking first.
+    - **The claim step must stay a *simple* request.** The bridge has no
+      OPTIONS handler on the claim path (it answers 404), so any custom
+      header or content type turns the POST into a preflighted one and the
+      browser blocks it before it is sent. Bare
+      `fetch(claimUrl, { method: 'POST' })`, nothing else. Balance reads are
+      fine to send an `Authorization` header, which the bridge does allow.
+    - An access URL carries its credentials in the URL itself
+      (`https://user:pass@host/…`), which a browser will not `fetch()`
+      directly — `parseAccessUrl()` splits the userinfo out and it is sent as
+      a Basic `Authorization` header instead.
+    - Reads pass `balances-only=1`, which keeps transactions off the wire
+      entirely — this app does not log spending and must never ask for them.
     - `js/link.js` is the only file that makes a network request, and it only
-      ever talks to the owner's bridge — **never to the provider**, which a
-      browser test asserts. `js/core/link.js` is the only file that interprets
-      what comes back.
-    - The access token lives sealed in the vault (rule 7) and a read only
-      works while the strongbox is open. The token is useless without the
-      provider credentials and vice versa — keep them in different places.
-    - The bridge asks for the **`balance` product only**. This app does not log
-      spending and must never ask for transactions.
+      ever talks to the owner's own bridge, which a browser test asserts.
+      `js/core/link.js` is the only file that interprets what comes back, and
+      it is pure — no network, no browser globals.
+    - The access URL lives sealed in the vault (rule 7) and a read only works
+      while the strongbox is open.
     - A sync may change **only** the balance and its date. Name, role, rate,
       pots and sealed details are the owner's; a bank renaming an account must
       not rewrite the book. `planSync()` enforces this and a unit test pins it.
     - A balance that hasn't moved is not a new reading (rule 8 still holds).
-      These balances are live, so a reading is dated `state.today`.
-    - **A credit card is money owed.** It is reported positive and
-      `fundTotal()` adds balances up, so `balanceFromBridge()` negates it.
-      Undo that and linking a card silently inflates the fund.
-    - **Never let a float touch a figure.** Plaid sends balances as JSON
-      numbers, which are doubles; the bridge quotes the digits in the raw text
-      before parsing so `centsFromDecimalString` gets exact input.
-    - Over a network the bridge must be https; plain http is allowed only on
-      `localhost`, or the token travels in the clear. `parseBase()` enforces it.
 
 ## Design
 
@@ -301,10 +309,16 @@ thing twice on one spread is the mistake a second page exists to avoid.
 - **Safe-area insets only bite on the device.** A laptop reports zero, so anything that forgets them looks perfect in every emulator and collides with the status bar on the Fold. `book.cjs` redefines `--safe-t`/`--safe-b` with a `<style>` tag after load — the only way to reproduce an inset in Chromium.
 - **Claim both view-transition promises.** `startViewTransition()` returns `ready` as well as `finished`; a second turn starting before the first settles rejects `ready`, and an unclaimed rejection is reported as a page error.
 - **Android's "Remove animations" setting reports `prefers-reduced-motion: reduce`**, which switches off every animation here. If the paper looks static on the phone but moves in the browser, check that setting before changing code.
-- **Check you can actually sign up, not just that the API is good.** I probed
-  Teller's API exhaustively, built the whole integration on it, and only then
-  found it has no self-serve signup at all — every signup route 404s. Verify
+- **Check you can actually sign up, not just that the API is good.** Teller's
+  API was probed exhaustively and the whole integration built on it, only to
+  find it has no self-serve signup at all — every signup route 404s. Verify
   the account exists before designing around the service.
+- **"Free" on a pricing page and "free" in the actual signup flow can
+  differ.** Plaid's own marketing says 200 free live calls; requesting real
+  production access, even for the narrowest product scope, routed through a
+  screen demanding a card and a real metered pricing agreement before issuing
+  a working secret. Verify the literal dashboard flow a person would click
+  through, not the copy on the pricing page.
 - **Don't assume an aggregator needs (or doesn't need) a server — probe it.**
   One `curl` settled the architecture repeatedly here: Teller answers every
   request with `Missing certificate` and sends no CORS headers; SimpleFIN, by

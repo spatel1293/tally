@@ -8,9 +8,9 @@ import { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } from '
 import { PLAN_KINDS, BP } from '../core/plans.js';
 import { money, plural } from '../ui/format.js';
 import { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open as openSealed, changePassphrase, describeVaultError } from '../vault.js';
-import { connectBridge, moveBridge } from '../link.js';
+import { claimSetupToken, saveBridge, syncNow } from '../link.js';
 import { ui } from './chrome.js';
-import { decodeLinkToken } from '../core/link.js';
+import { decodeSetupToken } from '../core/link.js';
 
 const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
@@ -515,19 +515,21 @@ export function openPlanAdjust(id) {
 
 // ---------- The bridge ----------
 
-// Connecting is one paste. The line is checked against the bridge before it
-// is sealed, so a bridge that isn't running says so here rather than the
-// first time the owner asks for figures.
+// Connecting is two small steps, not one: a setup token is claimed for an
+// access URL, and that URL is what gets sealed. Splitting them means a typo
+// in the token is caught before anything touches the strongbox, and a
+// claimed-but-unsealed URL is never left stranded if something goes wrong
+// in between.
 export function openBridgeForm() {
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <p class="sheet-lede">Start your bridge, open it in a browser, and sign in to your banks. It hands you one line — paste it here.</p>
+    <p class="sheet-lede">At <strong>simplefin.org</strong> you connect your own banks and generate a <em>setup token</em>. Paste it here once; the book turns it into a sealed address that can read balances and nothing else.</p>
     <label class="field">
-      <span class="label">The line from your bridge</span>
-      <textarea name="token" rows="4" spellcheck="false" placeholder="eyJ1IjoiaHR0cHM6Ly9icmlkZ2UuZXhhbXBsZSIsInQiOiJ0b2tlbl8…"></textarea>
-      <span class="hint">It carries where your bridge is and the token for the accounts you approved.</span>
+      <span class="label">Setup token</span>
+      <textarea name="token" rows="4" spellcheck="false" placeholder="aHR0cHM6Ly9iZXRhLWJyaWRnZS5zaW1wbGVmaW4ub3JnL3NpbXBsZWZpbi9jbGFpbS8…"></textarea>
+      <span class="hint">A long line of letters and numbers. It works once, so if this fails, generate another.</span>
     </label>
     ${errorSlot('token')}
-    <p class="hint">Your bank credentials stay with your provider and your bridge. This book never sees them, and never asks for them.</p>
+    <p class="hint">Your bank credentials stay at the bridge — this book never sees them, and never asks for them.</p>
   </form>`;
 
   openSheet({
@@ -539,63 +541,32 @@ export function openBridgeForm() {
       $('textarea[name="token"]', form).focus();
       wireSave(dialog, form, async () => {
         const token = formData(form).token.trim();
-        if (!token) return showErrors(form, { token: 'Paste the line your bridge gave you.' });
+        if (!token) return showErrors(form, { token: 'Paste the setup token from your bridge.' });
 
-        // Check the shape of the line first. It costs nothing, and it means a
-        // mis-paste is answered on the spot instead of behind a passphrase.
-        const decoded = decodeLinkToken(token);
+        // Check the shape of the token first. It costs nothing, and it means
+        // a mis-paste is answered on the spot instead of behind a passphrase.
+        const decoded = decodeSetupToken(token);
         if (!decoded.ok) return showErrors(form, { token: decoded.error });
 
-        // Sealing needs the strongbox, so ask for it before going near the
-        // bridge — there is no point spending a round trip to be told later.
+        // Sealing needs the strongbox, so ask for it before spending the
+        // token — a token claimed and then not sealed is a token wasted.
         if (!isUnlocked()) {
           const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
-          if (!opened) return showErrors(form, { token: 'The token has to be sealed, so the strongbox must be open.' });
+          if (!opened) return showErrors(form, { token: 'The address has to be sealed, so the strongbox must be open.' });
         }
 
-        const result = await connectBridge(token);
-        if (!result.ok) return showErrors(form, { token: result.error });
-        ui.offered = result.offered;
+        const claimed = await claimSetupToken(token);
+        if (!claimed.ok) return showErrors(form, { token: claimed.error });
+        await saveBridge(claimed.accessUrl);
+
+        // The claim itself doesn't list accounts, so one read of the bridge
+        // finishes the job: it is what fills in what there is to offer.
+        const result = await syncNow();
+        ui.offered = result.ok ? result.offered : [];
         sheet.close({ silent: true });
-        toast(result.offered.length
+        toast(result.ok && result.offered.length
           ? `Bridge connected. ${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} waiting in Accounts.`
           : 'Bridge connected.', { duration: 7000 });
-      });
-    },
-  });
-}
-
-// Re-pointing a bridge that has moved, keeping the token already sealed.
-export function openBridgeMoveForm() {
-  const body = html`<form class="stack" novalidate autocomplete="off">
-    <p class="sheet-lede">If your bridge is running somewhere new, give the book the new address. What you signed in to at each bank stays as it is — nothing has to be done again.</p>
-    <label class="field">
-      <span class="label">Where the bridge is now</span>
-      <input name="address" inputmode="url" spellcheck="false" placeholder="https://your-machine.ts.net" value="${state.settings.bridgeHost ? `https://${state.settings.bridgeHost}` : ''}" />
-      <span class="hint">It has to be https, unless the bridge is on this very machine.</span>
-    </label>
-    ${errorSlot('address')}
-  </form>`;
-
-  openSheet({
-    title: 'The bridge has moved',
-    body,
-    footer: html`<button type="button" class="btn primary grow" data-save>Point the book at it</button>`,
-    onMount(dialog, sheet) {
-      const form = $('form', dialog);
-      $('input[name="address"]', form).focus();
-      wireSave(dialog, form, async () => {
-        const address = formData(form).address.trim();
-        if (!address) return showErrors(form, { address: 'Give the address your bridge is running on.' });
-        if (!isUnlocked()) {
-          const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
-          if (!opened) return showErrors(form, { address: 'The token is in the strongbox, so it must be open.' });
-        }
-        const result = await moveBridge(address);
-        if (!result.ok) return showErrors(form, { address: result.error });
-        ui.offered = result.offered;
-        sheet.close({ silent: true });
-        toast('The book is reading from the new address.');
       });
     },
   });

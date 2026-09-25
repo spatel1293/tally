@@ -226,18 +226,17 @@ export function renderSettings() {
       ? html`<p class="hand">A connection needs the installed book or an <strong>https</strong> address, because the token it uses lives in the strongbox, and a browser only lends out the lock on a secure address.</p>
           <p class="marginal">You are reading this over plain http — the address <code>npm start</code> prints for a phone is exactly that. Put the book on any https host and add it to your home screen, and this offer appears.</p>`
       : !bridgeConnected()
-        ? html`<p class="hand">Tally can read your balances through a <strong>bridge</strong> — a small program you run, which holds your <strong>Plaid</strong> credentials and asks your banks for figures. Plaid's free allowance covers 200 live readings, which at a quarterly look-over is years of them.</p>
-            <p class="marginal">Nothing of mine sits anywhere on that path. You sign in at your own bridge, it hands you one line, and the book keeps that line sealed and asks it for balances — never for what you spent. Set it up with <code>npm run bridge</code>; the README has the steps.</p>
+        ? html`<p class="hand">Tally can read your balances from a <strong>SimpleFIN</strong> bridge. You connect your banks at the bridge; the bridge gives you one address that can read balances and nothing else; this book keeps that address sealed and asks it for figures.</p>
+            <p class="marginal">Nothing of mine sits in the middle: your bank talks to your bridge, and your bridge talks to this device. No account here, no server here, and the book still works with the aeroplane mode on.</p>
             <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
         : html`<ul class="plain-list ruled-list">
               ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}
               ${ruledRow('Last read', s.bridgeAt ? timeAgo(s.bridgeAt) : 'never')}
               ${ruledRow('Accounts following it', String(state.accounts.filter((a) => a.link).length))}
             </ul>
-            <p class="marginal">The token is sealed in the strongbox, so a read only works while that is open — and only while the bridge is running.</p>
+            <p class="marginal">The address is sealed in the strongbox, so a sync only works while that is open.</p>
             <div class="btn-row">
               <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
-              <button type="button" class="btn ghost" data-action="bridge-move">It has moved</button>
               <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
             </div>`}`, { id: 'connections' })}
 

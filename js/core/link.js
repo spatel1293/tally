@@ -1,41 +1,29 @@
-// Reading balances through a bridge.
+// Reading balances from a SimpleFIN bridge.
 //
-// The book speaks one shape, whoever is behind the bridge. It has been
-// SimpleFIN and Teller; it is Plaid now, on the free Limited Production
-// allowance, because Teller stopped letting anyone sign up. The bridge
-// normalises whatever the provider says into the shape below, so changing
-// provider never reaches the reader — and nothing in this file knows or
-// cares which one it is.
+// SimpleFIN is the one aggregator that fits this book. The owner signs up
+// with the bridge themselves and connects their own banks there; the bridge
+// hands out an *access URL* that carries its own credentials; and the API is
+// a single authenticated GET that the bridge serves with CORS headers — so
+// the phone talks to it directly. There is no server of ours in the middle,
+// no client secret, and no account of ours anywhere: the path is
 //
-// A bridge is needed because every provider authenticates with a secret that
-// must never live in a shipped app, and none of them serve CORS headers to a
-// browser. So the secret lives in `scripts/plaid-bridge.js`, on a machine
-// the owner controls, and the phone talks only to that. The path is
+//     your bank  →  your SimpleFIN bridge  →  this device
 //
-//     your bank  ->  Plaid  ->  your bridge  ->  this device
-//
-// and nothing of ours sits anywhere on it. The book only ever talks to the
-// owner's own bridge.
-//
-// The access token is the credential, so it is sealed in the strongbox and a
-// read only works while that is open. The token is useless without the
-// certificate and the certificate is useless without the token — they are
-// deliberately kept in different places.
+// The access URL is the whole credential, so it is sealed in the strongbox
+// and a sync only works while that is open.
 //
 // Everything in this file is pure. `js/link.js` does the talking.
 
-// The bridge hands money over as a *decimal string* — "28575.02" — which is
-// what keeps floating point out of the path entirely. Plaid sends a JSON
-// number, which is a double; the bridge quotes those digits before parsing so
-// that the exact figure survives into integer cents.
-// Anything past two decimals is rounded, half away from zero, and a figure
-// too large to be a safe integer is refused rather than mangled.
+// SimpleFIN reports money as a *decimal string* — "114265.51" — which is a
+// gift: it converts to exact cents with no floating point anywhere in the
+// path. Anything past two decimals is rounded, half away from zero, and a
+// figure too large to be a safe integer is refused rather than mangled.
 export function centsFromDecimalString(text) {
   const s = String(text ?? '').trim();
   const m = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(s);
   if (!m) return null;
   const negative = m[1] === '-';
-  const frac = m[3] ?? '';
+  const frac = m[2 + 1] ?? '';
   let cents = BigInt(m[2]) * 100n + BigInt((frac + '00').slice(0, 2));
   if (frac.length > 2 && Number(frac[2]) >= 5) cents += 1n;
   const value = Number(cents);
@@ -43,68 +31,59 @@ export function centsFromDecimalString(text) {
   return negative ? -value : value;
 }
 
-// The bridge's address. Plain http is allowed only on this machine: a bridge
-// running on your own laptop has nowhere to be overheard, but one reached
-// across a network carries a token and must be encrypted.
-export function parseBase(value) {
-  const raw = String(value ?? '').trim();
-  if (!raw) return { ok: false, error: 'That line doesn’t say where your bridge is.' };
+// `balance-date` is epoch seconds. A balance belongs to the day it was read
+// in the reader's own timezone, which is the day they would write down.
+export function dateFromEpoch(seconds, { now = () => new Date() } = {}) {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return null;
+  const d = new Date(seconds * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// A setup token is base64 of the one-time claim URL.
+export function decodeSetupToken(token, { decode = (s) => atob(s) } = {}) {
+  const trimmed = String(token ?? '').trim().replace(/\s+/g, '');
+  if (!trimmed) return { ok: false, error: 'Paste the setup token from your SimpleFIN bridge.' };
+  let url;
+  try {
+    url = decode(trimmed);
+  } catch {
+    return { ok: false, error: 'That doesn’t look like a setup token. Copy it again from the bridge.' };
+  }
+  if (!/^https:\/\/[^\s]+$/i.test(url)) {
+    return { ok: false, error: 'That token doesn’t decode to an https address, so it isn’t a setup token.' };
+  }
+  return { ok: true, claimUrl: url };
+}
+
+// An access URL carries its credentials in front of the host. A browser
+// refuses to fetch a URL written that way, so the two halves are separated
+// here and the credentials are sent as an Authorization header instead —
+// which is exactly the header the bridge allows through CORS.
+export function parseAccessUrl(accessUrl) {
+  const raw = String(accessUrl ?? '').trim();
+  if (!/^https:\/\//i.test(raw)) return { ok: false, error: 'An access URL starts with https://.' };
   let url;
   try {
     url = new URL(raw);
   } catch {
-    return { ok: false, error: 'Your bridge’s address isn’t a web address.' };
+    return { ok: false, error: 'That isn’t a web address.' };
   }
-  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
-    return { ok: false, error: 'A bridge reached over a network has to be https, or the token could be read on the way.' };
-  }
+  if (!url.username) return { ok: false, error: 'That access URL has no credentials in it, so nothing could sign in with it.' };
+  const username = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
   url.username = '';
   url.password = '';
-  url.hash = '';
-  url.search = '';
-  return { ok: true, base: url.toString().replace(/\/+$/, '') };
+  const base = url.toString().replace(/\/+$/, '');
+  return { ok: true, base, username, password };
 }
 
-// Connecting is one paste. The bridge's sign-in page hands over a single
-// line carrying both where the bridge is and the token to use with it, so
-// the owner never has to copy two things and get one of them wrong.
-export function decodeLinkToken(token, { decode = (s) => atob(s) } = {}) {
-  const trimmed = String(token ?? '').trim().replace(/\s+/g, '');
-  if (!trimmed) return { ok: false, error: 'Paste the line your bridge gave you after you signed in.' };
-  let text;
-  try {
-    text = decode(trimmed);
-  } catch {
-    return { ok: false, error: 'That doesn’t look like a bridge line. Copy it again from the bridge.' };
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return { ok: false, error: 'That line is damaged. Copy it again from the bridge.' };
-  }
-  const base = parseBase(parsed?.u);
-  if (!base.ok) return base;
-  const accessToken = String(parsed?.t ?? '').trim();
-  if (!accessToken) return { ok: false, error: 'That line carries no token, so nothing could sign in with it.' };
-  return { ok: true, base: base.base, accessToken };
-}
-
-// The provider says what kind of account it is, so nothing has to be guessed
-// from a name. Subtypes are normalised first, because providers spell the
-// same thing differently — "money market" and "money_market" are one thing.
 export function kindForBridge(account) {
-  if (String(account?.type ?? '').toLowerCase() === 'credit') return 'credit';
-  const subtype = String(account?.subtype ?? '').toLowerCase().replace(/[\s-]+/g, '_');
-  const saving = ['savings', 'money_market', 'certificate_of_deposit', 'cd', 'hsa', 'prepaid', 'cash_management'];
-  const invested = [
-    'treasury', 'sweep', 'brokerage', 'ira', 'roth', 'roth_401k', '401k', '401a', '403b', '457b', '529',
-    'retirement', 'pension', 'stock_plan', 'mutual_fund', 'sep_ira', 'simple_ira', 'rrsp', 'tfsa', 'trust',
-    'ugma', 'utma', 'variable_annuity', 'non_taxable_brokerage_account', 'thrift_savings_plan', 'profit_sharing_plan',
-  ];
-  if (saving.includes(subtype)) return 'savings';
-  if (invested.includes(subtype)) return 'brokerage';
+  const name = `${account?.name ?? ''} ${account?.org?.name ?? ''}`.toLowerCase();
+  if (/credit|card|visa|mastercard|amex/.test(name)) return 'credit';
+  if (/broker|invest|stock|ira|401|roth|securities|portfolio|wealthfront|betterment|robinhood|schwab|fidelity|vanguard|e\*?trade|merrill|ameritrade|sofi invest/.test(name)) return 'brokerage';
+  if (/saving|reserve|cash|money market/.test(name)) return 'savings';
   return 'checking';
 }
 
@@ -113,42 +92,21 @@ export function roleForBridge(account) {
   return { credit: 'spending', brokerage: 'investing', savings: 'savings', checking: 'hub' }[kind] ?? 'other';
 }
 
-// What an account is worth, from the balances the bridge returns beside it.
-//
-// `ledger` is everything in the account; `available` is that net of what
-// hasn't cleared. A book of record wants the ledger — the figure a statement
-// would print — and falls back to available only when there is no ledger.
-//
-// A credit card is money *owed*. Providers report it as a positive figure, but
-// `fundTotal` simply adds every balance up, so a card written in as reported
-// would inflate the fund by what you owe on it. It is negated here, which is
-// also how anyone would write it in by hand.
-export function balanceFromBridge(account) {
-  const balances = account?.balance ?? {};
-  const cents = centsFromDecimalString(balances.ledger) ?? centsFromDecimalString(balances.available);
-  if (cents == null) return null;
-  const owed = String(account?.type ?? '').toLowerCase() === 'credit';
-  return owed ? -Math.abs(cents) : cents;
-}
-
 // What the bridge calls an account, and which institution it came from.
-export function accountFromBridge(account, { today = null } = {}) {
-  const cents = balanceFromBridge(account);
-  const institution = String(account?.institution?.name ?? '').slice(0, 60);
-  const lastFour = String(account?.last_four ?? '').trim().slice(0, 4);
+// SimpleFIN's `org` is the bank; its `name` is the account at that bank.
+export function accountFromBridge(sfAccount, { today = null } = {}) {
+  const cents = centsFromDecimalString(sfAccount?.balance);
+  const read = dateFromEpoch(sfAccount?.['balance-date']);
   return {
-    name: String(account?.name ?? 'Account').trim().slice(0, 60) || 'Account',
-    institution,
-    kind: kindForBridge(account),
-    role: roleForBridge(account),
+    name: String(sfAccount?.name ?? 'Account').trim().slice(0, 60) || 'Account',
+    institution: String(sfAccount?.org?.name ?? sfAccount?.org?.domain ?? '').slice(0, 60),
+    kind: kindForBridge(sfAccount),
+    role: roleForBridge(sfAccount),
     balance: cents ?? 0,
-    // These balances are live, so a reading is taken today by definition:
-    // there is no statement date to file it under.
-    balanceAt: cents == null ? null : today,
+    balanceAt: cents == null ? null : read ?? today,
     link: {
-      accountId: String(account?.id ?? ''),
-      org: institution,
-      lastFour,
+      accountId: String(sfAccount?.id ?? ''),
+      org: String(sfAccount?.org?.name ?? sfAccount?.org?.domain ?? '').slice(0, 60),
       lastSyncAt: null,
     },
   };
@@ -164,8 +122,8 @@ export function accountFromBridge(account, { today = null } = {}) {
 //
 // `changed` says whether the figure actually moved, so a sync that finds
 // nothing new writes nothing at all.
-export function planSync(accounts, bridgeAccounts, { today, currency = 'USD' } = {}) {
-  const byId = new Map((bridgeAccounts ?? []).map((a) => [String(a.id), a]));
+export function planSync(accounts, sfAccounts, { today, currency = 'USD' } = {}) {
+  const byId = new Map((sfAccounts ?? []).map((a) => [String(a.id), a]));
   const updates = [];
   const problems = [];
 
@@ -177,36 +135,30 @@ export function planSync(accounts, bridgeAccounts, { today, currency = 'USD' } =
       problems.push({ id: account.id, name: account.name, reason: 'gone', message: `${account.name} is no longer offered by the bridge.` });
       continue;
     }
-    if (String(found.status ?? '').toLowerCase() === 'closed') {
-      problems.push({ id: account.id, name: account.name, reason: 'closed', message: `${account.name} is closed at the institution, so its balance was left as it was.` });
-      continue;
-    }
     const iso = String(found.currency ?? '').toUpperCase();
     if (iso && iso !== String(currency).toUpperCase()) {
       problems.push({ id: account.id, name: account.name, reason: 'currency', message: `${account.name} is reported in ${iso}, and this book is kept in ${currency}.` });
       continue;
     }
-    const cents = balanceFromBridge(found);
+    const cents = centsFromDecimalString(found.balance);
     if (cents == null) {
       problems.push({ id: account.id, name: account.name, reason: 'no-balance', message: `${account.name} came back without a balance.` });
       continue;
     }
+    const date = dateFromEpoch(found['balance-date']) ?? today;
     updates.push({
       id: account.id,
       name: account.name,
       cents,
-      date: today,
+      date,
       was: account.balance ?? 0,
-      changed: cents !== (account.balance ?? 0) || today !== account.balanceAt,
+      changed: cents !== (account.balance ?? 0) || date !== account.balanceAt,
     });
   }
 
-  // Accounts the bridge offers that the book hasn't taken up yet. A closed
-  // one is never offered — there is nothing to follow.
+  // Accounts the bridge offers that the book hasn't taken up yet.
   const taken = new Set(accounts.map((a) => a.link?.accountId).filter(Boolean).map(String));
-  const offered = (bridgeAccounts ?? []).filter(
-    (a) => !taken.has(String(a.id)) && String(a.status ?? '').toLowerCase() !== 'closed'
-  );
+  const offered = (sfAccounts ?? []).filter((a) => !taken.has(String(a.id)));
 
   return { updates, problems, offered, changed: updates.filter((u) => u.changed) };
 }

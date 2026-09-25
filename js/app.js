@@ -6,7 +6,7 @@ import { state, init, subscribe, checkDayChange, reload, saveAccount, describeEr
 import { isUnlocked, lock as lockVault, onVaultChange, open as openSealed, describeVaultError } from './vault.js';
 import { CHAPTERS, fleuron, icons, ui } from './views/chrome.js';
 import { money } from './ui/format.js';
-import { openAccountForm, openBalanceForm, openBridgeForm, openBridgeMoveForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
+import { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
 import { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } from './link.js';
 import { renderFund, fundFacingPage } from './views/fund.js';
 import { renderPots, potDetail, afterPotsMount, resetScenario } from './views/pots.js';
@@ -356,12 +356,11 @@ const actions = {
       fail(err);
     }
   },
-  'bridge-move': () => openBridgeMoveForm(),
   'bridge-forget': async () => {
     const ok = await confirmDialog({
       title: 'Disconnect the bridge?',
-      message: html`<p>The book forgets the sealed token, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
-        <p>The sign-in at your provider is untouched — revoke it there if you want it gone for good.</p>`,
+      message: html`<p>The book forgets the sealed address, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
+        <p>The connection at the bridge itself is untouched — revoke it there if you want it gone for good.</p>`,
       confirmLabel: 'Disconnect',
       danger: true,
     });
