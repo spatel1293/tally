@@ -48,6 +48,9 @@ const HOST = process.env.HOST || '127.0.0.1';
 const APP_ID = process.env.TELLER_APP_ID || '';
 const ENVIRONMENT = process.env.TELLER_ENV || 'development';
 const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
+// Override the address the bridge hands out, for a host that sets no
+// forwarded headers. Usually unnecessary.
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 const CERT_PATH = process.env.TELLER_CERT || '';
 const KEY_PATH = process.env.TELLER_KEY || '';
 
@@ -159,6 +162,11 @@ async function accountsWithBalances(accessToken) {
 // script here means Tally itself never fetches anything from a third party
 // and still works with no connection at all.
 function signInPage(publicUrl) {
+  // Signing in here is the expensive step — it is a real login at every
+  // institution — and the line it produces carries whatever address this
+  // page was opened on. Opened on localhost, that line works on this machine
+  // and nowhere else, which is a miserable thing to discover afterwards.
+  const local = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/i.test(publicUrl);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -185,12 +193,25 @@ function signInPage(publicUrl) {
            text-transform: uppercase; opacity: .6; }
   code { font-size: .85em; }
   .hide { display: none; }
+  .step.warn { border-left: 3px solid #8c2f2a; padding-left: 1rem; border-top: 0; }
+  .step.warn code { display: inline-block; padding: .2rem .45rem; background: rgba(128,128,128,.16); border-radius: .25rem; }
 </style>
 </head>
 <body>
 <main>
   <h1>Tally bridge</h1>
   <p class="sub">Running. Sign in to your banks here, then carry one line back to the book.</p>
+
+  ${local ? `<div class="step warn">
+    <p class="label">Read this first</p>
+    <p>You opened this bridge at <strong>${publicUrl}</strong>, which only this
+    machine can reach. Sign in here and the line you get back will work in the
+    book on this laptop and <strong>nowhere else</strong> &mdash; your phone
+    will not be able to use it.</p>
+    <p>To set up your phone, put the bridge behind a certificate first and
+    open <em>that</em> address instead:</p>
+    <p><code>tailscale serve --bg ${PORT}</code></p>
+  </div>` : ''}
 
   <div class="step">
     <p class="label">Step one</p>
@@ -264,6 +285,7 @@ function json(res, status, body) {
 // this wrong and the bridge hands out a line saying http://, which the book
 // refuses outright, correctly, as a token it would have to send in the clear.
 function publicOrigin(req) {
+  if (PUBLIC_URL) return PUBLIC_URL;
   const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
   const proto = (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || 'http';
   return `${proto}://${host}`;
