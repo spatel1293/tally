@@ -10,3 +10,8 @@ teller/
 teller.zip
 *.pem
 *.key
+
+# Never commit Plaid credentials. A client_id is not secret on its own, but
+# the secret paired with it is the whole credential for reading accounts,
+# and this repository is public.
+.env
