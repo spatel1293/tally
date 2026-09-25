@@ -27,12 +27,21 @@
 //   PLAID_ENV        "production" (the default; your free Limited Production
 //                    allowance lives here) or "sandbox" (fake banks, free and
 //                    unlimited, for trying the whole thing out).
-//   PLAID_PRODUCTS   comma separated, default "balance". Plaid requires at
-//                    least one product when creating a Link token, and the
-//                    right one for reading balances only is the thing most
-//                    likely to need adjusting — if Plaid rejects it, its own
-//                    message is printed and shown, verbatim, so you can see
-//                    exactly what it wants.
+//   PLAID_PRODUCTS   comma separated, default "auth". Plaid requires at least
+//                    one product on every Link session, and "balance" cannot
+//                    be that one — it is only ever granted automatically
+//                    alongside another product (confirmed against Plaid's own
+//                    API: it answers INVALID_PRODUCT and says so explicitly).
+//                    "auth" is the most broadly supported product across
+//                    ordinary banks and asks for nothing about what you
+//                    spend. If Plaid refuses it for an institution you use,
+//                    its own message is printed and shown, verbatim.
+//   PLAID_EXTRA_PRODUCTS  comma separated, default "investments,liabilities".
+//                    Sent as required_if_supported_products: added in
+//                    automatically for a brokerage or a credit card issuer
+//                    wherever the institution offers them, but never narrows
+//                    which institutions Link will show, the way putting them
+//                    in PLAID_PRODUCTS would.
 //   PORT             default 7000.
 //   HOST             default 127.0.0.1. See the note on binding below.
 //   PUBLIC_URL       override the address handed out. Rarely needed.
@@ -53,7 +62,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const CLIENT_ID = process.env.PLAID_CLIENT_ID || '';
 const SECRET = process.env.PLAID_SECRET || '';
 const ENVIRONMENT = process.env.PLAID_ENV || 'production';
-const PRODUCTS = (process.env.PLAID_PRODUCTS || 'balance').split(',').map((s) => s.trim()).filter(Boolean);
+const PRODUCTS = (process.env.PLAID_PRODUCTS || 'auth').split(',').map((s) => s.trim()).filter(Boolean);
+const EXTRA_PRODUCTS = (process.env.PLAID_EXTRA_PRODUCTS || 'investments,liabilities').split(',').map((s) => s.trim()).filter(Boolean);
 const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 
@@ -364,14 +374,21 @@ const server = createServer(async (req, res) => {
     const r = await plaid('/link/token/create', {
       client_name: 'Tally',
       user: { client_user_id: 'tally-owner' },
+      // "balance" rides along automatically with any other product and
+      // cannot be requested on its own (Plaid: INVALID_PRODUCT). The extra
+      // products go in required_if_supported_products rather than products,
+      // so an institution that only supports one of them — a brokerage that
+      // doesn't do auth, say — is not excluded from the Link picker; they
+      // are simply added in silently wherever the institution offers them.
       products: PRODUCTS,
+      required_if_supported_products: EXTRA_PRODUCTS,
       country_codes: ['US'],
       language: 'en',
     });
     if (r.status !== 200 || !r.body?.link_token) {
       const message = plaidError(r);
       console.error(`\n  Plaid refused to start a sign-in: ${message}`);
-      console.error(`  Products asked for: ${JSON.stringify(PRODUCTS)}. Set PLAID_PRODUCTS to change them.\n`);
+      console.error(`  Products asked for: ${JSON.stringify(PRODUCTS)} (required_if_supported: ${JSON.stringify(EXTRA_PRODUCTS)}). Set PLAID_PRODUCTS / PLAID_EXTRA_PRODUCTS to change them.\n`);
       return json(res, 502, { error: message });
     }
     return json(res, 200, { link_token: r.body.link_token });
@@ -407,7 +424,7 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  Tally bridge is running.\n`);
   console.log(`  Open        http://${where}:${PORT}/`);
   console.log(`  Environment ${ENVIRONMENT}${ENVIRONMENT === 'sandbox' ? '  (fake banks, free and unlimited)' : '  (200 free live calls per product)'}`);
-  console.log(`  Products    ${JSON.stringify(PRODUCTS)}`);
+  console.log(`  Products    ${JSON.stringify(PRODUCTS)} required, ${JSON.stringify(EXTRA_PRODUCTS)} if supported`);
   console.log(`\n  To reach it from your phone, put it behind a certificate:`);
   console.log(`    tailscale serve --bg ${PORT}`);
   console.log(`\n  It holds your Plaid credentials and nothing else. Stop it with Ctrl-C.\n`);
