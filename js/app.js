@@ -6,8 +6,9 @@ import { state, init, subscribe, checkDayChange, reload, saveAccount, describeEr
 import { isUnlocked, lock as lockVault, onVaultChange, open as openSealed, describeVaultError } from './vault.js';
 import { CHAPTERS, fleuron, icons, ui } from './views/chrome.js';
 import { money } from './ui/format.js';
-import { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
-import { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } from './link.js';
+import { openAccountForm, openBalanceForm, openPositionForm, openPriceKeyForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
+import { refreshPrices } from './valuation.js';
+import { pricesFrom } from './prices.js';
 import { renderFund, fundFacingPage } from './views/fund.js';
 import { renderPots, potDetail, afterPotsMount, resetScenario } from './views/pots.js';
 import { renderLedger, accountDetail, sealedFields } from './views/ledger.js';
@@ -75,11 +76,11 @@ function colophon() {
   return html`<div class="colophon">
     ${fleuron()}
     <p>This book keeps one thing: what the fund is worth, what it is for, and where it sits.</p>
-    ${bridgeConnected()
-      ? html`<p>It is kept on this device. The one thing it reaches for is your own bridge, to read balances and nothing else; there is no account of ours to sign into, and the sealed pages open only with your passphrase.</p>`
+    ${state.settings.priceKey
+      ? html`<p>It is kept on this device. The one thing it reaches for is the price of a share — never what you hold, never who you are — and the sealed pages open only with your passphrase.</p>`
       : html`<p>It runs entirely on this device. Nothing is sent anywhere, there is no account to sign into, and the sealed pages open only with your passphrase.</p>`}
     <p class="colophon-rule" aria-hidden="true"></p>
-    <p class="colophon-small">Set in the device’s book face. ${bridgeConnected() ? html`Reads ${state.settings.bridgeHost || 'your bridge'}.` : 'Written offline.'}</p>
+    <p class="colophon-small">Set in the device’s book face. ${state.settings.priceKey ? 'Prices from twelvedata.com.' : 'Written offline.'}</p>
   </div>`;
 }
 
@@ -317,60 +318,41 @@ const actions = {
     }
   },
 
-  'bridge-connect': () => openBridgeForm(),
-  // Reading the bridge writes only what actually moved, and says what it
-  // found — including the banks the bridge itself couldn't reach.
-  'bridge-sync': async (el) => {
-    if (!bridgeConnected()) return openBridgeForm();
+  'price-key': () => openPriceKeyForm(),
+  'add-position': (el) => openPositionForm(el.dataset.id),
+  'edit-position': (el) => {
+    const [accountId, index] = String(el.dataset.id ?? '').split(':');
+    openPositionForm(accountId, Number(index));
+  },
+
+  // Re-pricing the book writes only what actually moved, and says what it
+  // found — including anything the feed would not quote.
+  'prices-refresh': async (el) => {
+    if (!state.settings.priceKey) return openPriceKeyForm();
     el.disabled = true;
     try {
-      const result = await syncNow();
+      const result = await refreshPrices();
       if (!result.ok) {
         toast(result.error, { tone: 'error', duration: 8000 });
         return;
       }
-      ui.offered = result.offered;
+      if (result.empty) {
+        toast('Nothing is written in to price yet.');
+        return;
+      }
+      ui.quotes = result.quotes;
+      ui.prices = pricesFrom(result.quotes);
+
       const moved = result.changed.length;
-      const trouble = [...result.problems.map((p) => p.message), ...result.errors];
-      if (trouble.length) toast(trouble[0], { tone: 'error', duration: 9000 });
-      else if (moved) toast(moved === 1 ? `${result.changed[0].name} is now ${money(result.changed[0].cents)}` : `${moved} balances written in`);
-      else if (result.updates.length) toast('Nothing has moved since the last reading.');
-      else if (result.offered.length) toast(`${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} offered — write them in from the Accounts chapter.`, { duration: 7000 });
-      else toast('The bridge has nothing to show.');
+      if (result.errors.length) toast(result.errors[0], { tone: 'error', duration: 9000 });
+      else if (moved === 1) toast(`${result.changed[0].name} is now ${money(result.changed[0].cents)}`);
+      else if (moved) toast(`${moved} accounts re-priced`);
+      else toast('Nothing has moved since the last prices.');
       render({ keepScroll: true });
     } catch (err) {
       fail(err);
     } finally {
       el.disabled = false;
-    }
-  },
-  'adopt-account': async (el) => {
-    const offered = ui.offered[Number(el.dataset.index)];
-    if (!offered) return;
-    try {
-      await adoptAccount(offered);
-      ui.offered = ui.offered.filter((a) => a !== offered);
-      toast(`${offered.name} written in`);
-      render({ keepScroll: true });
-    } catch (err) {
-      fail(err);
-    }
-  },
-  'bridge-forget': async () => {
-    const ok = await confirmDialog({
-      title: 'Disconnect the bridge?',
-      message: html`<p>The book forgets the sealed address, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
-        <p>The connection at the bridge itself is untouched — revoke it there if you want it gone for good.</p>`,
-      confirmLabel: 'Disconnect',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await forgetBridge();
-      ui.offered = [];
-      toast('Bridge disconnected');
-    } catch (err) {
-      fail(err);
     }
   },
 

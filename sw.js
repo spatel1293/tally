@@ -2,7 +2,7 @@
 // loads from the cache and quietly checks for a newer version.
 // Bump VERSION whenever any file below changes.
 
-const VERSION = 'tally-v5.5.0';
+const VERSION = 'tally-v6.0.0';
 
 const FILES = [
   './',
@@ -20,13 +20,14 @@ const FILES = [
   './js/app.js',
   './js/store.js',
   './js/storage.js',
-  './js/link.js',
+  './js/prices.js',
+  './js/valuation.js',
   './js/vault.js',
   './js/core/advisor.js',
   './js/core/dates.js',
   './js/core/defaults.js',
   './js/core/fund.js',
-  './js/core/link.js',
+  './js/core/holdings.js',
   './js/core/money.js',
   './js/core/plans.js',
   './js/core/validate.js',

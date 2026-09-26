@@ -9,7 +9,7 @@ import { dayOf } from '../core/dates.js';
 import { money, date, timeAgo, plural } from '../ui/format.js';
 import { chapterHead, icons, ruledRow, section } from './chrome.js';
 import { vaultAvailable, vaultExists, isUnlocked } from '../vault.js';
-import { bridgeConnected } from '../link.js';
+import { symbolsHeld } from '../core/holdings.js';
 
 const CURRENCIES = [
   ['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'],
@@ -222,23 +222,20 @@ export function renderSettings() {
               <button type="button" class="btn ghost" data-action="vault-change">Change the passphrase</button>
             </div>`}`, { id: 'strongbox' })}
 
-    ${section('Connections', html`${!vaultAvailable()
-      ? html`<p class="hand">A connection needs the installed book or an <strong>https</strong> address, because the token it uses lives in the strongbox, and a browser only lends out the lock on a secure address.</p>
-          <p class="marginal">You are reading this over plain http — the address <code>npm start</code> prints for a phone is exactly that. Put the book on any https host and add it to your home screen, and this offer appears.</p>`
-      : !bridgeConnected()
-        ? html`<p class="hand">Tally can read your balances from a <strong>SimpleFIN</strong> bridge. You connect your banks at the bridge; the bridge gives you one address that can read balances and nothing else; this book keeps that address sealed and asks it for figures.</p>
-            <p class="marginal">Nothing of mine sits in the middle: your bank talks to your bridge, and your bridge talks to this device. No account here, no server here, and the book still works with the aeroplane mode on.</p>
-            <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
-        : html`<ul class="plain-list ruled-list">
-              ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}
-              ${ruledRow('Last read', s.bridgeAt ? timeAgo(s.bridgeAt) : 'never')}
-              ${ruledRow('Accounts following it', String(state.accounts.filter((a) => a.link).length))}
-            </ul>
-            <p class="marginal">The address is sealed in the strongbox, so a sync only works while that is open.</p>
-            <div class="btn-row">
-              <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
-              <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
-            </div>`}`, { id: 'connections' })}
+    ${section('The price feed', html`${!s.priceKey
+      ? html`<p class="hand">The book prices what it holds rather than asking a bank what it is worth. That needs a key from <strong>twelvedata.com</strong> — free, yours for good, and it takes a minute.</p>
+          <p class="marginal">One request prices every holding in the book, so a key that allows eight hundred a day is more than this will ever use. Nothing of yours goes with the request: it asks what a share costs, not what you own.</p>
+          <div class="btn-row"><button type="button" class="btn primary" data-action="price-key">${icons.sync}Add a price key</button></div>`
+      : html`<ul class="plain-list ruled-list">
+            ${ruledRow('Feed', 'twelvedata.com', { wrap: true })}
+            ${ruledRow('Key', `…${s.priceKey.slice(-4)}`, { sub: 'kept in the clear — it unlocks nothing of yours', wrap: true })}
+            ${ruledRow('Last priced', s.pricedAt ? timeAgo(s.pricedAt) : 'never')}
+            ${ruledRow('Holdings', String(symbolsHeld(state.accounts).length), { sub: 'priced in one request', wrap: true })}
+          </ul>
+          <div class="btn-row">
+            <button type="button" class="btn primary" data-action="prices-refresh">${icons.sync}Refresh prices now</button>
+            <button type="button" class="btn ghost" data-action="price-key">Change the key</button>
+          </div>`}`, { id: 'prices' })}
 
     ${section('Copies', html`<p class="hand">${s.lastExportAt ? `Last copy saved ${timeAgo(s.lastExportAt)}.` : 'No copy saved yet.'} This device holds the only one otherwise.</p>
       <div class="btn-row">

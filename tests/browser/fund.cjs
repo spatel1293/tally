@@ -62,7 +62,10 @@ const expect = (ok, message) => {
   const ledger = await text('.acct-list');
   step('accounts: ' + ledger);
   expect(ledger.includes('Wealthfront') && ledger.includes('4.50% A YEAR') === false, 'the entry names the institution');
-  expect(/two-step on/i.test(ledger) && /no two-step/i.test(ledger), 'each entry says whether its login has a second step');
+  // Whether a login has a second step is a bank concern, not a portfolio
+  // one, so it moved off the list and into the account's own page (and the
+  // Review chapter still checks it across the book).
+  expect(/holdings?|Savings buckets|Investing/i.test(ledger), 'each entry says what is in it');
   expect((await text('.display-figure')).includes('$18,800.00'), 'the chapter totals what is held');
 
   // ---- Pots: what the money is for ----

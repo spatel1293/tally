@@ -3608,7 +3608,7 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '5.5.0';
+const APP_VERSION = '6.0.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the
@@ -3661,11 +3661,13 @@ const DEFAULT_SETTINGS = {
   runwayTarget: 6,
   vaultSalt: null,
   vaultCheck: null,
-  // The bridge, if one is connected. `bridgeVault` holds the sealed address
-  // and token; the other two are only for showing what is connected.
-  bridgeVault: null,
-  bridgeHost: '',
-  bridgeAt: null,
+  // The price feed. A free Twelve Data key — it prices the whole book in
+  // one request, so a key that allows 800 a day is effectively unlimited
+  // here. It is not a credential for anything of the owner's, so it is kept
+  // in the clear rather than sealed; losing it costs nothing but a minute
+  // at twelvedata.com.
+  priceKey: '',
+  pricedAt: null,
 };
 
 const ACCOUNT_KINDS = {
@@ -3704,6 +3706,13 @@ function newAccount(fields = {}) {
     notes: '',
     vault: null,
     link: null,
+    // What the account holds. A position is { symbol, shares, costBasis },
+    // with shares as micro-shares and costBasis in cents (0 when unknown).
+    // An account with no positions is still a perfectly good account — a
+    // cash account has none — so this is empty, never absent.
+    positions: [],
+    // Uninvested cash sitting in the account, in cents.
+    cash: 0,
     balance: 0,
     balanceAt: null,
     history: [],
@@ -4294,12 +4303,298 @@ function projectPlans(plans, { monthly = 0, lumpSum = 0, todayIso, horizon = PRO
 return { PLAN_KINDS, BP, planKind, planProgress, requiredMonthly, growMonthly, allocate, projectGrowth, milestones, runway, safetyPlan, planOrder, projectPlans };
 })();
 
+// js/core/holdings.js
+const __m_js_core_holdings_js = (() => {
+// Positions, prices, and what they are worth together.
+//
+// Money is integer cents, as it is everywhere else in this book. Two new
+// quantities arrive with positions, and neither can be an integer:
+//
+//   * share counts, because Robinhood and Wealthfront both deal in
+//     fractional shares — 0.371482 of a share is a real position;
+//   * prices, because a quote comes back as "225.5100", four decimals.
+//
+// Both are held as scaled integers rather than floats, for exactly the
+// reason money is: a portfolio that is a few cents out every time it is
+// priced is a portfolio nobody trusts. Shares are micro-shares (1e6) and
+// prices are micro-dollars (1e6). The multiplication that turns them into
+// cents is done in BigInt and rounded once, at the very end.
+//
+// Everything here is pure: no network, no browser, no locale.
+
+const SHARE_SCALE = 1_000_000; // micro-shares
+const PRICE_SCALE = 1_000_000; // micro-dollars
+
+// A position is worth what a bank would pay for it, so quantities are
+// generous but not unbounded: a billion shares and a million a share.
+const MAX_SHARES = 1_000_000_000 * SHARE_SCALE;
+const MAX_PRICE = 1_000_000 * PRICE_SCALE;
+
+// ---------- Reading decimals exactly ----------
+
+// The one parser both shares and prices go through. A decimal string becomes
+// a scaled integer with no float in the path: the fractional digits are
+// padded or truncated to the scale's width, rounded half away from zero on
+// the first digit dropped, and assembled with BigInt.
+//
+// `scale` must be a power of ten. Returns null for anything that is not a
+// plain decimal number, rather than guessing.
+function parseScaled(text, scale, max) {
+  const s = String(text ?? '').trim();
+  const m = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(s);
+  if (!m) return null;
+
+  const digits = String(scale).length - 1;
+  const negative = m[1] === '-';
+  const frac = m[3] ?? '';
+  const kept = (frac + '0'.repeat(digits)).slice(0, digits);
+
+  let value = BigInt(m[2]) * BigInt(scale) + BigInt(kept || '0');
+  // Round half away from zero on the first digit we are about to drop.
+  if (frac.length > digits && Number(frac[digits]) >= 5) value += 1n;
+
+  const n = Number(value);
+  if (!Number.isSafeInteger(n) || n > max) return null;
+  return negative ? -n : n;
+}
+
+// A share count. Negative is refused: a short position is not something this
+// book models, and silently flipping the sign of a fat-fingered entry would
+// be worse than saying no.
+function parseShares(text) {
+  const n = parseScaled(text, SHARE_SCALE, MAX_SHARES);
+  return n == null || n < 0 ? null : n;
+}
+
+// A quoted price. Also refuses negatives, for the same reason.
+function parsePrice(text) {
+  const n = parseScaled(text, PRICE_SCALE, MAX_PRICE);
+  return n == null || n < 0 ? null : n;
+}
+
+// ---------- What a position is worth ----------
+
+// shares × price, in cents, exactly.
+//
+//   cents = (shares / 1e6) × (price / 1e6) × 100
+//         = shares × price / 1e10
+//
+// Done in BigInt so the product — which can run to nineteen digits and would
+// lose its tail as a double — is exact, and rounded half away from zero once
+// at the end.
+function positionValue(shares, priceMicro) {
+  if (!Number.isSafeInteger(shares) || !Number.isSafeInteger(priceMicro)) return null;
+  if (shares < 0 || priceMicro < 0) return null;
+
+  const divisor = BigInt(SHARE_SCALE) * BigInt(PRICE_SCALE) / 100n; // 1e10
+  const product = BigInt(shares) * BigInt(priceMicro);
+  const whole = product / divisor;
+  const remainder = product % divisor;
+
+  // Round half up. Both operands are non-negative, so "away from zero" and
+  // "up" are the same thing here.
+  const rounded = remainder * 2n >= divisor ? whole + 1n : whole;
+  const cents = Number(rounded);
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+// ---------- Displaying quantities ----------
+
+// Share counts are written the way a statement writes them: whole shares
+// plain, fractional shares with only as many decimals as they actually have,
+// never trailing zeroes. 12 shares is "12", not "12.000000".
+function formatShares(shares) {
+  if (!Number.isSafeInteger(shares)) return '';
+  const negative = shares < 0;
+  const abs = Math.abs(shares);
+  const whole = Math.trunc(abs / SHARE_SCALE);
+  const frac = String(abs % SHARE_SCALE).padStart(6, '0').replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`;
+}
+
+// A price, always to the cent at least, and to four places when the extra
+// digits carry information — which they do for anything thinly priced.
+function formatPrice(priceMicro, { currency = 'USD', locale = 'en-US' } = {}) {
+  if (!Number.isSafeInteger(priceMicro)) return '';
+  const value = priceMicro / PRICE_SCALE;
+  const extra = priceMicro % 10_000 !== 0; // finer than a cent
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: extra ? 4 : 2,
+    }).format(value);
+  } catch {
+    return `$${value.toFixed(extra ? 4 : 2)}`;
+  }
+}
+
+// ---------- A book of positions ----------
+
+// A symbol is how the price feed will be asked for a quote, so it is
+// normalised once here rather than at every call site.
+function normalizeSymbol(symbol) {
+  return String(symbol ?? '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function isValidSymbol(symbol) {
+  // Tickers, share classes (BRK.B) and a few hyphenated listings. Deliberately
+  // strict: anything stranger is likelier a typo than a real listing.
+  return /^[A-Z][A-Z0-9]{0,5}([.\-][A-Z0-9]{1,4})?$/.test(normalizeSymbol(symbol));
+}
+
+// Every distinct symbol a book holds, in one list, so the price feed can be
+// asked for all of them in a single request.
+function symbolsHeld(accounts) {
+  const seen = new Set();
+  for (const account of accounts ?? []) {
+    for (const position of account?.positions ?? []) {
+      const symbol = normalizeSymbol(position?.symbol);
+      if (symbol) seen.add(symbol);
+    }
+  }
+  return [...seen].sort();
+}
+
+// What one account is worth: its positions at the given prices, plus any
+// uninvested cash sitting in it.
+//
+// `prices` is a Map of symbol to micro-dollars. A symbol with no price is
+// reported rather than quietly counted as zero — a portfolio that silently
+// loses a holding because a quote failed is worse than one that says so.
+function valueAccount(account, prices) {
+  const lines = [];
+  const missing = [];
+  let invested = 0;
+
+  for (const position of account?.positions ?? []) {
+    const symbol = normalizeSymbol(position?.symbol);
+    const shares = Number.isSafeInteger(position?.shares) ? position.shares : 0;
+    const priceMicro = prices?.get?.(symbol);
+
+    if (priceMicro == null) {
+      missing.push(symbol);
+      lines.push({ symbol, shares, priceMicro: null, cents: null });
+      continue;
+    }
+
+    const cents = positionValue(shares, priceMicro);
+    if (cents == null) {
+      missing.push(symbol);
+      lines.push({ symbol, shares, priceMicro, cents: null });
+      continue;
+    }
+
+    invested += cents;
+    lines.push({ symbol, shares, priceMicro, cents });
+  }
+
+  const cash = Number.isSafeInteger(account?.cash) ? account.cash : 0;
+  return {
+    id: account?.id ?? null,
+    lines,
+    missing,
+    cash,
+    invested,
+    // Only a complete valuation is worth filing as a reading. If any holding
+    // could not be priced the total would understate the account, so it is
+    // marked and the caller decides.
+    total: invested + cash,
+    complete: missing.length === 0,
+  };
+}
+
+// The whole book, valued at once.
+function valueBook(accounts, prices) {
+  const byAccount = (accounts ?? []).map((a) => valueAccount(a, prices));
+  const missing = [...new Set(byAccount.flatMap((v) => v.missing))].sort();
+  return {
+    byAccount,
+    missing,
+    invested: byAccount.reduce((sum, v) => sum + v.invested, 0),
+    cash: byAccount.reduce((sum, v) => sum + v.cash, 0),
+    total: byAccount.reduce((sum, v) => sum + v.total, 0),
+    complete: missing.length === 0,
+  };
+}
+
+// What today did.
+//
+// A day's movement is the only number a portfolio is really opened for, and
+// it is the difference between what the holdings are worth now and what they
+// were worth at the previous close. Cash does not move, so it is left out of
+// both sides — otherwise a large cash balance would quietly flatten the
+// percentage and make every day look like nothing happened.
+//
+// `quotes` is a Map of symbol to { price, previousClose }. A holding whose
+// previous close is unknown is skipped on both sides rather than counted as
+// unchanged, so the percentage stays honest about what it could see.
+function dayChange(accounts, quotes) {
+  let now = 0;
+  let before = 0;
+  let counted = 0;
+
+  for (const account of accounts ?? []) {
+    for (const position of account?.positions ?? []) {
+      const symbol = normalizeSymbol(position?.symbol);
+      const quote = quotes?.get?.(symbol);
+      if (!quote || quote.previousClose == null) continue;
+
+      const shares = Number.isSafeInteger(position?.shares) ? position.shares : 0;
+      const nowCents = positionValue(shares, quote.price);
+      const beforeCents = positionValue(shares, quote.previousClose);
+      if (nowCents == null || beforeCents == null) continue;
+
+      now += nowCents;
+      before += beforeCents;
+      counted += 1;
+    }
+  }
+
+  if (!counted || before === 0) return null;
+  const cents = now - before;
+  return {
+    cents,
+    // Basis points, as every percentage in this book is.
+    bp: Math.round((cents * 10_000) / before),
+    counted,
+  };
+}
+
+// How the book is spread across what it holds, largest first. Percentages are
+// basis points, as everywhere else, and the largest slice absorbs the
+// rounding so the parts always sum to exactly 100%.
+function allocation(valued) {
+  const bySymbol = new Map();
+  for (const account of valued?.byAccount ?? []) {
+    for (const line of account.lines) {
+      if (line.cents == null) continue;
+      bySymbol.set(line.symbol, (bySymbol.get(line.symbol) ?? 0) + line.cents);
+    }
+  }
+  if ((valued?.cash ?? 0) > 0) bySymbol.set('Cash', (bySymbol.get('Cash') ?? 0) + valued.cash);
+
+  const total = [...bySymbol.values()].reduce((s, c) => s + c, 0);
+  const rows = [...bySymbol.entries()]
+    .map(([symbol, cents]) => ({ symbol, cents, bp: total > 0 ? Math.floor((cents * 10_000) / total) : 0 }))
+    .sort((a, b) => b.cents - a.cents || a.symbol.localeCompare(b.symbol));
+
+  const spare = 10_000 - rows.reduce((s, r) => s + r.bp, 0);
+  if (rows.length && spare > 0) rows[0].bp += spare;
+  return rows;
+}
+
+return { SHARE_SCALE, PRICE_SCALE, MAX_SHARES, MAX_PRICE, parseShares, parsePrice, positionValue, formatShares, formatPrice, normalizeSymbol, isValidSymbol, symbolsHeld, valueAccount, valueBook, dayChange, allocation };
+})();
+
 // js/core/validate.js
 const __m_js_core_validate_js = (() => {
 const { isValidCents, isValidSignedCents, isSupportedCurrency } = __m_js_core_money_js;
 const { isValidISODate } = __m_js_core_dates_js;
 const { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE, ACCOUNT_ROLES, roleForKind } = __m_js_core_defaults_js;
 const { PLAN_KINDS } = __m_js_core_plans_js;
+const { isValidSymbol, normalizeSymbol, MAX_SHARES } = __m_js_core_holdings_js;
 const NOTE_MAX = 500;
 const NAME_MAX = 60;
 
@@ -4326,6 +4621,20 @@ function bpOk(v) {
 // A connection to an account at the bridge: an id and where it came from.
 function linkOk(v) {
   return Boolean(v) && typeof v === 'object' && typeof v.accountId === 'string' && v.accountId.length > 0 && v.accountId.length <= 200;
+}
+
+// A position must have a symbol that could actually be quoted and a share
+// count that parses. Anything else is dropped rather than guessed at, on the
+// same principle as a reading without a date.
+function positionOk(p) {
+  return (
+    Boolean(p) &&
+    typeof p === 'object' &&
+    isValidSymbol(p.symbol) &&
+    Number.isSafeInteger(p.shares) &&
+    p.shares >= 0 &&
+    p.shares <= MAX_SHARES
+  );
 }
 
 function vaultOk(v) {
@@ -4358,6 +4667,17 @@ function sanitizeAccount(a, index) {
     reviewedAt: isValidISODate(a.reviewedAt) ? a.reviewedAt : null,
     notes: str(a.notes, NOTE_MAX),
     vault: vaultOk(a.vault) ? { v: 1, iv: a.vault.iv, data: a.vault.data } : null,
+    // Positions are whitelisted field by field like everything else, or a
+    // backup round trip would quietly reshape them.
+    positions: (Array.isArray(a.positions) ? a.positions : [])
+      .filter(positionOk)
+      .slice(0, 200)
+      .map((p) => ({
+        symbol: normalizeSymbol(p.symbol),
+        shares: p.shares,
+        costBasis: isValidSignedCents(p.costBasis) ? p.costBasis : 0,
+      })),
+    cash: isValidSignedCents(a.cash) ? a.cash : 0,
     // Which account at the bridge this entry follows. It holds no
     // credential — the access URL that can read it is sealed in settings.
     link: linkOk(a.link)
@@ -4422,9 +4742,8 @@ function sanitizeSettings(s) {
   if (vaultOk(s.vaultCheck)) out.vaultCheck = { v: 1, iv: s.vaultCheck.iv, data: s.vaultCheck.data };
   // The bridge's access URL is a credential, so it is sealed like the rest.
   // Its host and the time of the last sync are not, and are worth seeing.
-  if (vaultOk(s.bridgeVault)) out.bridgeVault = { v: 1, iv: s.bridgeVault.iv, data: s.bridgeVault.data };
-  if (typeof s.bridgeHost === 'string') out.bridgeHost = s.bridgeHost.slice(0, 120);
-  if (typeof s.bridgeAt === 'string') out.bridgeAt = s.bridgeAt.slice(0, 40);
+  if (typeof s.priceKey === 'string') out.priceKey = s.priceKey.trim().slice(0, 120);
+  if (typeof s.pricedAt === 'string') out.pricedAt = s.pricedAt.slice(0, 40);
   return out;
 }
 
@@ -4664,6 +4983,42 @@ async function deleteAccount(id, moveToId = null) {
 // The newest reading is always the one the account is worth — so writing in
 // a reading you forgot to take last month files it under its own date and
 // leaves today's figure alone, rather than winding the account backwards.
+// ---------- Holdings ----------
+
+// Writing a holding in, or editing one already there. `index` is which
+// position on the account, or null to add a new one. Two entries for the
+// same ticker are folded together rather than kept apart — a book that
+// shows VTI twice is a book you have to do arithmetic on.
+async function savePosition(id, position, index = null) {
+  const account = state.accounts.find((a) => a.id === id);
+  if (!account) return null;
+
+  const positions = [...(account.positions ?? [])];
+  if (index == null) {
+    const already = positions.findIndex((p) => p.symbol === position.symbol);
+    if (already >= 0) {
+      positions[already] = {
+        ...positions[already],
+        shares: positions[already].shares + position.shares,
+        costBasis: (positions[already].costBasis ?? 0) + (position.costBasis ?? 0),
+      };
+    } else {
+      positions.push(position);
+    }
+  } else {
+    positions[index] = position;
+  }
+
+  return saveAccount({ positions }, id);
+}
+
+async function removePosition(id, index) {
+  const account = state.accounts.find((a) => a.id === id);
+  if (!account) return null;
+  const positions = (account.positions ?? []).filter((_, i) => i !== index);
+  return saveAccount({ positions }, id);
+}
+
 async function recordBalance(id, cents, date) {
   const account = state.accounts.find((a) => a.id === id);
   if (!account) return null;
@@ -4754,7 +5109,7 @@ function snapshot() {
   };
 }
 
-return { state, subscribe, describeError, init, reload, checkDayChange, saveAccount, deleteAccount, recordBalance, saveGoal, adjustGoal, deleteGoal, updateSettings, markExported, restoreBackup, eraseAll, snapshot };
+return { state, subscribe, describeError, init, reload, checkDayChange, saveAccount, deleteAccount, savePosition, removePosition, recordBalance, saveGoal, adjustGoal, deleteGoal, updateSettings, markExported, restoreBackup, eraseAll, snapshot };
 })();
 
 // js/vault.js
@@ -4936,9 +5291,12 @@ const ui = {
   // folding the phone never loses your place.
   selectedPlan: null,
   selectedAccount: null,
-  // What the last sync found that the book hasn't got yet. Not persisted:
-  // it is true only until the next sync.
-  offered: [],
+  // The last prices seen, as a Map of symbol to micro-dollars. Memory-only:
+  // a price is a fact about this moment, not something to keep. The figures
+  // that matter are filed as readings on the accounts themselves.
+  prices: new Map(),
+  // The quotes behind those prices, for showing a day's movement.
+  quotes: new Map(),
 };
 
 const CHAPTERS = [
@@ -5098,354 +5456,11 @@ function plural(n, one, many = `${one}s`) {
 return { money, date, monthLabel, relativeDay, percent, timeAgo, plural };
 })();
 
-// js/core/link.js
-const __m_js_core_link_js = (() => {
-// Reading balances from a SimpleFIN bridge.
-//
-// SimpleFIN is the one aggregator that fits this book. The owner signs up
-// with the bridge themselves and connects their own banks there; the bridge
-// hands out an *access URL* that carries its own credentials; and the API is
-// a single authenticated GET that the bridge serves with CORS headers — so
-// the phone talks to it directly. There is no server of ours in the middle,
-// no client secret, and no account of ours anywhere: the path is
-//
-//     your bank  →  your SimpleFIN bridge  →  this device
-//
-// The access URL is the whole credential, so it is sealed in the strongbox
-// and a sync only works while that is open.
-//
-// Everything in this file is pure. `js/link.js` does the talking.
-
-// SimpleFIN reports money as a *decimal string* — "114265.51" — which is a
-// gift: it converts to exact cents with no floating point anywhere in the
-// path. Anything past two decimals is rounded, half away from zero, and a
-// figure too large to be a safe integer is refused rather than mangled.
-function centsFromDecimalString(text) {
-  const s = String(text ?? '').trim();
-  const m = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(s);
-  if (!m) return null;
-  const negative = m[1] === '-';
-  const frac = m[2 + 1] ?? '';
-  let cents = BigInt(m[2]) * 100n + BigInt((frac + '00').slice(0, 2));
-  if (frac.length > 2 && Number(frac[2]) >= 5) cents += 1n;
-  const value = Number(cents);
-  if (!Number.isSafeInteger(value)) return null;
-  return negative ? -value : value;
-}
-
-// `balance-date` is epoch seconds. A balance belongs to the day it was read
-// in the reader's own timezone, which is the day they would write down.
-function dateFromEpoch(seconds, { now = () => new Date() } = {}) {
-  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return null;
-  const d = new Date(seconds * 1000);
-  if (Number.isNaN(d.getTime())) return null;
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-// A setup token is base64 of the one-time claim URL.
-function decodeSetupToken(token, { decode = (s) => atob(s) } = {}) {
-  const trimmed = String(token ?? '').trim().replace(/\s+/g, '');
-  if (!trimmed) return { ok: false, error: 'Paste the setup token from your SimpleFIN bridge.' };
-  let url;
-  try {
-    url = decode(trimmed);
-  } catch {
-    return { ok: false, error: 'That doesn’t look like a setup token. Copy it again from the bridge.' };
-  }
-  if (!/^https:\/\/[^\s]+$/i.test(url)) {
-    return { ok: false, error: 'That token doesn’t decode to an https address, so it isn’t a setup token.' };
-  }
-  return { ok: true, claimUrl: url };
-}
-
-// An access URL carries its credentials in front of the host. A browser
-// refuses to fetch a URL written that way, so the two halves are separated
-// here and the credentials are sent as an Authorization header instead —
-// which is exactly the header the bridge allows through CORS.
-function parseAccessUrl(accessUrl) {
-  const raw = String(accessUrl ?? '').trim();
-  if (!/^https:\/\//i.test(raw)) return { ok: false, error: 'An access URL starts with https://.' };
-  let url;
-  try {
-    url = new URL(raw);
-  } catch {
-    return { ok: false, error: 'That isn’t a web address.' };
-  }
-  if (!url.username) return { ok: false, error: 'That access URL has no credentials in it, so nothing could sign in with it.' };
-  const username = decodeURIComponent(url.username);
-  const password = decodeURIComponent(url.password);
-  url.username = '';
-  url.password = '';
-  const base = url.toString().replace(/\/+$/, '');
-  return { ok: true, base, username, password };
-}
-
-function kindForBridge(account) {
-  const name = `${account?.name ?? ''} ${account?.org?.name ?? ''}`.toLowerCase();
-  if (/credit|card|visa|mastercard|amex/.test(name)) return 'credit';
-  if (/broker|invest|stock|ira|401|roth|securities|portfolio|wealthfront|betterment|robinhood|schwab|fidelity|vanguard|e\*?trade|merrill|ameritrade|sofi invest/.test(name)) return 'brokerage';
-  if (/saving|reserve|cash|money market/.test(name)) return 'savings';
-  return 'checking';
-}
-
-function roleForBridge(account) {
-  const kind = kindForBridge(account);
-  return { credit: 'spending', brokerage: 'investing', savings: 'savings', checking: 'hub' }[kind] ?? 'other';
-}
-
-// What the bridge calls an account, and which institution it came from.
-// SimpleFIN's `org` is the bank; its `name` is the account at that bank.
-function accountFromBridge(sfAccount, { today = null } = {}) {
-  const cents = centsFromDecimalString(sfAccount?.balance);
-  const read = dateFromEpoch(sfAccount?.['balance-date']);
-  return {
-    name: String(sfAccount?.name ?? 'Account').trim().slice(0, 60) || 'Account',
-    institution: String(sfAccount?.org?.name ?? sfAccount?.org?.domain ?? '').slice(0, 60),
-    kind: kindForBridge(sfAccount),
-    role: roleForBridge(sfAccount),
-    balance: cents ?? 0,
-    balanceAt: cents == null ? null : read ?? today,
-    link: {
-      accountId: String(sfAccount?.id ?? ''),
-      org: String(sfAccount?.org?.name ?? sfAccount?.org?.domain ?? '').slice(0, 60),
-      lastSyncAt: null,
-    },
-  };
-}
-
-// What a sync should change, and what it must leave alone.
-//
-// Only the balance and the date it was read are ever taken from the bridge.
-// The name you gave the account, the job you gave it, the rate you wrote
-// down, the pots kept in it and everything sealed in the strongbox stay
-// yours — a bank renaming "Individual" to "Individual Brokerage" must not
-// rewrite your book.
-//
-// `changed` says whether the figure actually moved, so a sync that finds
-// nothing new writes nothing at all.
-function planSync(accounts, sfAccounts, { today, currency = 'USD' } = {}) {
-  const byId = new Map((sfAccounts ?? []).map((a) => [String(a.id), a]));
-  const updates = [];
-  const problems = [];
-
-  for (const account of accounts) {
-    const id = account.link?.accountId;
-    if (!id) continue;
-    const found = byId.get(String(id));
-    if (!found) {
-      problems.push({ id: account.id, name: account.name, reason: 'gone', message: `${account.name} is no longer offered by the bridge.` });
-      continue;
-    }
-    const iso = String(found.currency ?? '').toUpperCase();
-    if (iso && iso !== String(currency).toUpperCase()) {
-      problems.push({ id: account.id, name: account.name, reason: 'currency', message: `${account.name} is reported in ${iso}, and this book is kept in ${currency}.` });
-      continue;
-    }
-    const cents = centsFromDecimalString(found.balance);
-    if (cents == null) {
-      problems.push({ id: account.id, name: account.name, reason: 'no-balance', message: `${account.name} came back without a balance.` });
-      continue;
-    }
-    const date = dateFromEpoch(found['balance-date']) ?? today;
-    updates.push({
-      id: account.id,
-      name: account.name,
-      cents,
-      date,
-      was: account.balance ?? 0,
-      changed: cents !== (account.balance ?? 0) || date !== account.balanceAt,
-    });
-  }
-
-  // Accounts the bridge offers that the book hasn't taken up yet.
-  const taken = new Set(accounts.map((a) => a.link?.accountId).filter(Boolean).map(String));
-  const offered = (sfAccounts ?? []).filter((a) => !taken.has(String(a.id)));
-
-  return { updates, problems, offered, changed: updates.filter((u) => u.changed) };
-}
-
-function isConnected(account) {
-  return Boolean(account?.link?.accountId);
-}
-
-return { centsFromDecimalString, dateFromEpoch, decodeSetupToken, parseAccessUrl, kindForBridge, roleForBridge, accountFromBridge, planSync, isConnected };
-})();
-
-// js/link.js
-const __m_js_link_js = (() => {
-// Talking to the SimpleFIN bridge.
-//
-// This is the only file in the book that makes a network request, and it
-// only ever makes two:
-//
-//   1. once, to claim a setup token for an access URL;
-//   2. thereafter, to read balances from that access URL.
-//
-// Both go straight from this device to the owner's own bridge. The access
-// URL is the whole credential, so it lives sealed in the strongbox and is
-// only ever held in memory for the length of a request.
-
-const { state, updateSettings, saveAccount, recordBalance } = __m_js_store_js;
-const { accountFromBridge, decodeSetupToken, parseAccessUrl, planSync } = __m_js_core_link_js;
-const { isUnlocked, open: openSealed, seal } = __m_js_vault_js;
-const TIMEOUT_MS = 30000;
-
-function bridgeConnected() {
-  return Boolean(state.settings.bridgeVault);
-}
-
-function authHeader(username, password) {
-  return `Basic ${btoa(`${username}:${password}`)}`;
-}
-
-async function withTimeout(run) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    return await run(controller.signal);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Claiming is a bare POST: no body, no content type, no custom headers.
-// That matters — anything else makes it a preflighted request, and the
-// bridge answers the preflight for this path with a 404, so the browser
-// blocks it before it is ever sent.
-async function claimSetupToken(token) {
-  const decoded = decodeSetupToken(token);
-  if (!decoded.ok) return { ok: false, error: decoded.error };
-
-  let response;
-  try {
-    response = await withTimeout((signal) => fetch(decoded.claimUrl, { method: 'POST', signal }));
-  } catch (err) {
-    return { ok: false, error: err?.name === 'AbortError' ? 'The bridge didn’t answer in time. Try again.' : 'Couldn’t reach the bridge. Check the connection and try again.' };
-  }
-  if (response.status === 403) return { ok: false, error: 'The bridge refused that token. A setup token can only be claimed once — generate a new one.' };
-  if (!response.ok) return { ok: false, error: `The bridge answered ${response.status}. Generate a new setup token and try again.` };
-
-  const accessUrl = (await response.text()).trim();
-  const parsed = parseAccessUrl(accessUrl);
-  if (!parsed.ok) return { ok: false, error: `The bridge sent something unexpected back: ${parsed.error}` };
-  return { ok: true, accessUrl, base: parsed.base };
-}
-
-// Seals the access URL into the strongbox. Nothing else in the book ever
-// writes it down, and it never leaves this device except back to the bridge
-// it came from.
-async function saveBridge(accessUrl) {
-  const parsed = parseAccessUrl(accessUrl);
-  if (!parsed.ok) throw new Error(parsed.error);
-  const bridgeVault = await seal({ accessUrl });
-  await updateSettings({ bridgeVault, bridgeHost: new URL(parsed.base).host, bridgeAt: null });
-  return parsed;
-}
-
-async function forgetBridge() {
-  await updateSettings({ bridgeVault: null, bridgeHost: '', bridgeAt: null });
-}
-
-async function accessUrl() {
-  if (!bridgeConnected()) throw new Error('bridge-missing');
-  if (!isUnlocked()) throw new Error('vault-locked');
-  const opened = await openSealed(state.settings.bridgeVault);
-  return String(opened?.accessUrl ?? '');
-}
-
-// Reading balances. `balances-only` keeps the transactions this book has no
-// use for from ever crossing the wire.
-async function fetchBalances() {
-  const parsed = parseAccessUrl(await accessUrl());
-  if (!parsed.ok) return { ok: false, error: parsed.error };
-
-  let response;
-  try {
-    response = await withTimeout((signal) =>
-      fetch(`${parsed.base}/accounts?balances-only=1`, {
-        headers: { Authorization: authHeader(parsed.username, parsed.password) },
-        signal,
-      })
-    );
-  } catch (err) {
-    return { ok: false, error: err?.name === 'AbortError' ? 'The bridge didn’t answer in time.' : 'Couldn’t reach the bridge.' };
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    return { ok: false, error: 'The bridge turned that access URL down. It may have been revoked — connect the bridge again.' };
-  }
-  if (!response.ok) return { ok: false, error: `The bridge answered ${response.status}.` };
-
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    return { ok: false, error: 'The bridge sent something that wasn’t readable.' };
-  }
-
-  return {
-    ok: true,
-    accounts: Array.isArray(body?.accounts) ? body.accounts : [],
-    // SimpleFIN reports a bank it couldn't reach here rather than failing
-    // the whole call, so a sync can half-work and must say so.
-    errors: Array.isArray(body?.errors) ? body.errors.map(String) : [],
-  };
-}
-
-// One sync: read the bridge, work out what actually moved, and write only
-// that. A balance that hasn't changed is not a new reading, so the history
-// doesn't fill up with identical entries from a nightly habit.
-async function syncNow() {
-  const result = await fetchBalances();
-  if (!result.ok) return result;
-
-  const plan = planSync(state.accounts, result.accounts, {
-    today: state.today,
-    currency: state.settings.currency,
-  });
-
-  const at = new Date().toISOString();
-  for (const update of plan.changed) {
-    await recordBalance(update.id, update.cents, update.date);
-  }
-  // Every connected account was looked at, whether or not it moved.
-  for (const update of plan.updates) {
-    const account = state.accounts.find((a) => a.id === update.id);
-    if (account?.link) await saveAccount({ link: { ...account.link, lastSyncAt: at } }, update.id);
-  }
-  await updateSettings({ bridgeAt: at });
-
-  return { ok: true, ...plan, errors: result.errors };
-}
-
-// Taking up an account the bridge offers that the book hasn't got yet.
-async function adoptAccount(sfAccount) {
-  const fields = accountFromBridge(sfAccount, { today: state.today });
-  const existing = state.accounts.find((a) => a.name.toLowerCase() === fields.name.toLowerCase() && !a.link);
-  // An account already written in by hand is claimed rather than duplicated.
-  return saveAccount(fields, existing?.id ?? null);
-}
-
-function describeLinkError(err) {
-  switch (err?.message) {
-    case 'bridge-missing':
-      return 'No bridge is connected yet. Connect one in the endpapers.';
-    case 'vault-locked':
-      return 'The strongbox holds the bridge’s credentials, so open it first.';
-    default:
-      return null;
-  }
-}
-
-return { bridgeConnected, claimSetupToken, saveBridge, forgetBridge, fetchBalances, syncNow, adoptAccount, describeLinkError };
-})();
-
 // js/views/forms.js
 const __m_js_views_forms_js = (() => {
 const { html, formData, showErrors, errorSlot, $, $$ } = __m_js_ui_html_js;
 const { openSheet, toast, confirmDialog } = __m_js_ui_overlay_js;
-const { state, saveAccount, deleteAccount, recordBalance, saveGoal, deleteGoal, adjustGoal, describeError } = __m_js_store_js;
+const { state, saveAccount, deleteAccount, recordBalance, saveGoal, deleteGoal, adjustGoal, savePosition, removePosition, updateSettings, describeError } = __m_js_store_js;
 const { NAME_MAX, NOTE_MAX } = __m_js_core_validate_js;
 const { parseAmount, centsToInput } = __m_js_core_money_js;
 const { isValidISODate } = __m_js_core_dates_js;
@@ -5453,9 +5468,8 @@ const { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } = __m_j
 const { PLAN_KINDS, BP } = __m_js_core_plans_js;
 const { money, plural } = __m_js_ui_format_js;
 const { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open: openSealed, changePassphrase, describeVaultError } = __m_js_vault_js;
-const { claimSetupToken, saveBridge, syncNow } = __m_js_link_js;
 const { ui } = __m_js_views_chrome_js;
-const { decodeSetupToken } = __m_js_core_link_js;
+const { parseShares, formatShares, isValidSymbol, normalizeSymbol } = __m_js_core_holdings_js;
 const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
 function footerButtons({ saveLabel, deletable }) {
@@ -5957,66 +5971,349 @@ function openPlanAdjust(id) {
   });
 }
 
-// ---------- The bridge ----------
+// ---------- Holdings ----------
 
-// Connecting is two small steps, not one: a setup token is claimed for an
-// access URL, and that URL is what gets sealed. Splitting them means a typo
-// in the token is caught before anything touches the strongbox, and a
-// claimed-but-unsealed URL is never left stranded if something goes wrong
-// in between.
-function openBridgeForm() {
+// A holding is a ticker and a share count. Cost basis is optional — it is
+// what makes gain showable, but a book that refuses a holding until you go
+// and find what you paid is a book you stop writing in.
+function openPositionForm(accountId, index = null) {
+  const account = state.accounts.find((a) => a.id === accountId);
+  if (!account) return;
+  const existing = index == null ? null : account.positions?.[index];
+
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <p class="sheet-lede">At <strong>simplefin.org</strong> you connect your own banks and generate a <em>setup token</em>. Paste it here once; the book turns it into a sealed address that can read balances and nothing else.</p>
-    <label class="field">
-      <span class="label">Setup token</span>
-      <textarea name="token" rows="4" spellcheck="false" placeholder="aHR0cHM6Ly9iZXRhLWJyaWRnZS5zaW1wbGVmaW4ub3JnL3NpbXBsZWZpbi9jbGFpbS8…"></textarea>
-      <span class="hint">A long line of letters and numbers. It works once, so if this fails, generate another.</span>
-    </label>
-    ${errorSlot('token')}
-    <p class="hint">Your bank credentials stay at the bridge — this book never sees them, and never asks for them.</p>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Ticker</span>
+        <input name="symbol" value="${existing?.symbol ?? ''}" placeholder="VTI" spellcheck="false" autocapitalize="characters" aria-describedby="err-symbol" />
+      </label>
+      <label class="field">
+        <span class="label">Shares</span>
+        <input name="shares" inputmode="decimal" value="${existing ? formatShares(existing.shares) : ''}" placeholder="10.5" aria-describedby="err-shares" />
+      </label>
+    </div>
+    ${errorSlot('symbol')}
+    ${errorSlot('shares')}
+    ${moneyField('costBasis', existing?.costBasis ? centsToInput(existing.costBasis, { locale: state.settings.locale }) : '', {
+      label: 'What you paid for them, all in',
+      hint: 'Optional. It is what lets the book show a gain rather than just a figure.',
+      optional: true,
+    })}
+    <p class="hint">Fractional shares are fine — write them as they appear on the statement.</p>
   </form>`;
 
   openSheet({
-    title: 'Connect a bridge',
+    title: existing ? 'Edit a holding' : 'Write in a holding',
     body,
-    footer: html`<button type="button" class="btn primary grow" data-save>Connect</button>`,
+    footer: footerButtons({ saveLabel: existing ? 'Save' : 'Write it in', deletable: Boolean(existing) }),
     onMount(dialog, sheet) {
       const form = $('form', dialog);
-      $('textarea[name="token"]', form).focus();
+      $('input[name="symbol"]', form).focus();
+
       wireSave(dialog, form, async () => {
-        const token = formData(form).token.trim();
-        if (!token) return showErrors(form, { token: 'Paste the setup token from your bridge.' });
+        const data = formData(form);
+        const symbol = normalizeSymbol(data.symbol);
+        if (!symbol) return showErrors(form, { symbol: 'Which ticker?' });
+        if (!isValidSymbol(symbol)) return showErrors(form, { symbol: 'That doesn’t look like a ticker. VTI, BND, BRK.B.' });
 
-        // Check the shape of the token first. It costs nothing, and it means
-        // a mis-paste is answered on the spot instead of behind a passphrase.
-        const decoded = decodeSetupToken(token);
-        if (!decoded.ok) return showErrors(form, { token: decoded.error });
+        const shares = parseShares(String(data.shares ?? '').trim().replace(',', '.'));
+        if (shares == null) return showErrors(form, { shares: 'How many shares? A number, like 10 or 10.5.' });
+        if (shares === 0) return showErrors(form, { shares: 'Nought shares is not a holding. Delete it instead.' });
 
-        // Sealing needs the strongbox, so ask for it before spending the
-        // token — a token claimed and then not sealed is a token wasted.
-        if (!isUnlocked()) {
-          const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
-          if (!opened) return showErrors(form, { token: 'The address has to be sealed, so the strongbox must be open.' });
+        let costBasis = 0;
+        const typed = String(data.costBasis ?? '').trim();
+        if (typed) {
+          const parsed = parseAmount(typed, { locale: state.settings.locale });
+          if (!parsed.ok) return showErrors(form, { costBasis: parsed.error });
+          costBasis = parsed.cents;
         }
 
-        const claimed = await claimSetupToken(token);
-        if (!claimed.ok) return showErrors(form, { token: claimed.error });
-        await saveBridge(claimed.accessUrl);
-
-        // The claim itself doesn't list accounts, so one read of the bridge
-        // finishes the job: it is what fills in what there is to offer.
-        const result = await syncNow();
-        ui.offered = result.ok ? result.offered : [];
+        await savePosition(accountId, { symbol, shares, costBasis }, index);
         sheet.close({ silent: true });
-        toast(result.ok && result.offered.length
-          ? `Bridge connected. ${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} waiting in Accounts.`
-          : 'Bridge connected.', { duration: 7000 });
+        toast(existing ? `${symbol} updated` : `${symbol} written in`);
+      });
+
+      if (existing) {
+        $('[data-delete]', dialog).addEventListener('click', async () => {
+          const ok = await confirmDialog({
+            title: `Remove ${existing.symbol}?`,
+            message: html`<p>The holding goes; every reading this account has already taken stays exactly as it is.</p>`,
+            confirmLabel: 'Remove',
+            danger: true,
+          });
+          if (!ok) return;
+          await removePosition(accountId, index);
+          sheet.close({ silent: true });
+          toast(`${existing.symbol} removed`);
+        });
+      }
+    },
+  });
+}
+
+// ---------- The price feed ----------
+
+function openPriceKeyForm() {
+  const body = html`<form class="stack" novalidate autocomplete="off">
+    <p class="sheet-lede">A free key from <strong>twelvedata.com</strong>. It takes a minute and lasts for good.</p>
+    <label class="field">
+      <span class="label">API key</span>
+      <input name="key" value="${state.settings.priceKey ?? ''}" spellcheck="false" autocomplete="off" aria-describedby="err-key" />
+      <span class="hint">One request prices the whole book, so the free allowance is far more than this will use.</span>
+    </label>
+    ${errorSlot('key')}
+    <p class="hint">The request asks what a share costs. It does not say what you own, and the key unlocks nothing of yours — so it is kept in the clear rather than sealed.</p>
+  </form>`;
+
+  openSheet({
+    title: 'The price feed',
+    body,
+    footer: html`<button type="button" class="btn primary grow" data-save>Save the key</button>`,
+    onMount(dialog, sheet) {
+      const form = $('form', dialog);
+      $('input[name="key"]', form).focus();
+      wireSave(dialog, form, async () => {
+        const key = String(formData(form).key ?? '').trim();
+        if (!key) return showErrors(form, { key: 'Paste the key from twelvedata.com.' });
+        await updateSettings({ priceKey: key });
+        sheet.close({ silent: true });
+        toast('Price key saved. Refresh prices whenever you like.');
       });
     },
   });
 }
 
-return { passphraseDialog, openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, openBridgeForm };
+return { passphraseDialog, openAccountForm, openBalanceForm, openPlanForm, openPlanAdjust, openPositionForm, openPriceKeyForm };
+})();
+
+// js/prices.js
+const __m_js_prices_js = (() => {
+// Asking what things are worth.
+//
+// The whole book is priced in a single request: Twelve Data takes a
+// comma-separated list of symbols, which matters because the free key allows
+// 800 requests a day and 8 a minute. Pricing twenty holdings costs one of
+// those, not twenty.
+//
+// It answers with `Access-Control-Allow-Origin: *`, so the phone calls it
+// directly and nothing of ours sits in between. That was checked by probe
+// before it was chosen — Yahoo's endpoints, the obvious alternative, send no
+// CORS headers at all and cannot be called from a browser however much the
+// internet says otherwise.
+//
+// Prices come back as decimal strings, which is the reason this one is a
+// good fit: they convert to exact scaled integers with no float in the path.
+//
+// `/quote` is used rather than `/price` because it costs the same single
+// request and carries the previous close as well, which is what makes "what
+// did today do" possible without a second call.
+
+const { parsePrice, normalizeSymbol } = __m_js_core_holdings_js;
+const ENDPOINT = 'https://api.twelvedata.com/quote';
+const TIMEOUT_MS = 20000;
+
+// The free key allows 8 requests a minute. One request prices everything, so
+// this only ever bites when someone taps refresh repeatedly.
+const MIN_GAP_MS = 8000;
+let lastCallAt = 0;
+
+function describePriceError(code) {
+  switch (code) {
+    case 'no-key':
+      return 'No price key yet. Add a free Twelve Data key in the endpapers and the figures start moving.';
+    case 'rate':
+      return 'The price feed is being asked too often. Give it a few seconds.';
+    case 'quota':
+      return 'Today’s free price requests are used up. They reset tomorrow; the last figures stand until then.';
+    case 'key':
+      return 'The price feed turned that key down. Check it in the endpapers.';
+    case 'offline':
+      return 'Couldn’t reach the price feed. The last figures stand.';
+    case 'slow':
+      return 'The price feed didn’t answer in time. The last figures stand.';
+    default:
+      return 'The price feed sent something unreadable. The last figures stand.';
+  }
+}
+
+function fail(code) {
+  return { ok: false, code, error: describePriceError(code) };
+}
+
+// One symbol's quote, whatever wrapper it arrived in.
+function readQuote(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  if (entry.status === 'error') return null;
+  const price = parsePrice(entry.close ?? entry.price);
+  if (price == null) return null;
+  return {
+    price,
+    // The previous close is what makes a day's movement showable. It is
+    // optional: a newly listed holding has none, and that is not an error.
+    previousClose: parsePrice(entry.previous_close),
+    name: typeof entry.name === 'string' ? entry.name.slice(0, 80) : '',
+    currency: typeof entry.currency === 'string' ? entry.currency.toUpperCase() : '',
+    marketOpen: entry.is_market_open === true,
+  };
+}
+
+// Twelve Data answers one symbol with a bare quote object and several with a
+// map keyed by symbol. The shape is detected rather than inferred from how
+// many were asked for, because a one-symbol book should not take a different
+// code path from a two-symbol one.
+function readQuotes(body, symbols) {
+  const quotes = new Map();
+  const refused = [];
+
+  const single = body && typeof body === 'object' && (body.close != null || body.price != null);
+  if (single) {
+    const quote = readQuote(body);
+    const symbol = normalizeSymbol(body.symbol) || symbols[0];
+    if (quote) quotes.set(symbol, quote);
+    for (const s of symbols) if (!quotes.has(s)) refused.push(s);
+    return { quotes, refused };
+  }
+
+  for (const symbol of symbols) {
+    const quote = readQuote(body?.[symbol]);
+    if (quote) quotes.set(symbol, quote);
+    else refused.push(symbol);
+  }
+  return { quotes, refused };
+}
+
+// Prices every symbol given, in one request.
+//
+// Returns { ok, quotes: Map<symbol, quote>, refused: string[] }. A symbol the
+// feed would not price is reported rather than dropped, because a holding
+// that silently vanishes from a total is the worst failure available here.
+async function fetchQuotes(symbols, apiKey, { now = Date.now, fetchFn = fetch } = {}) {
+  const wanted = [...new Set((symbols ?? []).map(normalizeSymbol).filter(Boolean))];
+  if (!wanted.length) return { ok: true, quotes: new Map(), refused: [] };
+  if (!apiKey) return fail('no-key');
+
+  const since = now() - lastCallAt;
+  if (lastCallAt && since < MIN_GAP_MS) return fail('rate');
+
+  const url = `${ENDPOINT}?symbol=${encodeURIComponent(wanted.join(','))}&apikey=${encodeURIComponent(apiKey)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetchFn(url, { signal: controller.signal });
+  } catch (err) {
+    return fail(err?.name === 'AbortError' ? 'slow' : 'offline');
+  } finally {
+    clearTimeout(timer);
+    lastCallAt = now();
+  }
+
+  if (response.status === 429) return fail('quota');
+  if (response.status === 401 || response.status === 403) return fail('key');
+  if (!response.ok) return fail('unreadable');
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    return fail('unreadable');
+  }
+
+  // The feed reports its own errors inside a 200, with a numeric code.
+  if (body?.status === 'error') {
+    const code = Number(body.code);
+    if (code === 429) return fail('quota');
+    if (code === 401 || code === 403) return fail('key');
+    return fail('unreadable');
+  }
+
+  const { quotes, refused } = readQuotes(body, wanted);
+  return { ok: true, quotes, refused };
+}
+
+// Only the prices, for the valuation functions in core/holdings.js, which
+// have no business knowing what a quote looks like.
+function pricesFrom(quotes) {
+  const prices = new Map();
+  for (const [symbol, quote] of quotes ?? []) prices.set(symbol, quote.price);
+  return prices;
+}
+
+return { describePriceError, fetchQuotes, pricesFrom };
+})();
+
+// js/valuation.js
+const __m_js_valuation_js = (() => {
+// Turning prices into readings.
+//
+// This is the seam between "what the market says" and "what the book
+// records". The old book's rule was that the newest reading is what an
+// account is worth, and that a reading is stated rather than derived. A
+// market value *is* derived — shares times price — so the rule is kept in
+// spirit rather than letter: a valuation is filed as a dated reading through
+// `recordBalance()`, exactly as a hand-written figure was, and everything
+// downstream (the history, the charts, the staleness checks) goes on working
+// without knowing the difference.
+//
+// One reading per account per day, so refreshing five times in an afternoon
+// corrects the day's figure rather than filling the history with noise.
+
+const { state, recordBalance, updateSettings } = __m_js_store_js;
+const { symbolsHeld, valueBook } = __m_js_core_holdings_js;
+const { fetchQuotes, pricesFrom, describePriceError } = __m_js_prices_js;
+// Re-prices the whole book and files what changed.
+//
+// Returns { ok, valued, quotes, refused, changed[], errors[] } — the same
+// shape of answer the old bridge gave, so the views that report a sync need
+// no special case for where the figures came from.
+async function refreshPrices({ apiKey = state.settings.priceKey, today = state.today } = {}) {
+  const symbols = symbolsHeld(state.accounts);
+  if (!symbols.length) {
+    return { ok: true, valued: null, quotes: new Map(), refused: [], changed: [], errors: [], empty: true };
+  }
+
+  const result = await fetchQuotes(symbols, apiKey);
+  if (!result.ok) return { ok: false, code: result.code, error: result.error, changed: [], errors: [result.error] };
+
+  const prices = pricesFrom(result.quotes);
+  const valued = valueBook(state.accounts, prices);
+
+  const changed = [];
+  for (const account of state.accounts) {
+    const view = valued.byAccount.find((v) => v.id === account.id);
+    if (!view) continue;
+
+    // An account whose holdings could not all be priced is left alone. Half a
+    // valuation filed as a reading would understate it, and the history is
+    // supposed to be trustworthy.
+    if (!view.complete) continue;
+    // An account with nothing in it has nothing to say.
+    if (!account.positions?.length && !account.cash) continue;
+
+    const moved = view.total !== (account.balance ?? 0) || account.balanceAt !== today;
+    if (!moved) continue;
+
+    await recordBalance(account.id, view.total, today);
+    changed.push({ id: account.id, name: account.name, cents: view.total, was: account.balance ?? 0 });
+  }
+
+  await updateSettings({ pricedAt: new Date().toISOString() });
+
+  const errors = [];
+  if (result.refused.length) {
+    errors.push(
+      result.refused.length === 1
+        ? `${result.refused[0]} could not be priced, so the accounts holding it were left as they were.`
+        : `${result.refused.length} holdings could not be priced (${result.refused.slice(0, 3).join(', ')}${result.refused.length > 3 ? '…' : ''}), so the accounts holding them were left as they were.`
+    );
+  }
+
+  return { ok: true, valued, quotes: result.quotes, refused: result.refused, changed, errors };
+}
+
+
+return { refreshPrices, describePriceError };
 })();
 
 // js/core/fund.js
@@ -6352,8 +6649,49 @@ const { allocate, BP, planOrder, planProgress, projectGrowth, runway, safetyPlan
 const { advisorReview } = __m_js_core_advisor_js;
 const { money, percent, monthLabel } = __m_js_ui_format_js;
 const { inkRing, ruledBars } = __m_js_ui_charts_js;
-const { chapterHead, displayFigure, emptyPage, icons, ruledRow, section } = __m_js_views_chrome_js;
+const { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } = __m_js_views_chrome_js;
+const { symbolsHeld, valueBook, allocation, dayChange } = __m_js_core_holdings_js;
+const { PALETTE } = __m_js_core_defaults_js;
 const fmtMonths = (m) => (Number.isInteger(m) ? String(m) : m.toFixed(1));
+
+// Under the opening figure. A portfolio's headline is what today did; a book
+// of savings accounts had a yield instead. Whichever the book actually is,
+// it says the true thing rather than the one it was built for.
+function headlineNote(accounts, apy, yearly) {
+  if (!accounts.length) return 'No accounts written in yet.';
+  const where = `Across ${accounts.length === 1 ? 'one account' : `${accounts.length} accounts`}`;
+  const move = ui.quotes?.size ? dayChange(accounts, ui.quotes) : null;
+  if (move) {
+    if (move.cents === 0) return `${where}. Level today.`;
+    return `${where}. ${move.cents > 0 ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`;
+  }
+  if (apy) return `${where}, earning ${rate(apy)} — about ${money(yearly)} a year without you doing anything.`;
+  return `${where}.`;
+}
+
+// What the whole book is made of, largest first. This is the "holdings
+// underneath" half of the opening: the totals are above it, and this says
+// what they are actually made of, across every account at once.
+function holdingsSpread(accounts) {
+  const held = symbolsHeld(accounts);
+  if (!held.length) return '';
+
+  const valued = valueBook(accounts, ui.prices);
+  const rows = allocation(valued).slice(0, 8);
+  if (!rows.length) return '';
+
+  return section('What it is made of', html`<p class="marginal">Every account's holdings, together.</p>
+    <div class="alloc-bar" role="img" aria-label="How the book is spread across what it holds">
+      ${rows.map((r, i) => html`<i style="--w:${(r.bp / 100).toFixed(2)}%;--c:${PALETTE[i % PALETTE.length]}"></i>`)}
+    </div>
+    <ul class="plain-list ruled-list">
+      ${rows.map((r, i) => ruledRow(
+        html`<i class="swatch" style="background:${PALETTE[i % PALETTE.length]}"></i>${r.symbol}`,
+        money(r.cents),
+        { sub: percent(r.bp / 10_000, 1), wrap: true }
+      ))}
+    </ul>`, { id: 'made-of' });
+}
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
 // The opening spread. Left page: what the fund is worth and what it buys.
@@ -6388,12 +6726,10 @@ function renderFund() {
 
   return html`${chapterHead('fund')}
     <div class="fund-headline">
-      ${displayFigure(money(total), 'the fund', {
-        note: accounts.length
-          ? `Across ${accounts.length === 1 ? 'one account' : `${accounts.length} accounts`}, earning ${rate(apy)} — about ${money(yearly)} a year without you doing anything.`
-          : 'No accounts written in yet.',
-      })}
+      ${displayFigure(money(total), 'the fund', { note: headlineNote(accounts, apy, yearly) })}
     </div>
+
+    ${holdingsSpread(accounts)}
 
     ${section('Runway', months == null
       ? html`<p class="hand">${safety
@@ -6708,7 +7044,7 @@ const { daysBetween, dayOf } = __m_js_core_dates_js;
 const { money, percent, date, relativeDay } = __m_js_ui_format_js;
 const { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } = __m_js_views_chrome_js;
 const { isUnlocked, vaultAvailable, vaultExists } = __m_js_vault_js;
-const { bridgeConnected } = __m_js_link_js;
+const { symbolsHeld, valueAccount, formatShares, formatPrice, dayChange } = __m_js_core_holdings_js;
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
 function reviewState(account) {
@@ -6721,12 +7057,11 @@ function vaultNote() {
   if (!vaultAvailable()) {
     return html`<p class="marginal locked">The strongbox needs the installed book or an https address. Over a plain http link it stays shut.</p>`;
   }
-  if (!vaultExists()) {
-    return html`<div class="strongbox-note">
-      <p class="marginal">Account numbers and logins can be written in a strongbox at the back of the book, sealed with a passphrase only you know.</p>
-      <button type="button" class="btn small primary" data-action="vault-create">${icons.lock}Set a passphrase</button>
-    </div>`;
-  }
+  // Until there is a strongbox, this is an offer rather than news, and an
+  // offer does not deserve a block at the top of every visit. It lives in
+  // the endpapers with the other things you set up once; the chapter only
+  // speaks up once there is actually something sealed to open or shut.
+  if (!vaultExists()) return '';
   return isUnlocked()
     ? html`<div class="strongbox-note open">
         <p class="marginal">The strongbox is open. It shuts itself after a few minutes, and whenever the book leaves the screen.</p>
@@ -6745,10 +7080,8 @@ function renderLedger() {
   // An empty book still shows the bridge and anything it offers — otherwise
   // connecting one on a fresh book leads nowhere.
   if (!state.accounts.length) {
-    return html`${head}${vaultNote()}${bridgeNote()}
-      ${ui.offered.length
-        ? offeredNote()
-        : emptyPage({
+    return html`${head}${vaultNote()}${priceNote()}
+      ${emptyPage({
             title: 'No accounts written in',
             body: 'Which institution holds what, what it pays, whether the login has a second step, and when you last looked at it. The numbers and passwords go in the strongbox, sealed.',
             actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Write in an account</button>`,
@@ -6761,10 +7094,9 @@ function renderLedger() {
   const selected = ui.selectedAccount && state.accounts.some((a) => a.id === ui.selectedAccount) ? ui.selectedAccount : null;
 
   return html`${head}
-    ${displayFigure(money(total), 'held', { note: `Earning ${rate(apy)} across the book.` })}
+    ${displayFigure(money(total), 'held', { note: bookNote() })}
     ${vaultNote()}
-    ${bridgeNote()}
-    ${ui.offered.length ? offeredNote() : ''}
+    ${priceNote()}
     <ul class="plain-list acct-list">
       ${state.accounts.map((a) => html`${accountEntry(a, recon.rows.find((r) => r.account.id === a.id), a.id === selected)}
         ${a.id === selected ? html`<li class="acct-open" data-inline-detail>${accountDetail(a)}</li>` : ''}`)}
@@ -6775,48 +7107,57 @@ function renderLedger() {
       : ''}`;
 }
 
+// What the book is, in one line under the figure: how much is invested
+// across how many accounts, and what today did to it.
+function bookNote() {
+  const held = symbolsHeld(state.accounts).length;
+  const accounts = state.accounts.length;
+  const move = ui.quotes?.size ? dayChange(state.accounts, ui.quotes) : null;
+  const where = `${held ? `${held} ${held === 1 ? 'holding' : 'holdings'}` : 'Nothing written in'} across ${accounts} ${accounts === 1 ? 'account' : 'accounts'}.`;
+  if (!move) return where;
+  const dir = move.cents > 0 ? 'up' : move.cents < 0 ? 'down' : 'level';
+  if (move.cents === 0) return `${where} Level today.`;
+  return `${where} ${dir === 'up' ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`;
+}
+
 // Where the figures come from, if they come from anywhere but your hand.
 //
-// When nothing is connected this is an invitation rather than nothing at
-// all: this is the chapter someone looks in to connect an account, so the
-// door belongs here and not only in the endpapers.
-function bridgeNote() {
-  if (!bridgeConnected()) {
-    if (!vaultAvailable()) {
-      return html`<div class="strongbox-note">
-        <p class="marginal">Balances can be read for you, but not at this address: reading them needs the strongbox, and the strongbox needs an installed book or an https address. Open Tally from your home screen, or over https, and the offer appears here.</p>
-      </div>`;
-    }
+// A book of holdings prices itself: what you own barely changes, what it is
+// worth changes every day. So this is not a connection to be made, it is a
+// feed that either has a key or hasn't.
+function priceNote() {
+  const held = symbolsHeld(state.accounts);
+  if (!held.length) {
     return html`<div class="strongbox-note">
-      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you connect your banks to. Nothing leaves this device until you say so.</p>
-      <button type="button" class="btn small" data-action="bridge-connect">${icons.sync}Connect a bridge</button>
+      <p class="marginal">Write in what an account holds — the ticker and how many shares — and the book prices it for you from then on. Nothing has to be typed twice.</p>
     </div>`;
   }
-  const following = state.accounts.filter((a) => a.link).length;
-  const last = state.settings.bridgeAt;
-  return html`<div class="strongbox-note${isUnlocked() ? ' open' : ''}">
-    <p class="marginal">${following
-      ? `${following === 1 ? 'One account follows' : `${following} accounts follow`} ${state.settings.bridgeHost || 'the bridge'}${last ? `, last read ${relativeDay(dayOf(last)).toLowerCase()}` : ''}.`
-      : `${state.settings.bridgeHost || 'A bridge'} is connected, but no account follows it yet.`}</p>
-    <button type="button" class="btn small primary" data-action="bridge-sync">${icons.sync}Read balances</button>
+  if (!state.settings.priceKey) {
+    return html`<div class="strongbox-note">
+      <p class="marginal">${held.length === 1 ? 'One holding is' : `${held.length} holdings are`} written in, but there is no price feed yet. A free key from twelvedata.com prices the whole book in one request.</p>
+      <button type="button" class="btn small" data-action="price-key">${icons.sync}Add a price key</button>
+    </div>`;
+  }
+  const last = state.settings.pricedAt;
+  return html`<div class="strongbox-note open">
+    <p class="marginal">${held.length === 1 ? 'One holding' : `${held.length} holdings`} priced${last ? ` ${relativeDay(dayOf(last)).toLowerCase()}` : ' — not yet today'}.</p>
+    <button type="button" class="btn small primary" data-action="prices-refresh">${icons.sync}Refresh prices</button>
   </div>`;
 }
 
-// Accounts the bridge offered that this book hasn't taken up.
-function offeredNote() {
-  return section('Offered by the bridge', html`<p class="marginal">These came back from the bridge and aren’t in the book yet.</p>
-    <ul class="plain-list ruled-list">
-      ${ui.offered.map((a, i) => ruledRow(
-        html`${a.name}`,
-        html`<button type="button" class="btn small" data-action="adopt-account" data-index="${i}">Write it in</button>`,
-        { sub: a.org?.name ?? '', wrap: true }
-      ))}
-    </ul>`, { id: 'offered' });
-}
-
+// One line of the account list.
+//
+// What belongs here is what you would actually want at a glance from a
+// portfolio: what it is worth, what it did today, and what is in it. The
+// things this book used to put here — a savings rate, whether the login has
+// a second step, how long since you last reviewed it — are bank concerns.
+// They are still kept, and still checked in the Review chapter, but they do
+// not belong shouting on every row of a list of investments.
 function accountEntry(account, row, selected) {
-  const rev = reviewState(account);
-  const claimed = row?.claimed ?? 0;
+  const held = account.positions?.length ?? 0;
+  const value = account.balance ?? 0;
+  const move = accountDayChange(account);
+
   return html`<li class="acct${selected ? ' selected' : ''}" data-role="${account.role}">
     <button type="button" class="acct-open-btn" data-action="select-account" data-id="${account.id}">
       <span class="acct-mark" aria-hidden="true">${(account.institution || account.name).slice(0, 1).toUpperCase()}</span>
@@ -6826,21 +7167,45 @@ function accountEntry(account, row, selected) {
           <span class="acct-where">${account.institution || ACCOUNT_KINDS[account.kind] || 'Account'}</span>
         </span>
         <span class="acct-tags">
-          <i class="tag">${ACCOUNT_ROLES[account.role] ?? 'Other'}</i>
-          <i class="tag ${account.apyBp ? 'good' : ''}">${account.apyBp ? `${rate(account.apyBp)} a year` : 'no yield'}</i>
-          <i class="tag ${account.mfa ? 'good' : 'bad'}">${account.mfa ? 'two-step on' : 'no two-step'}</i>
-          <i class="tag ${rev.stale ? 'bad' : ''}">${rev.text}</i>
+          ${held ? html`<i class="tag">${held} ${held === 1 ? 'holding' : 'holdings'}</i>` : html`<i class="tag">${ACCOUNT_ROLES[account.role] ?? 'Other'}</i>`}
+          ${account.balanceAt ? html`<i class="tag">${relativeDay(account.balanceAt).toLowerCase()}</i>` : html`<i class="tag">never priced</i>`}
           ${account.vault ? html`<i class="tag sealed">${icons.lock}sealed</i>` : ''}
-          ${account.link ? html`<i class="tag good">${icons.sync}follows the bridge</i>` : ''}
         </span>
       </span>
       <span class="acct-figure">
-        <span class="fig ${(account.balance ?? 0) < 0 ? 'short' : ''}">${money(account.balance ?? 0)}</span>
-        <small>${account.balanceAt ? `read ${account.balanceAt}` : 'never read'}</small>
-        ${claimed > 0 ? html`<small class="${row.short ? 'short' : ''}">${money(claimed)} claimed</small>` : ''}
+        <span class="fig ${value < 0 ? 'short' : ''}">${money(value)}</span>
+        ${move ? html`<small class="${move.cents > 0 ? 'covered' : move.cents < 0 ? 'short' : ''}">${money(move.cents, { sign: true })} today</small>` : ''}
       </span>
     </button>
   </li>`;
+}
+
+// Under an account's figure: what today did, and what it has made against
+// what was paid for it. Cost basis is optional, so the gain simply isn't
+// mentioned when there is nothing to compare against.
+function accountNote(account) {
+  const parts = [];
+  const move = accountDayChange(account);
+  if (move) {
+    parts.push(move.cents === 0
+      ? 'Level today.'
+      : `${move.cents > 0 ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`);
+  }
+
+  const paid = (account.positions ?? []).reduce((sum, p) => sum + (p.costBasis ?? 0), 0);
+  const priced = valueAccount(account, ui.prices);
+  if (paid > 0 && priced.complete && priced.invested > 0) {
+    const gain = priced.invested - paid;
+    const bp = Math.round((gain * 10_000) / paid);
+    parts.push(`${gain >= 0 ? 'Ahead' : 'Behind'} ${money(Math.abs(gain))} on ${money(paid)} put in, ${percent(Math.abs(bp) / 10_000, 1)}.`);
+  }
+  return parts.join(' ');
+}
+
+// What one account did today, from the last quotes the book saw.
+function accountDayChange(account) {
+  if (!account.positions?.length || !ui.quotes?.size) return null;
+  return dayChange([account], ui.quotes);
 }
 
 // One account in full: what the facing page shows when an account is chosen.
@@ -6861,14 +7226,13 @@ function accountDetail(account) {
         <p class="acct-where">${[account.institution, ACCOUNT_KINDS[account.kind], ACCOUNT_ROLES[account.role]].filter(Boolean).join(' · ')}</p>
       </div>
     </div>
-    ${displayFigure(money(balance), account.balanceAt ? `as at ${date(account.balanceAt)}` : 'never read', {
+    ${displayFigure(money(balance), account.balanceAt ? `as at ${date(account.balanceAt)}` : 'never priced', {
       tone: balance < 0 ? 'short' : '',
+      note: accountNote(account),
     })}
     <div class="btn-row">
-      ${account.link
-        ? html`<button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read from the bridge</button>`
-        : ''}
-      <button type="button" class="btn ${account.link ? '' : 'primary'}" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
+      <button type="button" class="btn primary" data-action="add-position" data-id="${account.id}">${icons.plus}Write in a holding</button>
+      <button type="button" class="btn" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
       <button type="button" class="btn" data-action="mark-reviewed" data-id="${account.id}">${icons.check}Reviewed today</button>
       <button type="button" class="btn" data-action="edit-account" data-id="${account.id}">Edit</button>
     </div>
@@ -6878,12 +7242,14 @@ function accountDetail(account) {
       ${ruledRow('Sign-in', account.mfa ? 'two-step on' : 'one step only', { tone: account.mfa ? 'covered' : 'short' })}
       ${ruledRow('Last reviewed', rev.text, { tone: rev.stale ? 'thin' : '', sub: rev.stale ? 'rates move' : '', wrap: true })}
       ${account.link
-        ? ruledRow('Read from', account.link.org || state.settings.bridgeHost || 'the bridge', { sub: account.link.lastSyncAt ? `last ${relativeDay(dayOf(account.link.lastSyncAt)).toLowerCase()}` : 'not read yet', wrap: true })
+        ? ruledRow('Read from', account.link.org || 'the broker', { sub: account.link.lastSyncAt ? `last ${relativeDay(dayOf(account.link.lastSyncAt)).toLowerCase()}` : 'not read yet', wrap: true })
         : ''}
       ${held.length
         ? ruledRow('Pots kept here', held.map((p) => p.name).join(', '), { sub: `${money(claimed)} claimed${claimed > balance ? ' — more than it holds' : `, ${money(balance - claimed)} spare`}`, tone: claimed > balance ? 'short' : '', wrap: true })
         : ruledRow('Pots kept here', 'none', { sub: 'nothing claims this money' })}
     </ul>
+
+    ${holdingsSection(account)}
 
     ${account.notes ? html`<p class="marginal note">${account.notes}</p>` : ''}
 
@@ -6901,6 +7267,38 @@ function accountDetail(account) {
       <div data-vault-fields="${account.id}">${sealedSlot(account)}</div>
     </section>
   </div>`;
+}
+
+// What an account holds, and what each holding is worth at the last prices
+// the book saw. A position with no quote yet says so rather than showing a
+// nought, which would read as "worth nothing" instead of "not yet asked".
+function holdingsSection(account) {
+  const positions = account.positions ?? [];
+  if (!positions.length) {
+    return section('Holdings', html`<p class="marginal">Nothing written in yet. Add a ticker and a share count and this account prices itself from then on.</p>`);
+  }
+
+  const valued = valueAccount(account, ui.prices);
+  const rows = valued.lines
+    .map((line, i) => ({ line, i }))
+    .sort((a, b) => (b.line.cents ?? -1) - (a.line.cents ?? -1));
+
+  return section('Holdings', html`<ul class="plain-list ruled-list">
+      ${rows.map(({ line, i }) => ruledRow(
+        line.symbol,
+        line.cents == null ? 'not priced' : money(line.cents),
+        {
+          sub: `${formatShares(line.shares)} ${line.shares === 1_000_000 ? 'share' : 'shares'}${line.priceMicro != null ? ` at ${formatPrice(line.priceMicro, { currency: state.settings.currency, locale: state.settings.locale })}` : ''}`,
+          tone: line.cents == null ? 'thin' : '',
+          action: 'edit-position',
+          id: `${account.id}:${i}`,
+          wrap: true,
+        }
+      ))}
+      ${account.cash ? ruledRow('Cash', money(account.cash), { sub: 'uninvested', wrap: true }) : ''}
+    </ul>
+    ${valued.missing.length ? html`<p class="marginal">${valued.missing.join(', ')} could not be priced, so this account's total is the last complete one.</p>` : ''}`,
+    { id: `holdings-${account.id}` });
 }
 
 function sealedSlot(account) {
@@ -7106,7 +7504,7 @@ const { dayOf } = __m_js_core_dates_js;
 const { money, date, timeAgo, plural } = __m_js_ui_format_js;
 const { chapterHead, icons, ruledRow, section } = __m_js_views_chrome_js;
 const { vaultAvailable, vaultExists, isUnlocked } = __m_js_vault_js;
-const { bridgeConnected } = __m_js_link_js;
+const { symbolsHeld } = __m_js_core_holdings_js;
 const CURRENCIES = [
   ['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'],
   ['NZD', 'New Zealand dollar'], ['JPY', 'Japanese yen'], ['CNY', 'Chinese yuan'], ['INR', 'Indian rupee'], ['MXN', 'Mexican peso'],
@@ -7318,23 +7716,20 @@ function renderSettings() {
               <button type="button" class="btn ghost" data-action="vault-change">Change the passphrase</button>
             </div>`}`, { id: 'strongbox' })}
 
-    ${section('Connections', html`${!vaultAvailable()
-      ? html`<p class="hand">A connection needs the installed book or an <strong>https</strong> address, because the token it uses lives in the strongbox, and a browser only lends out the lock on a secure address.</p>
-          <p class="marginal">You are reading this over plain http — the address <code>npm start</code> prints for a phone is exactly that. Put the book on any https host and add it to your home screen, and this offer appears.</p>`
-      : !bridgeConnected()
-        ? html`<p class="hand">Tally can read your balances from a <strong>SimpleFIN</strong> bridge. You connect your banks at the bridge; the bridge gives you one address that can read balances and nothing else; this book keeps that address sealed and asks it for figures.</p>
-            <p class="marginal">Nothing of mine sits in the middle: your bank talks to your bridge, and your bridge talks to this device. No account here, no server here, and the book still works with the aeroplane mode on.</p>
-            <div class="btn-row"><button type="button" class="btn primary" data-action="bridge-connect">${icons.sync}Connect a bridge</button></div>`
-        : html`<ul class="plain-list ruled-list">
-              ${ruledRow('Bridge', s.bridgeHost || 'connected', { wrap: true })}
-              ${ruledRow('Last read', s.bridgeAt ? timeAgo(s.bridgeAt) : 'never')}
-              ${ruledRow('Accounts following it', String(state.accounts.filter((a) => a.link).length))}
-            </ul>
-            <p class="marginal">The address is sealed in the strongbox, so a sync only works while that is open.</p>
-            <div class="btn-row">
-              <button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read balances now</button>
-              <button type="button" class="btn ghost danger-text" data-action="bridge-forget">Disconnect</button>
-            </div>`}`, { id: 'connections' })}
+    ${section('The price feed', html`${!s.priceKey
+      ? html`<p class="hand">The book prices what it holds rather than asking a bank what it is worth. That needs a key from <strong>twelvedata.com</strong> — free, yours for good, and it takes a minute.</p>
+          <p class="marginal">One request prices every holding in the book, so a key that allows eight hundred a day is more than this will ever use. Nothing of yours goes with the request: it asks what a share costs, not what you own.</p>
+          <div class="btn-row"><button type="button" class="btn primary" data-action="price-key">${icons.sync}Add a price key</button></div>`
+      : html`<ul class="plain-list ruled-list">
+            ${ruledRow('Feed', 'twelvedata.com', { wrap: true })}
+            ${ruledRow('Key', `…${s.priceKey.slice(-4)}`, { sub: 'kept in the clear — it unlocks nothing of yours', wrap: true })}
+            ${ruledRow('Last priced', s.pricedAt ? timeAgo(s.pricedAt) : 'never')}
+            ${ruledRow('Holdings', String(symbolsHeld(state.accounts).length), { sub: 'priced in one request', wrap: true })}
+          </ul>
+          <div class="btn-row">
+            <button type="button" class="btn primary" data-action="prices-refresh">${icons.sync}Refresh prices now</button>
+            <button type="button" class="btn ghost" data-action="price-key">Change the key</button>
+          </div>`}`, { id: 'prices' })}
 
     ${section('Copies', html`<p class="hand">${s.lastExportAt ? `Last copy saved ${timeAgo(s.lastExportAt)}.` : 'No copy saved yet.'} This device holds the only one otherwise.</p>
       <div class="btn-row">
@@ -7392,8 +7787,9 @@ const { state, init, subscribe, checkDayChange, reload, saveAccount, describeErr
 const { isUnlocked, lock: lockVault, onVaultChange, open: openSealed, describeVaultError } = __m_js_vault_js;
 const { CHAPTERS, fleuron, icons, ui } = __m_js_views_chrome_js;
 const { money } = __m_js_ui_format_js;
-const { openAccountForm, openBalanceForm, openBridgeForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
-const { adoptAccount, bridgeConnected, describeLinkError, forgetBridge, syncNow } = __m_js_link_js;
+const { openAccountForm, openBalanceForm, openPositionForm, openPriceKeyForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
+const { refreshPrices } = __m_js_valuation_js;
+const { pricesFrom } = __m_js_prices_js;
 const { renderFund, fundFacingPage } = __m_js_views_fund_js;
 const { renderPots, potDetail, afterPotsMount, resetScenario } = __m_js_views_pots_js;
 const { renderLedger, accountDetail, sealedFields } = __m_js_views_ledger_js;
@@ -7460,11 +7856,11 @@ function colophon() {
   return html`<div class="colophon">
     ${fleuron()}
     <p>This book keeps one thing: what the fund is worth, what it is for, and where it sits.</p>
-    ${bridgeConnected()
-      ? html`<p>It is kept on this device. The one thing it reaches for is your own bridge, to read balances and nothing else; there is no account of ours to sign into, and the sealed pages open only with your passphrase.</p>`
+    ${state.settings.priceKey
+      ? html`<p>It is kept on this device. The one thing it reaches for is the price of a share — never what you hold, never who you are — and the sealed pages open only with your passphrase.</p>`
       : html`<p>It runs entirely on this device. Nothing is sent anywhere, there is no account to sign into, and the sealed pages open only with your passphrase.</p>`}
     <p class="colophon-rule" aria-hidden="true"></p>
-    <p class="colophon-small">Set in the device’s book face. ${bridgeConnected() ? html`Reads ${state.settings.bridgeHost || 'your bridge'}.` : 'Written offline.'}</p>
+    <p class="colophon-small">Set in the device’s book face. ${state.settings.priceKey ? 'Prices from twelvedata.com.' : 'Written offline.'}</p>
   </div>`;
 }
 
@@ -7702,60 +8098,41 @@ const actions = {
     }
   },
 
-  'bridge-connect': () => openBridgeForm(),
-  // Reading the bridge writes only what actually moved, and says what it
-  // found — including the banks the bridge itself couldn't reach.
-  'bridge-sync': async (el) => {
-    if (!bridgeConnected()) return openBridgeForm();
+  'price-key': () => openPriceKeyForm(),
+  'add-position': (el) => openPositionForm(el.dataset.id),
+  'edit-position': (el) => {
+    const [accountId, index] = String(el.dataset.id ?? '').split(':');
+    openPositionForm(accountId, Number(index));
+  },
+
+  // Re-pricing the book writes only what actually moved, and says what it
+  // found — including anything the feed would not quote.
+  'prices-refresh': async (el) => {
+    if (!state.settings.priceKey) return openPriceKeyForm();
     el.disabled = true;
     try {
-      const result = await syncNow();
+      const result = await refreshPrices();
       if (!result.ok) {
         toast(result.error, { tone: 'error', duration: 8000 });
         return;
       }
-      ui.offered = result.offered;
+      if (result.empty) {
+        toast('Nothing is written in to price yet.');
+        return;
+      }
+      ui.quotes = result.quotes;
+      ui.prices = pricesFrom(result.quotes);
+
       const moved = result.changed.length;
-      const trouble = [...result.problems.map((p) => p.message), ...result.errors];
-      if (trouble.length) toast(trouble[0], { tone: 'error', duration: 9000 });
-      else if (moved) toast(moved === 1 ? `${result.changed[0].name} is now ${money(result.changed[0].cents)}` : `${moved} balances written in`);
-      else if (result.updates.length) toast('Nothing has moved since the last reading.');
-      else if (result.offered.length) toast(`${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} offered — write them in from the Accounts chapter.`, { duration: 7000 });
-      else toast('The bridge has nothing to show.');
+      if (result.errors.length) toast(result.errors[0], { tone: 'error', duration: 9000 });
+      else if (moved === 1) toast(`${result.changed[0].name} is now ${money(result.changed[0].cents)}`);
+      else if (moved) toast(`${moved} accounts re-priced`);
+      else toast('Nothing has moved since the last prices.');
       render({ keepScroll: true });
     } catch (err) {
       fail(err);
     } finally {
       el.disabled = false;
-    }
-  },
-  'adopt-account': async (el) => {
-    const offered = ui.offered[Number(el.dataset.index)];
-    if (!offered) return;
-    try {
-      await adoptAccount(offered);
-      ui.offered = ui.offered.filter((a) => a !== offered);
-      toast(`${offered.name} written in`);
-      render({ keepScroll: true });
-    } catch (err) {
-      fail(err);
-    }
-  },
-  'bridge-forget': async () => {
-    const ok = await confirmDialog({
-      title: 'Disconnect the bridge?',
-      message: html`<p>The book forgets the sealed address, and balances go back to being written in by hand. What each account holds, and every reading on record, stay exactly as they are.</p>
-        <p>The connection at the bridge itself is untouched — revoke it there if you want it gone for good.</p>`,
-      confirmLabel: 'Disconnect',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await forgetBridge();
-      ui.offered = [];
-      toast('Bridge disconnected');
-    } catch (err) {
-      fail(err);
     }
   },
 

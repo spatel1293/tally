@@ -2,6 +2,7 @@ import { isValidCents, isValidSignedCents, isSupportedCurrency } from './money.j
 import { isValidISODate } from './dates.js';
 import { APP_NAME, BACKUP_FORMAT, DEFAULT_SETTINGS, PALETTE, ACCOUNT_ROLES, roleForKind } from './defaults.js';
 import { PLAN_KINDS } from './plans.js';
+import { isValidSymbol, normalizeSymbol, MAX_SHARES } from './holdings.js';
 
 export const NOTE_MAX = 500;
 export const NAME_MAX = 60;
@@ -29,6 +30,20 @@ function bpOk(v) {
 // A connection to an account at the bridge: an id and where it came from.
 function linkOk(v) {
   return Boolean(v) && typeof v === 'object' && typeof v.accountId === 'string' && v.accountId.length > 0 && v.accountId.length <= 200;
+}
+
+// A position must have a symbol that could actually be quoted and a share
+// count that parses. Anything else is dropped rather than guessed at, on the
+// same principle as a reading without a date.
+function positionOk(p) {
+  return (
+    Boolean(p) &&
+    typeof p === 'object' &&
+    isValidSymbol(p.symbol) &&
+    Number.isSafeInteger(p.shares) &&
+    p.shares >= 0 &&
+    p.shares <= MAX_SHARES
+  );
 }
 
 function vaultOk(v) {
@@ -61,6 +76,17 @@ export function sanitizeAccount(a, index) {
     reviewedAt: isValidISODate(a.reviewedAt) ? a.reviewedAt : null,
     notes: str(a.notes, NOTE_MAX),
     vault: vaultOk(a.vault) ? { v: 1, iv: a.vault.iv, data: a.vault.data } : null,
+    // Positions are whitelisted field by field like everything else, or a
+    // backup round trip would quietly reshape them.
+    positions: (Array.isArray(a.positions) ? a.positions : [])
+      .filter(positionOk)
+      .slice(0, 200)
+      .map((p) => ({
+        symbol: normalizeSymbol(p.symbol),
+        shares: p.shares,
+        costBasis: isValidSignedCents(p.costBasis) ? p.costBasis : 0,
+      })),
+    cash: isValidSignedCents(a.cash) ? a.cash : 0,
     // Which account at the bridge this entry follows. It holds no
     // credential — the access URL that can read it is sealed in settings.
     link: linkOk(a.link)
@@ -125,9 +151,8 @@ export function sanitizeSettings(s) {
   if (vaultOk(s.vaultCheck)) out.vaultCheck = { v: 1, iv: s.vaultCheck.iv, data: s.vaultCheck.data };
   // The bridge's access URL is a credential, so it is sealed like the rest.
   // Its host and the time of the last sync are not, and are worth seeing.
-  if (vaultOk(s.bridgeVault)) out.bridgeVault = { v: 1, iv: s.bridgeVault.iv, data: s.bridgeVault.data };
-  if (typeof s.bridgeHost === 'string') out.bridgeHost = s.bridgeHost.slice(0, 120);
-  if (typeof s.bridgeAt === 'string') out.bridgeAt = s.bridgeAt.slice(0, 40);
+  if (typeof s.priceKey === 'string') out.priceKey = s.priceKey.trim().slice(0, 120);
+  if (typeof s.pricedAt === 'string') out.pricedAt = s.pricedAt.slice(0, 40);
   return out;
 }
 

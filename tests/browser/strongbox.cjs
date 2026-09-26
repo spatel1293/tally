@@ -35,9 +35,12 @@ const PASSPHRASE = 'correct-horse-battery-staple';
   const body = () => page.textContent('body');
   const clearToasts = () => page.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove()));
 
-  await page.goto(BASE + '#/ledger');
-  await page.waitForSelector('.strongbox-note');
-  expect((await text('.strongbox-note')).includes('sealed with a passphrase'), 'the book offers a strongbox before there is one');
+  // Setting a passphrase is something you do once, so the offer lives in the
+  // endpapers with the other setup rather than at the top of every visit to
+  // the accounts chapter.
+  await page.goto(BASE + '#/settings');
+  await page.waitForSelector('[data-action=vault-create]');
+  expect(/passphrase/i.test(await text('[aria-labelledby=strongbox]')), 'the endpapers offer a strongbox before there is one');
 
   // ---- Choosing a passphrase ----
   await page.click('[data-action=vault-create]');
@@ -49,6 +52,11 @@ const PASSPHRASE = 'correct-horse-battery-staple';
   await page.fill('#vault-pass2', PASSPHRASE);
   await page.click('dialog#confirm button[type=submit]');
   await page.waitForSelector('dialog#confirm[open]', { state: 'detached' });
+
+  // Back to the accounts chapter, which is where the strongbox reports
+  // itself now that there is one to report on.
+  await page.goto(BASE + '#/ledger');
+  await page.waitForSelector('.strongbox-note');
   expect((await text('.strongbox-note')).includes('open'), 'sealing it leaves it open');
 
   // ---- Sealing an account's details ----

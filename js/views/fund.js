@@ -5,9 +5,50 @@ import { allocate, BP, planOrder, planProgress, projectGrowth, runway, safetyPla
 import { advisorReview } from '../core/advisor.js';
 import { money, percent, monthLabel } from '../ui/format.js';
 import { inkRing, ruledBars } from '../ui/charts.js';
-import { chapterHead, displayFigure, emptyPage, icons, ruledRow, section } from './chrome.js';
+import { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } from './chrome.js';
+import { symbolsHeld, valueBook, allocation, dayChange } from '../core/holdings.js';
+import { PALETTE } from '../core/defaults.js';
 
 const fmtMonths = (m) => (Number.isInteger(m) ? String(m) : m.toFixed(1));
+
+// Under the opening figure. A portfolio's headline is what today did; a book
+// of savings accounts had a yield instead. Whichever the book actually is,
+// it says the true thing rather than the one it was built for.
+function headlineNote(accounts, apy, yearly) {
+  if (!accounts.length) return 'No accounts written in yet.';
+  const where = `Across ${accounts.length === 1 ? 'one account' : `${accounts.length} accounts`}`;
+  const move = ui.quotes?.size ? dayChange(accounts, ui.quotes) : null;
+  if (move) {
+    if (move.cents === 0) return `${where}. Level today.`;
+    return `${where}. ${move.cents > 0 ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`;
+  }
+  if (apy) return `${where}, earning ${rate(apy)} — about ${money(yearly)} a year without you doing anything.`;
+  return `${where}.`;
+}
+
+// What the whole book is made of, largest first. This is the "holdings
+// underneath" half of the opening: the totals are above it, and this says
+// what they are actually made of, across every account at once.
+function holdingsSpread(accounts) {
+  const held = symbolsHeld(accounts);
+  if (!held.length) return '';
+
+  const valued = valueBook(accounts, ui.prices);
+  const rows = allocation(valued).slice(0, 8);
+  if (!rows.length) return '';
+
+  return section('What it is made of', html`<p class="marginal">Every account's holdings, together.</p>
+    <div class="alloc-bar" role="img" aria-label="How the book is spread across what it holds">
+      ${rows.map((r, i) => html`<i style="--w:${(r.bp / 100).toFixed(2)}%;--c:${PALETTE[i % PALETTE.length]}"></i>`)}
+    </div>
+    <ul class="plain-list ruled-list">
+      ${rows.map((r, i) => ruledRow(
+        html`<i class="swatch" style="background:${PALETTE[i % PALETTE.length]}"></i>${r.symbol}`,
+        money(r.cents),
+        { sub: percent(r.bp / 10_000, 1), wrap: true }
+      ))}
+    </ul>`, { id: 'made-of' });
+}
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
 // The opening spread. Left page: what the fund is worth and what it buys.
@@ -42,12 +83,10 @@ export function renderFund() {
 
   return html`${chapterHead('fund')}
     <div class="fund-headline">
-      ${displayFigure(money(total), 'the fund', {
-        note: accounts.length
-          ? `Across ${accounts.length === 1 ? 'one account' : `${accounts.length} accounts`}, earning ${rate(apy)} — about ${money(yearly)} a year without you doing anything.`
-          : 'No accounts written in yet.',
-      })}
+      ${displayFigure(money(total), 'the fund', { note: headlineNote(accounts, apy, yearly) })}
     </div>
+
+    ${holdingsSpread(accounts)}
 
     ${section('Runway', months == null
       ? html`<p class="hand">${safety

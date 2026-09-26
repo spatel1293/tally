@@ -10,9 +10,12 @@ export const ui = {
   // folding the phone never loses your place.
   selectedPlan: null,
   selectedAccount: null,
-  // What the last sync found that the book hasn't got yet. Not persisted:
-  // it is true only until the next sync.
-  offered: [],
+  // The last prices seen, as a Map of symbol to micro-dollars. Memory-only:
+  // a price is a fact about this moment, not something to keep. The figures
+  // that matter are filed as readings on the accounts themselves.
+  prices: new Map(),
+  // The quotes behind those prices, for showing a day's movement.
+  quotes: new Map(),
 };
 
 export const CHAPTERS = [

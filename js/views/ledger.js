@@ -6,7 +6,7 @@ import { daysBetween, dayOf } from '../core/dates.js';
 import { money, percent, date, relativeDay } from '../ui/format.js';
 import { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } from './chrome.js';
 import { isUnlocked, vaultAvailable, vaultExists } from '../vault.js';
-import { bridgeConnected } from '../link.js';
+import { symbolsHeld, valueAccount, formatShares, formatPrice, dayChange } from '../core/holdings.js';
 
 const rate = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 
@@ -20,12 +20,11 @@ function vaultNote() {
   if (!vaultAvailable()) {
     return html`<p class="marginal locked">The strongbox needs the installed book or an https address. Over a plain http link it stays shut.</p>`;
   }
-  if (!vaultExists()) {
-    return html`<div class="strongbox-note">
-      <p class="marginal">Account numbers and logins can be written in a strongbox at the back of the book, sealed with a passphrase only you know.</p>
-      <button type="button" class="btn small primary" data-action="vault-create">${icons.lock}Set a passphrase</button>
-    </div>`;
-  }
+  // Until there is a strongbox, this is an offer rather than news, and an
+  // offer does not deserve a block at the top of every visit. It lives in
+  // the endpapers with the other things you set up once; the chapter only
+  // speaks up once there is actually something sealed to open or shut.
+  if (!vaultExists()) return '';
   return isUnlocked()
     ? html`<div class="strongbox-note open">
         <p class="marginal">The strongbox is open. It shuts itself after a few minutes, and whenever the book leaves the screen.</p>
@@ -44,10 +43,8 @@ export function renderLedger() {
   // An empty book still shows the bridge and anything it offers — otherwise
   // connecting one on a fresh book leads nowhere.
   if (!state.accounts.length) {
-    return html`${head}${vaultNote()}${bridgeNote()}
-      ${ui.offered.length
-        ? offeredNote()
-        : emptyPage({
+    return html`${head}${vaultNote()}${priceNote()}
+      ${emptyPage({
             title: 'No accounts written in',
             body: 'Which institution holds what, what it pays, whether the login has a second step, and when you last looked at it. The numbers and passwords go in the strongbox, sealed.',
             actions: html`<button type="button" class="btn primary" data-action="new-account">${icons.plus}Write in an account</button>`,
@@ -60,10 +57,9 @@ export function renderLedger() {
   const selected = ui.selectedAccount && state.accounts.some((a) => a.id === ui.selectedAccount) ? ui.selectedAccount : null;
 
   return html`${head}
-    ${displayFigure(money(total), 'held', { note: `Earning ${rate(apy)} across the book.` })}
+    ${displayFigure(money(total), 'held', { note: bookNote() })}
     ${vaultNote()}
-    ${bridgeNote()}
-    ${ui.offered.length ? offeredNote() : ''}
+    ${priceNote()}
     <ul class="plain-list acct-list">
       ${state.accounts.map((a) => html`${accountEntry(a, recon.rows.find((r) => r.account.id === a.id), a.id === selected)}
         ${a.id === selected ? html`<li class="acct-open" data-inline-detail>${accountDetail(a)}</li>` : ''}`)}
@@ -74,48 +70,57 @@ export function renderLedger() {
       : ''}`;
 }
 
+// What the book is, in one line under the figure: how much is invested
+// across how many accounts, and what today did to it.
+function bookNote() {
+  const held = symbolsHeld(state.accounts).length;
+  const accounts = state.accounts.length;
+  const move = ui.quotes?.size ? dayChange(state.accounts, ui.quotes) : null;
+  const where = `${held ? `${held} ${held === 1 ? 'holding' : 'holdings'}` : 'Nothing written in'} across ${accounts} ${accounts === 1 ? 'account' : 'accounts'}.`;
+  if (!move) return where;
+  const dir = move.cents > 0 ? 'up' : move.cents < 0 ? 'down' : 'level';
+  if (move.cents === 0) return `${where} Level today.`;
+  return `${where} ${dir === 'up' ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`;
+}
+
 // Where the figures come from, if they come from anywhere but your hand.
 //
-// When nothing is connected this is an invitation rather than nothing at
-// all: this is the chapter someone looks in to connect an account, so the
-// door belongs here and not only in the endpapers.
-function bridgeNote() {
-  if (!bridgeConnected()) {
-    if (!vaultAvailable()) {
-      return html`<div class="strongbox-note">
-        <p class="marginal">Balances can be read for you, but not at this address: reading them needs the strongbox, and the strongbox needs an installed book or an https address. Open Tally from your home screen, or over https, and the offer appears here.</p>
-      </div>`;
-    }
+// A book of holdings prices itself: what you own barely changes, what it is
+// worth changes every day. So this is not a connection to be made, it is a
+// feed that either has a key or hasn't.
+function priceNote() {
+  const held = symbolsHeld(state.accounts);
+  if (!held.length) {
     return html`<div class="strongbox-note">
-      <p class="marginal">Balances can be read for you instead of written in by hand, through a bridge you connect your banks to. Nothing leaves this device until you say so.</p>
-      <button type="button" class="btn small" data-action="bridge-connect">${icons.sync}Connect a bridge</button>
+      <p class="marginal">Write in what an account holds — the ticker and how many shares — and the book prices it for you from then on. Nothing has to be typed twice.</p>
     </div>`;
   }
-  const following = state.accounts.filter((a) => a.link).length;
-  const last = state.settings.bridgeAt;
-  return html`<div class="strongbox-note${isUnlocked() ? ' open' : ''}">
-    <p class="marginal">${following
-      ? `${following === 1 ? 'One account follows' : `${following} accounts follow`} ${state.settings.bridgeHost || 'the bridge'}${last ? `, last read ${relativeDay(dayOf(last)).toLowerCase()}` : ''}.`
-      : `${state.settings.bridgeHost || 'A bridge'} is connected, but no account follows it yet.`}</p>
-    <button type="button" class="btn small primary" data-action="bridge-sync">${icons.sync}Read balances</button>
+  if (!state.settings.priceKey) {
+    return html`<div class="strongbox-note">
+      <p class="marginal">${held.length === 1 ? 'One holding is' : `${held.length} holdings are`} written in, but there is no price feed yet. A free key from twelvedata.com prices the whole book in one request.</p>
+      <button type="button" class="btn small" data-action="price-key">${icons.sync}Add a price key</button>
+    </div>`;
+  }
+  const last = state.settings.pricedAt;
+  return html`<div class="strongbox-note open">
+    <p class="marginal">${held.length === 1 ? 'One holding' : `${held.length} holdings`} priced${last ? ` ${relativeDay(dayOf(last)).toLowerCase()}` : ' — not yet today'}.</p>
+    <button type="button" class="btn small primary" data-action="prices-refresh">${icons.sync}Refresh prices</button>
   </div>`;
 }
 
-// Accounts the bridge offered that this book hasn't taken up.
-function offeredNote() {
-  return section('Offered by the bridge', html`<p class="marginal">These came back from the bridge and aren’t in the book yet.</p>
-    <ul class="plain-list ruled-list">
-      ${ui.offered.map((a, i) => ruledRow(
-        html`${a.name}`,
-        html`<button type="button" class="btn small" data-action="adopt-account" data-index="${i}">Write it in</button>`,
-        { sub: a.org?.name ?? '', wrap: true }
-      ))}
-    </ul>`, { id: 'offered' });
-}
-
+// One line of the account list.
+//
+// What belongs here is what you would actually want at a glance from a
+// portfolio: what it is worth, what it did today, and what is in it. The
+// things this book used to put here — a savings rate, whether the login has
+// a second step, how long since you last reviewed it — are bank concerns.
+// They are still kept, and still checked in the Review chapter, but they do
+// not belong shouting on every row of a list of investments.
 function accountEntry(account, row, selected) {
-  const rev = reviewState(account);
-  const claimed = row?.claimed ?? 0;
+  const held = account.positions?.length ?? 0;
+  const value = account.balance ?? 0;
+  const move = accountDayChange(account);
+
   return html`<li class="acct${selected ? ' selected' : ''}" data-role="${account.role}">
     <button type="button" class="acct-open-btn" data-action="select-account" data-id="${account.id}">
       <span class="acct-mark" aria-hidden="true">${(account.institution || account.name).slice(0, 1).toUpperCase()}</span>
@@ -125,21 +130,45 @@ function accountEntry(account, row, selected) {
           <span class="acct-where">${account.institution || ACCOUNT_KINDS[account.kind] || 'Account'}</span>
         </span>
         <span class="acct-tags">
-          <i class="tag">${ACCOUNT_ROLES[account.role] ?? 'Other'}</i>
-          <i class="tag ${account.apyBp ? 'good' : ''}">${account.apyBp ? `${rate(account.apyBp)} a year` : 'no yield'}</i>
-          <i class="tag ${account.mfa ? 'good' : 'bad'}">${account.mfa ? 'two-step on' : 'no two-step'}</i>
-          <i class="tag ${rev.stale ? 'bad' : ''}">${rev.text}</i>
+          ${held ? html`<i class="tag">${held} ${held === 1 ? 'holding' : 'holdings'}</i>` : html`<i class="tag">${ACCOUNT_ROLES[account.role] ?? 'Other'}</i>`}
+          ${account.balanceAt ? html`<i class="tag">${relativeDay(account.balanceAt).toLowerCase()}</i>` : html`<i class="tag">never priced</i>`}
           ${account.vault ? html`<i class="tag sealed">${icons.lock}sealed</i>` : ''}
-          ${account.link ? html`<i class="tag good">${icons.sync}follows the bridge</i>` : ''}
         </span>
       </span>
       <span class="acct-figure">
-        <span class="fig ${(account.balance ?? 0) < 0 ? 'short' : ''}">${money(account.balance ?? 0)}</span>
-        <small>${account.balanceAt ? `read ${account.balanceAt}` : 'never read'}</small>
-        ${claimed > 0 ? html`<small class="${row.short ? 'short' : ''}">${money(claimed)} claimed</small>` : ''}
+        <span class="fig ${value < 0 ? 'short' : ''}">${money(value)}</span>
+        ${move ? html`<small class="${move.cents > 0 ? 'covered' : move.cents < 0 ? 'short' : ''}">${money(move.cents, { sign: true })} today</small>` : ''}
       </span>
     </button>
   </li>`;
+}
+
+// Under an account's figure: what today did, and what it has made against
+// what was paid for it. Cost basis is optional, so the gain simply isn't
+// mentioned when there is nothing to compare against.
+function accountNote(account) {
+  const parts = [];
+  const move = accountDayChange(account);
+  if (move) {
+    parts.push(move.cents === 0
+      ? 'Level today.'
+      : `${move.cents > 0 ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`);
+  }
+
+  const paid = (account.positions ?? []).reduce((sum, p) => sum + (p.costBasis ?? 0), 0);
+  const priced = valueAccount(account, ui.prices);
+  if (paid > 0 && priced.complete && priced.invested > 0) {
+    const gain = priced.invested - paid;
+    const bp = Math.round((gain * 10_000) / paid);
+    parts.push(`${gain >= 0 ? 'Ahead' : 'Behind'} ${money(Math.abs(gain))} on ${money(paid)} put in, ${percent(Math.abs(bp) / 10_000, 1)}.`);
+  }
+  return parts.join(' ');
+}
+
+// What one account did today, from the last quotes the book saw.
+function accountDayChange(account) {
+  if (!account.positions?.length || !ui.quotes?.size) return null;
+  return dayChange([account], ui.quotes);
 }
 
 // One account in full: what the facing page shows when an account is chosen.
@@ -160,14 +189,13 @@ export function accountDetail(account) {
         <p class="acct-where">${[account.institution, ACCOUNT_KINDS[account.kind], ACCOUNT_ROLES[account.role]].filter(Boolean).join(' · ')}</p>
       </div>
     </div>
-    ${displayFigure(money(balance), account.balanceAt ? `as at ${date(account.balanceAt)}` : 'never read', {
+    ${displayFigure(money(balance), account.balanceAt ? `as at ${date(account.balanceAt)}` : 'never priced', {
       tone: balance < 0 ? 'short' : '',
+      note: accountNote(account),
     })}
     <div class="btn-row">
-      ${account.link
-        ? html`<button type="button" class="btn primary" data-action="bridge-sync">${icons.sync}Read from the bridge</button>`
-        : ''}
-      <button type="button" class="btn ${account.link ? '' : 'primary'}" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
+      <button type="button" class="btn primary" data-action="add-position" data-id="${account.id}">${icons.plus}Write in a holding</button>
+      <button type="button" class="btn" data-action="read-balance" data-id="${account.id}">${icons.pen}Write in a balance</button>
       <button type="button" class="btn" data-action="mark-reviewed" data-id="${account.id}">${icons.check}Reviewed today</button>
       <button type="button" class="btn" data-action="edit-account" data-id="${account.id}">Edit</button>
     </div>
@@ -177,12 +205,14 @@ export function accountDetail(account) {
       ${ruledRow('Sign-in', account.mfa ? 'two-step on' : 'one step only', { tone: account.mfa ? 'covered' : 'short' })}
       ${ruledRow('Last reviewed', rev.text, { tone: rev.stale ? 'thin' : '', sub: rev.stale ? 'rates move' : '', wrap: true })}
       ${account.link
-        ? ruledRow('Read from', account.link.org || state.settings.bridgeHost || 'the bridge', { sub: account.link.lastSyncAt ? `last ${relativeDay(dayOf(account.link.lastSyncAt)).toLowerCase()}` : 'not read yet', wrap: true })
+        ? ruledRow('Read from', account.link.org || 'the broker', { sub: account.link.lastSyncAt ? `last ${relativeDay(dayOf(account.link.lastSyncAt)).toLowerCase()}` : 'not read yet', wrap: true })
         : ''}
       ${held.length
         ? ruledRow('Pots kept here', held.map((p) => p.name).join(', '), { sub: `${money(claimed)} claimed${claimed > balance ? ' — more than it holds' : `, ${money(balance - claimed)} spare`}`, tone: claimed > balance ? 'short' : '', wrap: true })
         : ruledRow('Pots kept here', 'none', { sub: 'nothing claims this money' })}
     </ul>
+
+    ${holdingsSection(account)}
 
     ${account.notes ? html`<p class="marginal note">${account.notes}</p>` : ''}
 
@@ -200,6 +230,38 @@ export function accountDetail(account) {
       <div data-vault-fields="${account.id}">${sealedSlot(account)}</div>
     </section>
   </div>`;
+}
+
+// What an account holds, and what each holding is worth at the last prices
+// the book saw. A position with no quote yet says so rather than showing a
+// nought, which would read as "worth nothing" instead of "not yet asked".
+function holdingsSection(account) {
+  const positions = account.positions ?? [];
+  if (!positions.length) {
+    return section('Holdings', html`<p class="marginal">Nothing written in yet. Add a ticker and a share count and this account prices itself from then on.</p>`);
+  }
+
+  const valued = valueAccount(account, ui.prices);
+  const rows = valued.lines
+    .map((line, i) => ({ line, i }))
+    .sort((a, b) => (b.line.cents ?? -1) - (a.line.cents ?? -1));
+
+  return section('Holdings', html`<ul class="plain-list ruled-list">
+      ${rows.map(({ line, i }) => ruledRow(
+        line.symbol,
+        line.cents == null ? 'not priced' : money(line.cents),
+        {
+          sub: `${formatShares(line.shares)} ${line.shares === 1_000_000 ? 'share' : 'shares'}${line.priceMicro != null ? ` at ${formatPrice(line.priceMicro, { currency: state.settings.currency, locale: state.settings.locale })}` : ''}`,
+          tone: line.cents == null ? 'thin' : '',
+          action: 'edit-position',
+          id: `${account.id}:${i}`,
+          wrap: true,
+        }
+      ))}
+      ${account.cash ? ruledRow('Cash', money(account.cash), { sub: 'uninvested', wrap: true }) : ''}
+    </ul>
+    ${valued.missing.length ? html`<p class="marginal">${valued.missing.join(', ')} could not be priced, so this account's total is the last complete one.</p>` : ''}`,
+    { id: `holdings-${account.id}` });
 }
 
 function sealedSlot(account) {

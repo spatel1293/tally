@@ -1,7 +1,7 @@
 export const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-export const APP_VERSION = '5.5.0';
+export const APP_VERSION = '6.0.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the
@@ -54,11 +54,13 @@ export const DEFAULT_SETTINGS = {
   runwayTarget: 6,
   vaultSalt: null,
   vaultCheck: null,
-  // The bridge, if one is connected. `bridgeVault` holds the sealed address
-  // and token; the other two are only for showing what is connected.
-  bridgeVault: null,
-  bridgeHost: '',
-  bridgeAt: null,
+  // The price feed. A free Twelve Data key — it prices the whole book in
+  // one request, so a key that allows 800 a day is effectively unlimited
+  // here. It is not a credential for anything of the owner's, so it is kept
+  // in the clear rather than sealed; losing it costs nothing but a minute
+  // at twelvedata.com.
+  priceKey: '',
+  pricedAt: null,
 };
 
 export const ACCOUNT_KINDS = {
@@ -97,6 +99,13 @@ export function newAccount(fields = {}) {
     notes: '',
     vault: null,
     link: null,
+    // What the account holds. A position is { symbol, shares, costBasis },
+    // with shares as micro-shares and costBasis in cents (0 when unknown).
+    // An account with no positions is still a perfectly good account — a
+    // cash account has none — so this is empty, never absent.
+    positions: [],
+    // Uninvested cash sitting in the account, in cents.
+    cash: 0,
     balance: 0,
     balanceAt: null,
     history: [],

@@ -158,6 +158,42 @@ export async function deleteAccount(id, moveToId = null) {
 // The newest reading is always the one the account is worth — so writing in
 // a reading you forgot to take last month files it under its own date and
 // leaves today's figure alone, rather than winding the account backwards.
+// ---------- Holdings ----------
+
+// Writing a holding in, or editing one already there. `index` is which
+// position on the account, or null to add a new one. Two entries for the
+// same ticker are folded together rather than kept apart — a book that
+// shows VTI twice is a book you have to do arithmetic on.
+export async function savePosition(id, position, index = null) {
+  const account = state.accounts.find((a) => a.id === id);
+  if (!account) return null;
+
+  const positions = [...(account.positions ?? [])];
+  if (index == null) {
+    const already = positions.findIndex((p) => p.symbol === position.symbol);
+    if (already >= 0) {
+      positions[already] = {
+        ...positions[already],
+        shares: positions[already].shares + position.shares,
+        costBasis: (positions[already].costBasis ?? 0) + (position.costBasis ?? 0),
+      };
+    } else {
+      positions.push(position);
+    }
+  } else {
+    positions[index] = position;
+  }
+
+  return saveAccount({ positions }, id);
+}
+
+export async function removePosition(id, index) {
+  const account = state.accounts.find((a) => a.id === id);
+  if (!account) return null;
+  const positions = (account.positions ?? []).filter((_, i) => i !== index);
+  return saveAccount({ positions }, id);
+}
+
 export async function recordBalance(id, cents, date) {
   const account = state.accounts.find((a) => a.id === id);
   if (!account) return null;

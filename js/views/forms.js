@@ -1,6 +1,6 @@
 import { html, formData, showErrors, errorSlot, $, $$ } from '../ui/html.js';
 import { openSheet, toast, confirmDialog } from '../ui/overlay.js';
-import { state, saveAccount, deleteAccount, recordBalance, saveGoal, deleteGoal, adjustGoal, describeError } from '../store.js';
+import { state, saveAccount, deleteAccount, recordBalance, saveGoal, deleteGoal, adjustGoal, savePosition, removePosition, updateSettings, describeError } from '../store.js';
 import { NAME_MAX, NOTE_MAX } from '../core/validate.js';
 import { parseAmount, centsToInput } from '../core/money.js';
 import { isValidISODate } from '../core/dates.js';
@@ -8,9 +8,8 @@ import { PALETTE, PLAN_ICONS, ACCOUNT_KINDS, ACCOUNT_ROLES, roleForKind } from '
 import { PLAN_KINDS, BP } from '../core/plans.js';
 import { money, plural } from '../ui/format.js';
 import { vaultAvailable, vaultExists, isUnlocked, createVault, unlock, seal, open as openSealed, changePassphrase, describeVaultError } from '../vault.js';
-import { claimSetupToken, saveBridge, syncNow } from '../link.js';
 import { ui } from './chrome.js';
-import { decodeSetupToken } from '../core/link.js';
+import { parseShares, formatShares, isValidSymbol, normalizeSymbol } from '../core/holdings.js';
 
 const fail = (err) => toast(describeVaultError(err) ?? describeError(err), { tone: 'error' });
 
@@ -513,60 +512,113 @@ export function openPlanAdjust(id) {
   });
 }
 
-// ---------- The bridge ----------
+// ---------- Holdings ----------
 
-// Connecting is two small steps, not one: a setup token is claimed for an
-// access URL, and that URL is what gets sealed. Splitting them means a typo
-// in the token is caught before anything touches the strongbox, and a
-// claimed-but-unsealed URL is never left stranded if something goes wrong
-// in between.
-export function openBridgeForm() {
+// A holding is a ticker and a share count. Cost basis is optional — it is
+// what makes gain showable, but a book that refuses a holding until you go
+// and find what you paid is a book you stop writing in.
+export function openPositionForm(accountId, index = null) {
+  const account = state.accounts.find((a) => a.id === accountId);
+  if (!account) return;
+  const existing = index == null ? null : account.positions?.[index];
+
   const body = html`<form class="stack" novalidate autocomplete="off">
-    <p class="sheet-lede">At <strong>simplefin.org</strong> you connect your own banks and generate a <em>setup token</em>. Paste it here once; the book turns it into a sealed address that can read balances and nothing else.</p>
-    <label class="field">
-      <span class="label">Setup token</span>
-      <textarea name="token" rows="4" spellcheck="false" placeholder="aHR0cHM6Ly9iZXRhLWJyaWRnZS5zaW1wbGVmaW4ub3JnL3NpbXBsZWZpbi9jbGFpbS8…"></textarea>
-      <span class="hint">A long line of letters and numbers. It works once, so if this fails, generate another.</span>
-    </label>
-    ${errorSlot('token')}
-    <p class="hint">Your bank credentials stay at the bridge — this book never sees them, and never asks for them.</p>
+    <div class="row-2">
+      <label class="field">
+        <span class="label">Ticker</span>
+        <input name="symbol" value="${existing?.symbol ?? ''}" placeholder="VTI" spellcheck="false" autocapitalize="characters" aria-describedby="err-symbol" />
+      </label>
+      <label class="field">
+        <span class="label">Shares</span>
+        <input name="shares" inputmode="decimal" value="${existing ? formatShares(existing.shares) : ''}" placeholder="10.5" aria-describedby="err-shares" />
+      </label>
+    </div>
+    ${errorSlot('symbol')}
+    ${errorSlot('shares')}
+    ${moneyField('costBasis', existing?.costBasis ? centsToInput(existing.costBasis, { locale: state.settings.locale }) : '', {
+      label: 'What you paid for them, all in',
+      hint: 'Optional. It is what lets the book show a gain rather than just a figure.',
+      optional: true,
+    })}
+    <p class="hint">Fractional shares are fine — write them as they appear on the statement.</p>
   </form>`;
 
   openSheet({
-    title: 'Connect a bridge',
+    title: existing ? 'Edit a holding' : 'Write in a holding',
     body,
-    footer: html`<button type="button" class="btn primary grow" data-save>Connect</button>`,
+    footer: footerButtons({ saveLabel: existing ? 'Save' : 'Write it in', deletable: Boolean(existing) }),
     onMount(dialog, sheet) {
       const form = $('form', dialog);
-      $('textarea[name="token"]', form).focus();
+      $('input[name="symbol"]', form).focus();
+
       wireSave(dialog, form, async () => {
-        const token = formData(form).token.trim();
-        if (!token) return showErrors(form, { token: 'Paste the setup token from your bridge.' });
+        const data = formData(form);
+        const symbol = normalizeSymbol(data.symbol);
+        if (!symbol) return showErrors(form, { symbol: 'Which ticker?' });
+        if (!isValidSymbol(symbol)) return showErrors(form, { symbol: 'That doesn’t look like a ticker. VTI, BND, BRK.B.' });
 
-        // Check the shape of the token first. It costs nothing, and it means
-        // a mis-paste is answered on the spot instead of behind a passphrase.
-        const decoded = decodeSetupToken(token);
-        if (!decoded.ok) return showErrors(form, { token: decoded.error });
+        const shares = parseShares(String(data.shares ?? '').trim().replace(',', '.'));
+        if (shares == null) return showErrors(form, { shares: 'How many shares? A number, like 10 or 10.5.' });
+        if (shares === 0) return showErrors(form, { shares: 'Nought shares is not a holding. Delete it instead.' });
 
-        // Sealing needs the strongbox, so ask for it before spending the
-        // token — a token claimed and then not sealed is a token wasted.
-        if (!isUnlocked()) {
-          const opened = await passphraseDialog({ mode: vaultExists() ? 'unlock' : 'create' });
-          if (!opened) return showErrors(form, { token: 'The address has to be sealed, so the strongbox must be open.' });
+        let costBasis = 0;
+        const typed = String(data.costBasis ?? '').trim();
+        if (typed) {
+          const parsed = parseAmount(typed, { locale: state.settings.locale });
+          if (!parsed.ok) return showErrors(form, { costBasis: parsed.error });
+          costBasis = parsed.cents;
         }
 
-        const claimed = await claimSetupToken(token);
-        if (!claimed.ok) return showErrors(form, { token: claimed.error });
-        await saveBridge(claimed.accessUrl);
-
-        // The claim itself doesn't list accounts, so one read of the bridge
-        // finishes the job: it is what fills in what there is to offer.
-        const result = await syncNow();
-        ui.offered = result.ok ? result.offered : [];
+        await savePosition(accountId, { symbol, shares, costBasis }, index);
         sheet.close({ silent: true });
-        toast(result.ok && result.offered.length
-          ? `Bridge connected. ${result.offered.length === 1 ? 'One account is' : `${result.offered.length} accounts are`} waiting in Accounts.`
-          : 'Bridge connected.', { duration: 7000 });
+        toast(existing ? `${symbol} updated` : `${symbol} written in`);
+      });
+
+      if (existing) {
+        $('[data-delete]', dialog).addEventListener('click', async () => {
+          const ok = await confirmDialog({
+            title: `Remove ${existing.symbol}?`,
+            message: html`<p>The holding goes; every reading this account has already taken stays exactly as it is.</p>`,
+            confirmLabel: 'Remove',
+            danger: true,
+          });
+          if (!ok) return;
+          await removePosition(accountId, index);
+          sheet.close({ silent: true });
+          toast(`${existing.symbol} removed`);
+        });
+      }
+    },
+  });
+}
+
+// ---------- The price feed ----------
+
+export function openPriceKeyForm() {
+  const body = html`<form class="stack" novalidate autocomplete="off">
+    <p class="sheet-lede">A free key from <strong>twelvedata.com</strong>. It takes a minute and lasts for good.</p>
+    <label class="field">
+      <span class="label">API key</span>
+      <input name="key" value="${state.settings.priceKey ?? ''}" spellcheck="false" autocomplete="off" aria-describedby="err-key" />
+      <span class="hint">One request prices the whole book, so the free allowance is far more than this will use.</span>
+    </label>
+    ${errorSlot('key')}
+    <p class="hint">The request asks what a share costs. It does not say what you own, and the key unlocks nothing of yours — so it is kept in the clear rather than sealed.</p>
+  </form>`;
+
+  openSheet({
+    title: 'The price feed',
+    body,
+    footer: html`<button type="button" class="btn primary grow" data-save>Save the key</button>`,
+    onMount(dialog, sheet) {
+      const form = $('form', dialog);
+      $('input[name="key"]', form).focus();
+      wireSave(dialog, form, async () => {
+        const key = String(formData(form).key ?? '').trim();
+        if (!key) return showErrors(form, { key: 'Paste the key from twelvedata.com.' });
+        await updateSettings({ priceKey: key });
+        sheet.close({ silent: true });
+        toast('Price key saved. Refresh prices whenever you like.');
       });
     },
   });
