@@ -66,17 +66,18 @@ export function fleuron() {
 // The bibliographic mark at the head of every chapter: its number, its name,
 // what it is for, and an ornament to close the opening — the way a printed
 // book announces one.
+// A screen's head is its name and the one thing you can do here. The
+// chapter number, the descriptive subtitle and the ornament all went: they
+// were three lines of decoration between opening the app and seeing a
+// figure, and position already says what the screen is.
 export function chapterHead(route, { actions = '' } = {}) {
   const chapter = CHAPTERS.find((c) => c.route === route);
   if (!chapter) return '';
   return html`<header class="chapter-head">
-    <p class="chapter-number">Chapter ${chapter.folio}</p>
     <div class="chapter-title-row">
       <h1 class="chapter-title">${chapter.title}</h1>
       ${actions ? html`<div class="chapter-actions">${actions}</div>` : ''}
     </div>
-    <p class="chapter-blurb">${chapter.blurb}</p>
-    ${fleuron()}
   </header>`;
 }
 
@@ -104,9 +105,27 @@ export function ruledRow(name, value, { sub = '', tone = '', href = '', action =
 }
 
 // The figure a page is really about, set large in the display face.
-export function displayFigure(value, label, { tone = '', note = '' } = {}) {
-  return html`<p class="display-figure ${tone}"><span class="display-value">${value}</span>${label ? html`<span class="display-label">${label}</span>` : ''}</p>
-    ${note ? html`<p class="display-note">${note}</p>` : ''}`;
+// The one figure a screen is about, and what it did.
+//
+// `delta` is { cents, bp } or null. It is rendered as a sign, an amount and
+// a percent — never as a sentence — because a signed coloured number says
+// "up" without the word, and works in greyscale because the sign survives
+// when the colour does not.
+export function displayFigure(value, label, { tone = '', note = '', delta = null, money, percent } = {}) {
+  const dir = !delta || delta.cents === 0 ? 'flat' : delta.cents > 0 ? 'up' : 'down';
+  return html`<div class="hero">
+    <p class="hero-value ${tone}">${value}</p>
+    ${delta && money && percent
+      ? html`<p class="hero-delta ${dir}">
+          <span class="hero-arrow" aria-hidden="true">${dir === 'up' ? '▲' : dir === 'down' ? '▼' : '–'}</span>
+          <span>${money(Math.abs(delta.cents))}</span>
+          <span class="hero-pct">${percent(Math.abs(delta.bp) / 10_000, 2)}</span>
+        </p>`
+      : label
+        ? html`<p class="hero-label">${label}</p>`
+        : ''}
+    ${note ? html`<p class="hero-note">${note}</p>` : ''}
+  </div>`;
 }
 
 export function emptyPage({ title, body, actions = '' }) {

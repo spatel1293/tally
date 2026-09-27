@@ -32,6 +32,40 @@ export function percent(ratio, digits = 0) {
   }
 }
 
+// Intl hands back a hyphen-minus, which is drawn short: measured in this
+// face it is 2.8px narrower than the plus it has to line up with, so a
+// column of gains and losses sits visibly crooked. U+2212 is cut to digit
+// width in a tabular run and matches the plus exactly.
+const trueMinus = (text) => text.replace(/-/g, '\u2212');
+
+// A change, always signed, never signed when it is nought. The minus comes
+// from Intl, so it is a real minus sign rather than a hyphen — a hyphen is
+// visibly short and knocks a tabular column out of true.
+export function signedMoney(cents, { currency = state.settings.currency, locale = state.settings.locale } = {}) {
+  try {
+    return trueMinus(new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      signDisplay: 'exceptZero',
+    }).format(cents / 100));
+  } catch {
+    return `${cents > 0 ? '+' : cents < 0 ? '\u2212' : ''}$${Math.abs(cents / 100).toFixed(2)}`;
+  }
+}
+
+export function signedPercent(bp, { locale = state.settings.locale } = {}) {
+  try {
+    return trueMinus(new Intl.NumberFormat(locale, {
+      style: 'percent',
+      signDisplay: 'exceptZero',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(bp / 10_000));
+  } catch {
+    return `${bp > 0 ? '+' : bp < 0 ? '\u2212' : ''}${Math.abs(bp / 100).toFixed(2)}%`;
+  }
+}
+
 export function timeAgo(isoTimestamp) {
   if (!isoTimestamp) return 'never';
   const then = new Date(isoTimestamp);

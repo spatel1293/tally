@@ -14,16 +14,17 @@ const fmtMonths = (m) => (Number.isInteger(m) ? String(m) : m.toFixed(1));
 // Under the opening figure. A portfolio's headline is what today did; a book
 // of savings accounts had a yield instead. Whichever the book actually is,
 // it says the true thing rather than the one it was built for.
+// The one word the hero still needs. Everything else about the figure —
+// that it is the total, that the delta is today's — is carried by size,
+// position and colour.
 function headlineNote(accounts, apy, yearly) {
-  if (!accounts.length) return 'No accounts written in yet.';
-  const where = `Across ${accounts.length === 1 ? 'one account' : `${accounts.length} accounts`}`;
-  const move = ui.quotes?.size ? dayChange(accounts, ui.quotes) : null;
-  if (move) {
-    if (move.cents === 0) return `${where}. Level today.`;
-    return `${where}. ${move.cents > 0 ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`;
-  }
-  if (apy) return `${where}, earning ${rate(apy)} — about ${money(yearly)} a year without you doing anything.`;
-  return `${where}.`;
+  if (!accounts.length) return '';
+  const held = symbolsHeld(accounts).length;
+  const where = `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`;
+  // Nothing is held, so there is no "today" to report and no holdings to
+  // count. What such a book has instead is a rate, so say that.
+  if (!held) return apy ? `${where} · earns ${rate(apy)} · ${money(yearly)} a year` : where;
+  return `Today · ${held} ${held === 1 ? 'holding' : 'holdings'} · ${where}`;
 }
 
 // What the whole book is made of, largest first. This is the "holdings
@@ -37,8 +38,7 @@ function holdingsSpread(accounts) {
   const rows = allocation(valued).slice(0, 8);
   if (!rows.length) return '';
 
-  return section('What it is made of', html`<p class="marginal">Every account's holdings, together.</p>
-    <div class="alloc-bar" role="img" aria-label="How the book is spread across what it holds">
+  return section('Holdings', html`<div class="alloc-bar" role="img" aria-label="How the book is spread across what it holds">
       ${rows.map((r, i) => html`<i style="--w:${(r.bp / 100).toFixed(2)}%;--c:${PALETTE[i % PALETTE.length]}"></i>`)}
     </div>
     <ul class="plain-list ruled-list">
@@ -83,16 +83,16 @@ export function renderFund() {
 
   return html`${chapterHead('fund')}
     <div class="fund-headline">
-      ${displayFigure(money(total), 'the fund', { note: headlineNote(accounts, apy, yearly) })}
+      ${displayFigure(money(total), 'total', {
+        delta: ui.quotes?.size ? dayChange(accounts, ui.quotes) : null,
+        money, percent,
+        note: headlineNote(accounts, apy, yearly),
+      })}
     </div>
 
     ${holdingsSpread(accounts)}
 
-    ${section('Runway', months == null
-      ? html`<p class="hand">${safety
-          ? html`Put what a month costs into <a href="#/settings">the endpapers</a> and this becomes a number of months.`
-          : html`Mark one pot as the safety net and this page will tell you how long you could go without income.`}</p>`
-      : html`<div class="runway">
+    ${months == null ? '' : section('Runway', html`<div class="runway">
           ${inkRing({ ratio, tone, centre: fmtMonths(months), below: months === 1 ? 'month' : 'months', label: `Safety net covers ${fmtMonths(months)} of ${target} months` })}
           <div class="runway-words">
             <p class="hand">${months >= target

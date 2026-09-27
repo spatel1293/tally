@@ -3,7 +3,7 @@ import { state } from '../store.js';
 import { balanceHistory, fundTotal, reconcile, STALE_AFTER_DAYS, weightedApy } from '../core/fund.js';
 import { ACCOUNT_KINDS, ACCOUNT_ROLES } from '../core/defaults.js';
 import { daysBetween, dayOf } from '../core/dates.js';
-import { money, percent, date, relativeDay } from '../ui/format.js';
+import { money, percent, date, relativeDay, signedMoney, signedPercent } from '../ui/format.js';
 import { chapterHead, displayFigure, emptyPage, icons, ruledRow, section, ui } from './chrome.js';
 import { isUnlocked, vaultAvailable, vaultExists } from '../vault.js';
 import { symbolsHeld, valueAccount, formatShares, formatPrice, dayChange } from '../core/holdings.js';
@@ -57,7 +57,11 @@ export function renderLedger() {
   const selected = ui.selectedAccount && state.accounts.some((a) => a.id === ui.selectedAccount) ? ui.selectedAccount : null;
 
   return html`${head}
-    ${displayFigure(money(total), 'held', { note: bookNote() })}
+    ${displayFigure(money(total), 'total', {
+      delta: ui.quotes?.size ? dayChange(state.accounts, ui.quotes) : null,
+      money, percent,
+      note: bookNote(),
+    })}
     ${vaultNote()}
     ${priceNote()}
     <ul class="plain-list acct-list">
@@ -75,12 +79,8 @@ export function renderLedger() {
 function bookNote() {
   const held = symbolsHeld(state.accounts).length;
   const accounts = state.accounts.length;
-  const move = ui.quotes?.size ? dayChange(state.accounts, ui.quotes) : null;
-  const where = `${held ? `${held} ${held === 1 ? 'holding' : 'holdings'}` : 'Nothing written in'} across ${accounts} ${accounts === 1 ? 'account' : 'accounts'}.`;
-  if (!move) return where;
-  const dir = move.cents > 0 ? 'up' : move.cents < 0 ? 'down' : 'level';
-  if (move.cents === 0) return `${where} Level today.`;
-  return `${where} ${dir === 'up' ? 'Up' : 'Down'} ${money(Math.abs(move.cents))} today, ${percent(Math.abs(move.bp) / 10_000, 2)}.`;
+  if (!held) return '';
+  return `Today · ${held} ${held === 1 ? 'holding' : 'holdings'} · ${accounts} ${accounts === 1 ? 'account' : 'accounts'}`;
 }
 
 // Where the figures come from, if they come from anywhere but your hand.
@@ -102,9 +102,9 @@ function priceNote() {
     </div>`;
   }
   const last = state.settings.pricedAt;
-  return html`<div class="strongbox-note open">
-    <p class="marginal">${held.length === 1 ? 'One holding' : `${held.length} holdings`} priced${last ? ` ${relativeDay(dayOf(last)).toLowerCase()}` : ' — not yet today'}.</p>
-    <button type="button" class="btn small primary" data-action="prices-refresh">${icons.sync}Refresh prices</button>
+  return html`<div class="price-strip">
+    <span class="price-when">${last ? relativeDay(dayOf(last)) : 'Not priced yet'}</span>
+    <button type="button" class="btn small" data-action="prices-refresh">${icons.sync}Refresh</button>
   </div>`;
 }
 
@@ -125,19 +125,12 @@ function accountEntry(account, row, selected) {
     <button type="button" class="acct-open-btn" data-action="select-account" data-id="${account.id}">
       <span class="acct-mark" aria-hidden="true">${(account.institution || account.name).slice(0, 1).toUpperCase()}</span>
       <span class="acct-body">
-        <span class="acct-title">
-          <span class="acct-name">${account.name}</span>
-          <span class="acct-where">${account.institution || ACCOUNT_KINDS[account.kind] || 'Account'}</span>
-        </span>
-        <span class="acct-tags">
-          ${held ? html`<i class="tag">${held} ${held === 1 ? 'holding' : 'holdings'}</i>` : html`<i class="tag">${ACCOUNT_ROLES[account.role] ?? 'Other'}</i>`}
-          ${account.balanceAt ? html`<i class="tag">${relativeDay(account.balanceAt).toLowerCase()}</i>` : html`<i class="tag">never priced</i>`}
-          ${account.vault ? html`<i class="tag sealed">${icons.lock}sealed</i>` : ''}
-        </span>
+        <span class="acct-name">${account.name}</span>
+        <span class="acct-where">${subtitleFor(account, held)}</span>
       </span>
       <span class="acct-figure">
         <span class="fig ${value < 0 ? 'short' : ''}">${money(value)}</span>
-        ${move ? html`<small class="${move.cents > 0 ? 'covered' : move.cents < 0 ? 'short' : ''}">${money(move.cents, { sign: true })} today</small>` : ''}
+        ${move ? html`<small class="${move.cents > 0 ? 'covered' : move.cents < 0 ? 'short' : ''}">${signedMoney(move.cents)}</small>` : ''}
       </span>
     </button>
   </li>`;
@@ -163,6 +156,22 @@ function accountNote(account) {
     parts.push(`${gain >= 0 ? 'Ahead' : 'Behind'} ${money(Math.abs(gain))} on ${money(paid)} put in, ${percent(Math.abs(bp) / 10_000, 1)}.`);
   }
   return parts.join(' ');
+}
+
+// The second line of a row: where it is and what is in it, in one line
+// rather than three. The institution is dropped when it only repeats the
+// name — "Robinhood · Robinhood" says nothing twice — and the date is
+// dropped entirely, because the hero already says the figures are today's.
+function subtitleFor(account, held) {
+  const parts = [];
+  const where = account.institution || ACCOUNT_KINDS[account.kind] || '';
+  if (where && where.toLowerCase() !== account.name.toLowerCase()) parts.push(where);
+  // Holdings when it has them; otherwise the job it does, which is all a
+  // cash account has to say for itself.
+  if (held) parts.push(`${held} ${held === 1 ? 'holding' : 'holdings'}`);
+  else parts.push(ACCOUNT_ROLES[account.role] ?? 'Account');
+  if (account.vault) parts.push('sealed');
+  return parts.join(' · ');
 }
 
 // What one account did today, from the last quotes the book saw.

@@ -74,7 +74,7 @@ const PASSPHRASE = 'correct-horse-battery-staple';
   await page.click('[data-save]');
   await closed();
   await page.waitForSelector('.acct');
-  expect((await text('.acct-tags')).includes('sealed'), 'the entry says its details are sealed');
+  expect((await text('.acct-where')).includes('sealed'), 'the entry says its details are sealed');
 
   // ---- Masked by default ----
   await clearToasts();

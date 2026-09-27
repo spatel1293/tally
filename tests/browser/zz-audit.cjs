@@ -145,7 +145,7 @@ const bottomCheck = async (page, label) => {
     if (s.safe) await page.addStyleTag({ content: SAFE });
     if (process.env.SELFTEST) {
       // Plant a defect and make sure the audit still sees one.
-      await page.addStyleTag({ content: '.display-value{width:24px;overflow:hidden;display:inline-block} .chapter-blurb{position:relative;left:400px}' });
+      await page.addStyleTag({ content: '.hero-value{width:24px;overflow:hidden;display:inline-block} .acct-where{position:relative;left:400px}' });
       await page.waitForTimeout(200);
       const found = await audit(page, `${s.name} SELFTEST`);
       console.log(`SELFTEST at ${s.name}: ${found.length} caught`);

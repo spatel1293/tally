@@ -25,33 +25,33 @@
 }
 
 :root {
-  /* The book face is the best serif the device already has: nothing to
-     download, nothing asked of a third party, and every platform ships one
-     drawn for setting text. Public Sans stays for small caps and labels —
-     the printed equivalent of a different case, not a different voice. */
-  --book: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Noto Serif', 'Times New Roman', serif;
-  --hand: 'Public Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* One sans, everywhere. A portfolio screen is a table of numbers, and a
+     book face sets prose beautifully and figures badly — the reason this
+     app read as wordy was as much the serif as the sentences. Public Sans
+     is already here and already self-hosted, so nothing new is fetched. */
+  --book: 'Public Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --hand: var(--book);
 
-  /* Paper and ink: warm and low-contrast, the way a page is. Never black on
-     white, never white on black. */
-  --paper: #efe7d7;
-  --paper-2: #e7dcc7;
-  --paper-edge: #d8c9ab;
-  --ink: #241d14;
-  --ink-2: #4a3f31;
-  --ink-3: #6f6150;
+  /* Surfaces and ink. Still warm and still low-contrast — that part was
+     never the problem — but neutral enough that figures read as figures. */
+  --paper: #f7f6f4;
+  --paper-2: #eeecea;
+  --paper-edge: #e4e1dd;
+  --ink: #16151a;
+  --ink-2: #3b3a41;
+  --ink-3: #62606a;
   /* The quietest ink that is still a word. Anything printed in it must pass
      AA against the paper; anything quieter than this is a mark, not a word,
      and uses --ink-faint. */
-  --ink-4: #6d5f4d;
-  --ink-faint: #9c8c74;
+  --ink-4: #6b6974;
+  --ink-faint: #a5a2ad;
   --rule: rgb(78 62 40 / 0.26);
   --rule-soft: rgb(78 62 40 / 0.14);
 
   /* Three inks that mean money, one for the binding. */
-  --covered: #2f6b3f;
-  --thin: #7d6019;
-  --short: #9c3323;
+  --covered: #0f7a4a;
+  --thin: #8a6a1f;
+  --short: #c0392b;
   --accent: #1d4e6f;
   --accent-ink: #f6efe0;
   --ribbon: #8c2f2a;
@@ -71,11 +71,11 @@
   --pill: 999px;
 
   /* A book is set on one scale and stays on it. */
-  --t-display: clamp(2.3rem, 11cqi, 3.5rem);
-  --t-body: 1.0625rem;
-  --t-small: 0.9375rem;
+  --t-display: clamp(2.5rem, 12cqi, 3.25rem);
+  --t-body: 0.9375rem;
+  --t-small: 0.875rem;
   --t-caption: 0.8125rem;
-  --t-tiny: 0.6875rem;
+  --t-tiny: 0.75rem;
 
   --measure: 34rem;
   --pad: 20px;
@@ -92,22 +92,23 @@
   color-scheme: light;
 }
 
-/* Night reading: a dark board with the same warm ink reversed out of it. */
+/* Night: a near-black surface, which is what every app of this kind uses,
+   because a figure in the dark wants contrast rather than warmth. */
 :root[data-theme='dark'] {
-  --paper: #17130e;
-  --paper-2: #1f1913;
-  --paper-edge: #0d0a07;
-  --ink: #efe3cd;
-  --ink-2: #d2c3a9;
-  --ink-3: #a9987c;
-  --ink-4: #a2917a;
-  --ink-faint: #7d6e58;
-  --rule: rgb(220 200 165 / 0.22);
-  --rule-soft: rgb(220 200 165 / 0.12);
+  --paper: #111114;
+  --paper-2: #1a1a1f;
+  --paper-edge: #09090b;
+  --ink: #f4f4f6;
+  --ink-2: #c9c8d0;
+  --ink-3: #9b99a4;
+  --ink-4: #8a8893;
+  --ink-faint: #56545e;
+  --rule: rgb(255 255 255 / 0.14);
+  --rule-soft: rgb(255 255 255 / 0.08);
 
-  --covered: #71b585;
-  --thin: #d8ad55;
-  --short: #dd7361;
+  --covered: #32d583;
+  --thin: #fdb022;
+  --short: #f97066;
   --accent: #8fbcd8;
   --accent-ink: #13100c;
   --ribbon: #a9433c;
@@ -1095,22 +1096,16 @@ button.ruled-row:hover {
   background: linear-gradient(90deg, var(--rule-soft), transparent 70%);
 }
 
-/* An entry is a printed record, so its particulars get their own line under
-   the name rather than being squeezed into the column between the mark and
-   the figure. Laid out as a grid: the mark, the name and the figure share
-   the first line; the particulars run the full measure beneath them. The
-   body is display: contents so its two children become grid items directly,
-   which keeps the markup as it is. */
+/* A row is three things across: a mark, what it is, what it is worth. It
+   was a grid when the particulars needed a second full-width line of their
+   own; now that they fit under the name, a flex row says it more simply and
+   keeps the name from colliding with the figure. */
 .acct-open-btn {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    'mark title figure'
-    '.    tags  tags';
-  align-items: start;
-  gap: 2px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 14px 2px;
+  padding: 10px 2px;
   border: 0;
   background: none;
   color: inherit;
@@ -1118,11 +1113,34 @@ button.ruled-row:hover {
   text-align: left;
 }
 
-.acct-open-btn .acct-mark { grid-area: mark; }
-.acct-open-btn .acct-body { display: contents; }
-.acct-open-btn .acct-title { grid-area: title; }
-.acct-open-btn .acct-tags { grid-area: tags; }
-.acct-open-btn .acct-figure { grid-area: figure; }
+.acct-open-btn .acct-mark { flex: none; }
+
+.acct-open-btn .acct-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* Without this a long name refuses to shrink and pushes the figure off
+     the row — the oldest bug in this codebase's list of gotchas. */
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.acct-open-btn .acct-name,
+.acct-open-btn .acct-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct-open-btn .acct-figure {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: right;
+  white-space: nowrap;
+}
 
 /* An institution's initial, stamped. */
 .acct-mark {
@@ -2813,6 +2831,236 @@ main[data-turned] .ruled-list .ruled:nth-child(n + 6) { animation-delay: 260ms; 
 
 ::view-transition-new(page) {
   transform-origin: left center;
+}
+
+
+/* ==========================================================================
+   The instrument
+   --------------------------------------------------------------------------
+   A portfolio screen is a table of numbers, and the job is to be readable in
+   a glance rather than a sentence. Three rules do most of the work:
+   position and size say what a figure is, so it needs no label; figures are
+   right-aligned and tabular, so magnitude reads as length without being
+   read; and direction is carried by a sign as well as a colour, so it
+   survives greyscale and colour blindness both.
+   ========================================================================== */
+
+/* Every figure in the book, everywhere. Tabular so a column lines up and so
+   a live value does not jitter as it ticks; lining so it sits in a row of
+   digits rather than in a line of prose. */
+.hero-value,
+.hero-delta,
+.ruled-value,
+.fig,
+.acct-figure,
+.pot-pct,
+.display-value,
+td,
+th,
+input {
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+/* ---------- The hero ---------- */
+
+.hero {
+  margin: 4px 0 20px;
+}
+
+.hero-value {
+  font-size: var(--t-display);
+  font-weight: 600;
+  line-height: 1.04;
+  /* Default tracking is drawn for body copy and reads loose at display size. */
+  letter-spacing: -0.022em;
+  color: var(--ink);
+}
+
+/* Roughly a third of the hero: unambiguous as secondary, still large enough
+   to read without looking for it. Colour lives here and nowhere else — the
+   total itself is always ink, so the screen stays calm. */
+.hero-delta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  margin-top: 4px;
+  font-size: calc(var(--t-display) * 0.33);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
+}
+
+.hero-delta.up { color: var(--covered); }
+.hero-delta.down { color: var(--short); }
+
+.hero-arrow {
+  font-size: 0.72em;
+  line-height: 1;
+}
+
+.hero-pct {
+  font-size: 0.86em;
+  opacity: 0.85;
+}
+
+.hero-label,
+.hero-note {
+  margin-top: 4px;
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+}
+
+.hero-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--t-tiny);
+  color: var(--ink-4);
+}
+
+/* ---------- Rows ---------- */
+
+/* Leader dots were the book's way of tying a name to a figure across a gap.
+   In a column of figures the alignment already does that, and forty rows of
+   dots is forty rows of ink carrying no information. */
+.ruled-leader {
+  display: none;
+}
+
+.ruled-row {
+  gap: 12px;
+  min-height: 48px;
+  align-items: center;
+}
+
+.ruled-name {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ruled-value {
+  flex: none;
+  text-align: right;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 550;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* A figure is ink. Only a change is coloured. */
+.ruled-value.covered { color: var(--covered); }
+.ruled-value.short { color: var(--short); }
+.ruled-value.thin { color: var(--thin); }
+
+/* ---------- Holdings and accounts ---------- */
+
+/* One row, two columns, two lines each: what it is on the left, what it is
+   worth on the right. No dividers between them — alignment groups the
+   column, and a rule under every row is ink that says nothing. */
+.acct-open-btn {
+  min-height: 56px;
+  gap: 2px 12px;
+  padding: 10px 2px;
+}
+
+.acct-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.acct-where {
+  color: var(--ink-3);
+  font-size: var(--t-caption);
+}
+
+.acct-figure .fig {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.acct-figure small {
+  font-size: var(--t-caption);
+  font-style: normal;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.acct-figure small.covered { color: var(--covered); }
+.acct-figure small.short { color: var(--short); }
+
+/* The particulars under a name: quiet, and one line. */
+.acct-tags .tag {
+  font-size: var(--t-tiny);
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+}
+
+/* ---------- Quieter furniture ---------- */
+
+/* The ribbon was part of the book, and the book is gone. */
+.ribbon {
+  display: none;
+}
+
+.section-rule h2 {
+  font-size: var(--t-tiny);
+  letter-spacing: 0.09em;
+  color: var(--ink-4);
+  font-weight: 600;
+}
+
+.chapter-title {
+  font-size: 1.375rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.chapter-head {
+  margin-bottom: 10px;
+  padding-top: 2px;
+}
+
+/* When the figures were last asked for, and the one control that asks
+   again. It was a sentence and a primary button taking a block of the
+   screen; it is a line. */
+.price-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.price-when {
+  font-size: var(--t-caption);
+  color: var(--ink-4);
+}
+
+/* Two lines, and the second is quiet. */
+.acct-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* A percentage beside a name is a figure, not an aside — it was being set
+   in italic, which is a prose convention and made it read as commentary. */
+.ruled-name small {
+  font-style: normal;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--ink-4);
+  font-size: var(--t-caption);
+}
+
+/* An aside is a note, not a panel. */
+.strongbox-note {
+  border-left-width: 2px;
+  padding: 2px 0 10px 12px;
+  margin: 12px 0;
+  font-size: var(--t-small);
 }
 
 @media (prefers-reduced-motion: reduce) {

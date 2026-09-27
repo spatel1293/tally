@@ -66,7 +66,7 @@ const expect = (ok, message) => {
   // one, so it moved off the list and into the account's own page (and the
   // Review chapter still checks it across the book).
   expect(/holdings?|Savings buckets|Investing/i.test(ledger), 'each entry says what is in it');
-  expect((await text('.display-figure')).includes('$18,800.00'), 'the chapter totals what is held');
+  expect((await text('.hero')).includes('$18,800.00'), 'the screen totals what is held');
 
   // ---- Pots: what the money is for ----
   await clearToasts();
