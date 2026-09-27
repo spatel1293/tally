@@ -115,7 +115,12 @@ const PASSPHRASE = 'correct-horse-battery-staple';
   await page.waitForSelector('dialog#confirm[open]');
   await page.fill('#vault-pass', 'not the passphrase');
   await page.click('dialog#confirm button[type=submit]');
-  await page.waitForTimeout(400);
+  // Checking a passphrase is 300,000 PBKDF2 rounds, which under load takes
+  // longer than any fixed sleep worth writing. Wait for the answer itself.
+  await page.waitForFunction(
+    () => { const e = document.querySelector('#vault-error'); return e && !e.hidden && e.textContent.trim().length > 0; },
+    { timeout: 15000 }
+  ).catch(() => {});
   expect(!(await page.isHidden('#vault-error')), 'the wrong passphrase is refused');
   await page.fill('#vault-pass', PASSPHRASE);
   await page.click('dialog#confirm button[type=submit]');

@@ -1,0 +1,53 @@
+name: Tell the phone what the day did
+
+# The only part of this book that is awake when the book itself is shut.
+# It prices the holdings it was given and pushes one line to the phone.
+#
+# Two secrets make it work, both set once in Settings → Secrets → Actions:
+#
+#   TALLY_WATCH    the line the book's endpapers generate. It carries where
+#                  to push, what is held, and the price key to value it with.
+#                  Generate it again whenever the holdings change.
+#   VAPID_PRIVATE  the private half of the signing key, from vapid.local.json
+#
+# VAPID_PUBLIC is not secret and is committed in js/notify.js, but it is read
+# from a variable here so the two can never drift apart unnoticed.
+
+on:
+  schedule:
+    # 21:10 UTC on weekdays — a little after the US close, which is 21:00 UTC
+    # in summer and 22:00 in winter. GitHub's scheduler is best-effort and
+    # can run late under load; nothing here minds being a few minutes off.
+    - cron: '10 21 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Work out the figure but send nothing'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify
+  cancel-in-progress: true
+
+jobs:
+  tell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Price the book and push
+        env:
+          TALLY_WATCH: ${{ secrets.TALLY_WATCH }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          VAPID_PUBLIC: ${{ vars.VAPID_PUBLIC }}
+          VAPID_SUBJECT: ${{ vars.VAPID_SUBJECT }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: node scripts/send-push.js

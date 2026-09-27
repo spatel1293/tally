@@ -16,6 +16,9 @@ export const ui = {
   prices: new Map(),
   // The quotes behind those prices, for showing a day's movement.
   quotes: new Map(),
+  // The line to paste into the repository's secrets, once it is generated.
+  // Memory-only: it is shown to be copied, not kept.
+  watchLine: '',
 };
 
 export const CHAPTERS = [

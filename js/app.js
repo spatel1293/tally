@@ -9,6 +9,7 @@ import { money } from './ui/format.js';
 import { openAccountForm, openBalanceForm, openPositionForm, openPriceKeyForm, openPlanForm, openPlanAdjust, passphraseDialog } from './views/forms.js';
 import { refreshPrices } from './valuation.js';
 import { pricesFrom } from './prices.js';
+import { enableNotifications, disableNotifications, watchLine } from './notify.js';
 import { renderFund, fundFacingPage } from './views/fund.js';
 import { renderPots, potDetail, afterPotsMount, resetScenario } from './views/pots.js';
 import { renderLedger, accountDetail, sealedFields } from './views/ledger.js';
@@ -316,6 +317,30 @@ const actions = {
     } catch {
       toast('This browser wouldn’t let the book use the clipboard.', { tone: 'error' });
     }
+  },
+
+  'notify-on': async (el) => {
+    el.disabled = true;
+    try {
+      const result = await enableNotifications();
+      if (!result.ok) {
+        toast(result.error, { tone: 'error', duration: 8000 });
+        return;
+      }
+      ui.watchLine = watchLine(result.subscription);
+      toast('Copy the line into the repository and it will tell you daily.', { duration: 8000 });
+      render({ keepScroll: true });
+    } catch (err) {
+      fail(err);
+    } finally {
+      el.disabled = false;
+    }
+  },
+  'notify-off': async () => {
+    await disableNotifications();
+    ui.watchLine = '';
+    toast('It will stop telling you once the secret is removed too.');
+    render({ keepScroll: true });
   },
 
   'price-key': () => openPriceKeyForm(),

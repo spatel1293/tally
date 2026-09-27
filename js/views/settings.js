@@ -7,9 +7,10 @@ import { formatMoney } from '../core/money.js';
 import { APP_VERSION } from '../core/defaults.js';
 import { dayOf } from '../core/dates.js';
 import { money, date, timeAgo, plural } from '../ui/format.js';
-import { chapterHead, icons, ruledRow, section } from './chrome.js';
+import { chapterHead, icons, ruledRow, section, ui } from './chrome.js';
 import { vaultAvailable, vaultExists, isUnlocked } from '../vault.js';
 import { symbolsHeld } from '../core/holdings.js';
+import { pushAvailable, pushPermission } from '../notify.js';
 
 const CURRENCIES = [
   ['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'],
@@ -236,6 +237,21 @@ export function renderSettings() {
             <button type="button" class="btn primary" data-action="prices-refresh">${icons.sync}Refresh prices now</button>
             <button type="button" class="btn ghost" data-action="price-key">Change the key</button>
           </div>`}`, { id: 'prices' })}
+
+    ${section('Being told', html`${!pushAvailable()
+      ? html`<p class="hand">Telling you needs the installed book. Add Tally to your home screen and this appears.</p>`
+      : pushPermission() === 'denied'
+        ? html`<p class="hand">Notifications are switched off for this book. Android’s own settings are the only place that can be turned back on.</p>`
+        : html`<p class="hand">The book can tell you what the day did, once a day, without you opening it. Turning it on gives you one line to paste into this repository’s secrets — that is what actually does the telling, on a schedule, for nothing.</p>
+            <div id="watch-slot">${ui.watchLine
+              ? html`<p class="marginal">Paste this into the repository as a secret called <code>TALLY_WATCH</code>. It carries where to push, what you hold, and the price key — no passphrase, nothing sealed.</p>
+                  <label class="field"><span class="label">Your watch line</span><textarea rows="4" readonly onclick="this.select()">${ui.watchLine}</textarea></label>
+                  <p class="hint">Generate it again whenever your holdings change.</p>`
+              : ''}</div>
+            <div class="btn-row">
+              <button type="button" class="btn primary" data-action="notify-on">${icons.sync}${ui.watchLine ? 'Generate the line again' : 'Tell me daily'}</button>
+              ${ui.watchLine ? html`<button type="button" class="btn ghost" data-action="notify-off">Stop telling me</button>` : ''}
+            </div>`}`, { id: 'told' })}
 
     ${section('Copies', html`<p class="hand">${s.lastExportAt ? `Last copy saved ${timeAgo(s.lastExportAt)}.` : 'No copy saved yet.'} This device holds the only one otherwise.</p>
       <div class="btn-row">

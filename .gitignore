@@ -1,3 +1,8 @@
 node_modules/
 .DS_Store
 dist/site/
+
+# The VAPID private key for push notifications. It signs pushes to your
+# phone; it is not a credential for anything of yours, but it should not be
+# public, and this repository is.
+vapid.local.json

@@ -7,8 +7,8 @@ you write in once, and everything else follows from them.
 
 No backend of mine and no account to sign into. Account numbers and logins
 are sealed with a passphrase that is never stored anywhere. Nothing leaves the
-device unless you export it — or unless you connect a bridge, which you run,
-and which only ever reports balances.
+device unless you export it. The one thing it asks the network is what a
+share costs — never what you hold, never who you are.
 
 ## What's in it
 
@@ -26,11 +26,11 @@ and which only ever reports balances.
   safety net covers its target, which pots have no home, which balances have
   gone stale, which logins still have no second step.
 - **Endpapers** — the two monthly figures, paper and theme, copies, the
-  strongbox and the bridge.
+  strongbox and the price feed.
 
 Balances are *stated*, not derived. You read a statement and write the figure
-in, and every earlier reading stays on record — or you connect a bridge and
-the figures are read for you.
+in, and every earlier reading stays on record — or you write in what an
+account holds and the book prices it for you from then on.
 
 ## Run it
 
@@ -66,8 +66,7 @@ connection.
 
 It has to be **https**, not the LAN address `npm start` prints. The strongbox
 uses the browser's own encryption, which is only handed out on a secure
-address, so over plain http the sealed pages — and the bridge with them —
-cannot be set up at all. The book will say so rather than leaving you
+address, so over plain http the sealed pages cannot be set up at all. The book will say so rather than leaving you
 guessing.
 
 ### Shipping an update
@@ -75,58 +74,84 @@ guessing.
 Bump `VERSION` in `sw.js` and `APP_VERSION` in `js/core/defaults.js` together,
 then upload. Open devices pick the new version up on their next launch.
 
-## Connecting a bridge
+## Pricing what you hold
 
-Balances can be read for you instead of typed in, using
-[SimpleFIN](https://www.simplefin.org) — a flat **$1.50/month or $15/year**,
-paid by you, directly, to them. There is nothing to run and nothing to
-install: no server, no certificate, no program on your laptop that has to
-stay open. The whole thing lives in the browser.
+Balances are not fetched from a bank. The book stores **what each account
+holds** — a ticker and a share count — and prices those holdings itself. The
+whole thing is free, and there is nothing to run: no server, no bridge, no
+aggregator account.
 
-```
-your bank  →  your SimpleFIN bridge  →  this device
-```
+The reason it works is that the two halves move at very different speeds:
 
-You sign up with the bridge and connect your own banks there; the bridge
-hands you a *setup token* that turns into a sealed *access URL* — a single
-address with its own credentials baked in, good for reading balances and
-nothing else. Nothing of mine sits anywhere on that path: your bank talks to
-your bridge, and your bridge talks to this device, directly, over the same
-connection the book itself is loaded on. The book works with the aeroplane
-mode on except for the moment it actually reads a balance.
+> **Holdings change rarely. Prices change daily.**
+
+So the part that is expensive and gated — reading positions out of a broker —
+only has to happen occasionally, by hand, while the part that actually keeps
+the number fresh is free and unlimited.
 
 ### Setting it up
 
-1. **Sign up at [simplefin.org](https://www.simplefin.org)** and connect the
-   institutions you want the book to follow. This is where the cost is —
-   check your banks are listed before paying.
-2. **Generate a setup token** — a long line of letters and numbers, good for
-   one claim.
-3. In Tally: **Endpapers → Connections → Connect a bridge**, paste it in, and
-   open the strongbox when asked.
-4. **Accounts** then lists what the bridge offers, usually right away. Write
-   in the ones you want the book to follow, and leave the rest.
-5. Press **Read balances** whenever you like, from wherever you are — there
-   is no local machine that has to be reachable.
+1. **Get a free key from [twelvedata.com](https://twelvedata.com/pricing)** —
+   self-serve, about a minute, and yours for good.
+2. In Tally: **Endpapers → The price feed → Add a price key**.
+3. **Write in what each account holds.** Open an account, press *Write in a
+   holding*, and give it a ticker and a share count. Fractional shares are
+   fine. What you paid is optional — it is what lets the book show a gain
+   rather than just a figure.
+4. Press **Refresh prices**. The whole book is priced in one request.
 
-A setup token can only be claimed once. If something goes wrong partway
-through, generate a new one and start again.
+The free allowance is 800 requests a day and the book uses **one per
+refresh**, however many holdings there are, because the feed takes a
+comma-separated list. You will not get near the limit.
 
-### What this does and does not do
+### Where the holdings come from
 
-- **Only the balance and the date it was read** are ever taken from the
-  bridge. The name you gave an account, the job you gave it, the rate you
-  wrote down and the pots kept in it stay yours — a bank renaming an account
-  will not rewrite your book.
-- **A balance that hasn't moved is not a new reading**, so reading twice in a
-  day doesn't fill the history with identical entries.
-- **Transactions are never requested.** The read asks for balances only, so a
-  list of what you spent never crosses the wire. This app does not log
-  spending and does not want the data.
-- **The access URL is the whole credential**, so it is sealed in the
-  strongbox. Reading balances only works while the strongbox is open.
-- **Disconnecting** forgets the address. Every balance it ever read stays in
-  the book. To revoke it for good, do that at the bridge.
+| Account | How its holdings get in |
+| --- | --- |
+| **Robinhood** | By hand today. Its official agent API is a public OAuth client with `Access-Control-Allow-Origin: *`, so a browser-direct connector is possible with no server — it needs a dedicated Robinhood "Agentic" account and its schema is undocumented. |
+| **Charles Schwab** | By hand. Its official API is free but is a confidential client (needs a server to hold the secret) and forces a browser re-login every seven days. |
+| **Wealthfront** | By hand. It has no public API of any kind — confirmed by searching its own help centre, which returns nothing but articles about APY. |
+
+Either way, **the value updates automatically**. Only the share counts need
+an occasional look-in, and those change rarely enough to be a few minutes a
+quarter rather than a daily chore.
+
+### What it does and does not do
+
+- **Only what a share costs** ever leaves the device. The request names the
+  tickers; it carries no identity, no balance, no share count, and nothing
+  sealed.
+- **Transactions are never involved.** There is no aggregator and nothing that
+  could see what you spent.
+- **A holding the feed will not quote is reported, never counted as nothing**,
+  and an account that is only half priced keeps its last complete figure
+  rather than filing an understatement.
+- **No floating point touches a figure.** Shares and prices are scaled
+  integers multiplied in `BigInt` and rounded once, at the end, into cents.
+- **A valuation is filed as a dated reading**, exactly like a hand-written
+  one, so the history and the charts work the same either way.
+
+## Being told what the day did
+
+The book can push a notification to your phone once a day, without you opening
+it. This is also free, and it runs in this repository rather than on a server.
+
+1. In Tally: **Endpapers → Being told → Tell me daily**, and allow
+   notifications. It gives you one long line.
+2. In the repository: **Settings → Secrets and variables → Actions**, and add
+   - a secret `TALLY_WATCH` — the line from step 1
+   - a secret `VAPID_PRIVATE` — the `private` value from `vapid.local.json`
+   - a variable `VAPID_PUBLIC` — the `public` value from the same file
+3. That's it. [.github/workflows/notify.yml](.github/workflows/notify.yml)
+   runs on weekday afternoons, prices your holdings, and pushes one line.
+
+Generate the watch line again whenever your holdings change — it carries them,
+so the job knows what to value. To try it without waiting for the schedule,
+run the workflow by hand from the Actions tab; there is a *dry run* option
+that works out the figure and sends nothing.
+
+The job holds nothing. It writes nothing back, keeps no balance and no
+history, and learns only what is already in the secret you gave it.
 
 ## How your data is stored
 
@@ -151,7 +176,7 @@ Everything lives in the browser you use, on that device.
 ### The strongbox
 
 Account numbers, routing numbers, usernames, passwords, private notes and a
-bridge's address are encrypted with AES-GCM under a key derived from your
+private notes are encrypted with AES-GCM under a key derived from your
 passphrase (PBKDF2, 300,000 rounds). The passphrase is never stored, so there
 is no way to recover it: lose it and the sealed pages stay shut for good. The
 key lives only in memory, and the strongbox shuts itself on a timer and
@@ -219,8 +244,8 @@ npm run test:browser   # 5 browser test files (needs Playwright, see below)
 - totals, weighted yield, reconciling pots against balances, stale readings
 - pot progress, shares of the surplus, compounding, milestones and runway
 - the quarterly review checklist
-- exact cents from the bridge's decimal strings, and what a sync may and may
-  not change
+- exact cents from the feed's decimal strings, shares and prices as scaled
+  integers, and the multiplication that turns them into money
 - validation and backup round trips, including damaged files
 - the offline file list, and HTML escaping of user text
 
@@ -231,8 +256,9 @@ Fold and laptop sizes, including both folded postures:
 - `strongbox.cjs` — that sealed plaintext is in neither the page nor storage
 - `book.cjs` — the spread, the crease, sheets on the facing leaf, safe areas,
   and a sweep for clipping and overflow at every size
-- `bridge.cjs` — connecting, reading, adopting and disconnecting a bridge,
-  against a stubbed one; no real bridge, provider account or money involved
+- `holdings.cjs` — writing in holdings, pricing the book, and the two things
+  that must not happen: a holding silently counted as nothing, and a
+  half-priced account filed as a reading. The feed is stubbed throughout
 - `zz-audit.cjs` — a layout audit over every chapter
 
 They also fail on any browser console error, or if a page becomes wider than
@@ -270,7 +296,7 @@ js/
     plans.js            Pots: progress, shares, yield, milestones, runway
     fund.js             Accounts: totals, yield, reconciliation, history
     advisor.js          The quarterly review as a checklist
-    link.js             Reading a bridge's figures, exactly
+    holdings.js         Positions, prices, and what they are worth
     validate.js         Record checks and backup parsing
     defaults.js         The one shape a record has, the palette, settings
   ui/                   Templating, sheets and toasts, charts, formatting
@@ -289,8 +315,8 @@ dist/tally.html         The single-file build
   in the browser. There are no runtime dependencies, so nothing needs
   updating.
 - **Money is whole cents,** never a decimal fraction, so sums are exact. A
-  balance read from a bridge arrives as a decimal string and is converted with
-  integer arithmetic, so no float ever touches it.
+  price arrives as a decimal string and becomes a scaled integer, multiplied
+  in BigInt, so no float ever touches a figure.
 - **Percentages are basis points.** A share of 4.25% is stored as 425, and
   the shares are floored so they can never claim more than the surplus.
 - **Dates are calendar dates** (`2026-09-23`) calculated in UTC, so a
@@ -300,5 +326,4 @@ dist/tally.html         The single-file build
 - **All user text is escaped** before it's shown, so a note can never inject
   markup.
 - **Changing the currency only changes the symbol.** Amounts are not
-  converted, and there's one currency per book. An account a bridge reports in
-  another currency is refused rather than mixed in.
+  converted, and there's one currency per book.

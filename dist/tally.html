@@ -3608,7 +3608,7 @@ const __m_js_core_defaults_js = (() => {
 const APP_NAME = 'Tally';
 // Kept in step with VERSION in sw.js by a test, so the line in Settings is a
 // reliable way to tell which build a device is actually running.
-const APP_VERSION = '6.0.0';
+const APP_VERSION = '6.1.0';
 // 4 is the fund: accounts carry a stated balance and its history, the monthly
 // surplus is two figures in settings rather than a ledger of transactions,
 // and spending is no longer logged at all. Older backups still restore — the
@@ -5297,6 +5297,9 @@ const ui = {
   prices: new Map(),
   // The quotes behind those prices, for showing a day's movement.
   quotes: new Map(),
+  // The line to paste into the repository's secrets, once it is generated.
+  // Memory-only: it is shown to be copied, not kept.
+  watchLine: '',
 };
 
 const CHAPTERS = [
@@ -6314,6 +6317,114 @@ async function refreshPrices({ apiKey = state.settings.priceKey, today = state.t
 
 
 return { refreshPrices, describePriceError };
+})();
+
+// js/notify.js
+const __m_js_notify_js = (() => {
+// Being told, rather than remembering to look.
+//
+// A notification that arrives while the book is shut cannot come from the
+// book — a page that is not open cannot do anything. It has to be *pushed*
+// to the device by something that is awake, which for this book is a
+// scheduled job in the same GitHub repository that publishes it. Free, and
+// already there.
+//
+// So this file does the phone's half: asks permission, subscribes to the
+// browser's push service, and hands back one line to paste into the
+// repository's secrets. The job's half is `scripts/send-push.js`.
+//
+// The line carries three things the job needs and nothing else: where to
+// push, what is held, and the price key to value it with. No passphrase, no
+// account number, nothing sealed — none of which the job has any use for.
+
+const { state } = __m_js_store_js;
+const { symbolsHeld, formatShares } = __m_js_core_holdings_js;
+// The public half of the signing key. It is meant to be public — it is how
+// the browser's push service recognises pushes as coming from this book.
+const VAPID_PUBLIC = 'BADN92uRc1xhfprnNWrW62jwyaFxbe-LtEAoz9AjTLklkYPE2pZOm0s_asQzl_9pKh0xm0n7iZ9nHYWtwUoANZg';
+
+function pushAvailable() {
+  return typeof Notification !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+}
+
+function pushPermission() {
+  return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+}
+
+// base64url → the Uint8Array the PushManager wants.
+function decodeKey(base64url) {
+  const padded = base64url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (base64url.length % 4)) % 4);
+  const raw = atob(padded);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function currentSubscription() {
+  if (!pushAvailable()) return null;
+  const registration = await navigator.serviceWorker.ready;
+  return registration.pushManager.getSubscription();
+}
+
+// Asks, then subscribes. Permission has to be asked for from a real tap, so
+// this is only ever called from a button.
+async function enableNotifications() {
+  if (!pushAvailable()) return { ok: false, error: 'This browser can’t be told anything. Install the book to your home screen and try from there.' };
+
+  const permission = await Notification.requestPermission();
+  if (permission === 'denied') {
+    return { ok: false, error: 'Notifications are turned off for this book. Android’s own settings are the only place that can be undone.' };
+  }
+  if (permission !== 'granted') return { ok: false, error: 'Not now, then. The button is here whenever.' };
+
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      // Android will not allow a silent push, and this book has no use for
+      // one anyway: every push it sends is something worth reading.
+      userVisibleOnly: true,
+      applicationServerKey: decodeKey(VAPID_PUBLIC),
+    });
+  }
+  return { ok: true, subscription };
+}
+
+async function disableNotifications() {
+  const subscription = await currentSubscription();
+  if (subscription) await subscription.unsubscribe();
+}
+
+// One line for the repository's secrets.
+//
+// Holdings go in it because the job has to know what to value, and they
+// change rarely — which is the whole premise of this book. When they do
+// change, the line is generated again and pasted again.
+function watchLine(subscription) {
+  if (!subscription) return '';
+  const holdings = [];
+  for (const account of state.accounts) {
+    for (const position of account.positions ?? []) {
+      holdings.push({ s: position.symbol, q: formatShares(position.shares) });
+    }
+  }
+  const payload = {
+    v: 1,
+    sub: subscription.toJSON ? subscription.toJSON() : subscription,
+    holdings,
+    key: state.settings.priceKey || '',
+  };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+}
+
+// What the line is about to say, so it can be shown before it is copied.
+function watchSummary() {
+  const held = symbolsHeld(state.accounts).length;
+  return {
+    held,
+    hasKey: Boolean(state.settings.priceKey),
+  };
+}
+
+return { VAPID_PUBLIC, pushAvailable, pushPermission, currentSubscription, enableNotifications, disableNotifications, watchLine, watchSummary };
 })();
 
 // js/core/fund.js
@@ -7502,9 +7613,10 @@ const { formatMoney } = __m_js_core_money_js;
 const { APP_VERSION } = __m_js_core_defaults_js;
 const { dayOf } = __m_js_core_dates_js;
 const { money, date, timeAgo, plural } = __m_js_ui_format_js;
-const { chapterHead, icons, ruledRow, section } = __m_js_views_chrome_js;
+const { chapterHead, icons, ruledRow, section, ui } = __m_js_views_chrome_js;
 const { vaultAvailable, vaultExists, isUnlocked } = __m_js_vault_js;
 const { symbolsHeld } = __m_js_core_holdings_js;
+const { pushAvailable, pushPermission } = __m_js_notify_js;
 const CURRENCIES = [
   ['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'],
   ['NZD', 'New Zealand dollar'], ['JPY', 'Japanese yen'], ['CNY', 'Chinese yuan'], ['INR', 'Indian rupee'], ['MXN', 'Mexican peso'],
@@ -7731,6 +7843,21 @@ function renderSettings() {
             <button type="button" class="btn ghost" data-action="price-key">Change the key</button>
           </div>`}`, { id: 'prices' })}
 
+    ${section('Being told', html`${!pushAvailable()
+      ? html`<p class="hand">Telling you needs the installed book. Add Tally to your home screen and this appears.</p>`
+      : pushPermission() === 'denied'
+        ? html`<p class="hand">Notifications are switched off for this book. Android’s own settings are the only place that can be turned back on.</p>`
+        : html`<p class="hand">The book can tell you what the day did, once a day, without you opening it. Turning it on gives you one line to paste into this repository’s secrets — that is what actually does the telling, on a schedule, for nothing.</p>
+            <div id="watch-slot">${ui.watchLine
+              ? html`<p class="marginal">Paste this into the repository as a secret called <code>TALLY_WATCH</code>. It carries where to push, what you hold, and the price key — no passphrase, nothing sealed.</p>
+                  <label class="field"><span class="label">Your watch line</span><textarea rows="4" readonly onclick="this.select()">${ui.watchLine}</textarea></label>
+                  <p class="hint">Generate it again whenever your holdings change.</p>`
+              : ''}</div>
+            <div class="btn-row">
+              <button type="button" class="btn primary" data-action="notify-on">${icons.sync}${ui.watchLine ? 'Generate the line again' : 'Tell me daily'}</button>
+              ${ui.watchLine ? html`<button type="button" class="btn ghost" data-action="notify-off">Stop telling me</button>` : ''}
+            </div>`}`, { id: 'told' })}
+
     ${section('Copies', html`<p class="hand">${s.lastExportAt ? `Last copy saved ${timeAgo(s.lastExportAt)}.` : 'No copy saved yet.'} This device holds the only one otherwise.</p>
       <div class="btn-row">
         <button type="button" class="btn primary" data-action="export-json">Save a copy</button>
@@ -7790,6 +7917,7 @@ const { money } = __m_js_ui_format_js;
 const { openAccountForm, openBalanceForm, openPositionForm, openPriceKeyForm, openPlanForm, openPlanAdjust, passphraseDialog } = __m_js_views_forms_js;
 const { refreshPrices } = __m_js_valuation_js;
 const { pricesFrom } = __m_js_prices_js;
+const { enableNotifications, disableNotifications, watchLine } = __m_js_notify_js;
 const { renderFund, fundFacingPage } = __m_js_views_fund_js;
 const { renderPots, potDetail, afterPotsMount, resetScenario } = __m_js_views_pots_js;
 const { renderLedger, accountDetail, sealedFields } = __m_js_views_ledger_js;
@@ -8096,6 +8224,30 @@ const actions = {
     } catch {
       toast('This browser wouldn’t let the book use the clipboard.', { tone: 'error' });
     }
+  },
+
+  'notify-on': async (el) => {
+    el.disabled = true;
+    try {
+      const result = await enableNotifications();
+      if (!result.ok) {
+        toast(result.error, { tone: 'error', duration: 8000 });
+        return;
+      }
+      ui.watchLine = watchLine(result.subscription);
+      toast('Copy the line into the repository and it will tell you daily.', { duration: 8000 });
+      render({ keepScroll: true });
+    } catch (err) {
+      fail(err);
+    } finally {
+      el.disabled = false;
+    }
+  },
+  'notify-off': async () => {
+    await disableNotifications();
+    ui.watchLine = '';
+    toast('It will stop telling you once the secret is removed too.');
+    render({ keepScroll: true });
   },
 
   'price-key': () => openPriceKeyForm(),

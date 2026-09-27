@@ -1,7 +1,8 @@
 # Tally: notes for Claude
 
-Tally is a **wealth-fund book**: an installable PWA that keeps what the fund
-is worth, what it is for, and where it sits. It began as a budgeting app and
+Tally is a **portfolio book**: an installable PWA that keeps what the fund is
+worth, what it is for, and where it sits — and, since 6.0, prices what it
+holds rather than being told what it is worth. It began as a budgeting app and
 was refocused twice — in September 2026 the owner removed spending entirely.
 **There is no transaction logging in this app.** No transactions, no
 categories, no budgets, no repeating items, no CSV. If a change starts by
@@ -30,6 +31,9 @@ and the Fold is the device to design for when the two disagree.
 - `npm test`: 129 unit tests with Node's built-in runner. No install needed.
 - `npm run test:browser`: 5 Playwright test files (`fund`, `strongbox`, `book`, `bridge`, `zz-audit`) at phone, Fold and laptop sizes, including both folded postures. `bridge` stubs the SimpleFIN bridge with `page.route()`, so it never touches a real one or costs anything. Needs `npm install` and `npx playwright install chromium` once. It builds `dist/` first.
 - `npm run build`: rebuilds `dist/tally.html`, the single-file version.
+- `node scripts/send-push.js`: what the scheduled job runs to tell the phone
+  what the day did. `DRY_RUN=1` works out the figure and sends nothing. Not
+  part of the app and not precached.
 
 Run `npm test` and `npm run test:browser` before saying something works. If the browser tests can't run in this environment, say so plainly.
 
@@ -46,14 +50,18 @@ There is no framework and no build step. Plain ES modules load directly in the b
     against balances, the history of readings, what has gone stale.
   - `advisor.js` — the quarterly review as a computed checklist. Takes a
     `money` formatter as an argument so core stays free of locale.
-  - `link.js` — reading a SimpleFIN bridge: exact cents from decimal
-    strings, setup-token decoding, access-URL parsing, and `planSync()`,
-    which decides what a sync may change.
+  - `holdings.js` — positions and prices: exact cents from decimal strings,
+    share counts and prices as scaled integers (1e6), `positionValue()`
+    multiplying them in BigInt, `valueAccount()`/`valueBook()`, `allocation()`
+    and `dayChange()`.
   - `defaults.js` — `newAccount()` is the one shape an account has;
     `validate.js` sanitises and parses backups.
-- `js/link.js`: the bridge. The only file in the app that makes a network
-  request, and it only ever asks the owner's bridge for balances. Browser-only,
-  so outside `core/`.
+- `js/prices.js`: the price feed. One of only two files that make a network
+  request. Quotes the whole book in one call to Twelve Data.
+- `js/valuation.js`: the seam between "what the market says" and "what the
+  book records" — turns prices into dated readings via `recordBalance()`.
+- `js/notify.js`: the phone's half of being told. Permission, push
+  subscription, and the one line pasted into the repository's secrets.
 - `js/vault.js`: the strongbox. AES-GCM under a PBKDF2 key (300k rounds)
   from a passphrase that is never stored. Browser-only, so outside `core/`.
 - `js/storage.js`: IndexedDB, falling back to localStorage, then memory.
@@ -70,9 +78,9 @@ There is no framework and no build step. Plain ES modules load directly in the b
   page, `data-action` click delegation, keyboard, paper theme, service worker.
 - `css/app.css`: all styles.
 - `sw.js`: precaches every shipped file.
-- `scripts/`: `serve.js`, `build-single-file.js`, `browser-test.js`. There
-  is no local bridge script — SimpleFIN is reachable straight from the
-  browser, so nothing runs on the owner's machine at all.
+- `scripts/`: `serve.js`, `build-single-file.js`, `build-site.js`,
+  `browser-test.js`, and `send-push.js` — the last runs in GitHub Actions,
+  not in the browser and not on the owner's machine.
 
 ## Rules that must not break
 
@@ -94,6 +102,13 @@ There is no framework and no build step. Plain ES modules load directly in the b
 8. **The newest reading is what an account is worth.** `recordBalance()`
    files a backdated reading under its own date and leaves the current figure
    alone. One reading per day; a second on the same date corrects the first.
+   Since 6.0 a reading may be **derived** — shares times price — and that is
+   deliberate: `js/valuation.js` files it through `recordBalance()` like any
+   other, so the history, the charts and the staleness checks never learn the
+   difference. What must not change is that only a *complete* valuation is
+   filed. An account with a holding the feed would not quote keeps its last
+   complete figure, because a half-priced total understates it and a history
+   you cannot trust is worse than one that is a day stale.
 9. **A record written today and one restored from a backup must be identical.**
    `newAccount()` is the one shape; `saveGoal` does the same for pots. Skip it
    and a backup round trip silently changes the data.
@@ -106,63 +121,51 @@ There is no framework and no build step. Plain ES modules load directly in the b
 12. **Single-file bundler limits.** Single-line `import { a, b as c } from './x.js';` and `export function|const|let|class` only. No default exports, dynamic imports or import cycles. Run `npm run build` after source changes.
 13. **Privacy by default.** No analytics, no AI; fonts self-hosted, and the
     book face is whichever serif the device already has. Anything that leaves
-    the device must be the owner's explicit choice. There is **exactly one**
-    runtime request the app can make, and it is that choice: reading balances
-    from a SimpleFIN bridge the owner signed up for themselves (rule 15). No
-    other third party is ever contacted. Don't add a second one.
+    the device must be the owner's explicit choice.
+    The app makes **one kind of request**: asking a price feed what a share
+    costs. That request says what is held only in the sense that it names the
+    tickers; it carries no identity, no balance, no share count, and nothing
+    sealed. Nothing else is contacted from the browser — no broker, no
+    aggregator, no analytics — and a browser test asserts it.
+    The scheduled job in `.github/workflows/notify.yml` is the one other
+    thing that reaches the network, and it runs in the owner's own repository
+    under their own secrets.
 14. **UI copy** is the book's voice: plain, active, unhurried. Things are
     "written in", not "saved"; the strongbox is "shut", not "locked out".
     Error messages say what to do next.
-15. **Account connectivity is SimpleFIN, paid, at the owner's explicit
-    instruction — don't swap it for a "free" alternative without asking.**
-    This took three tries and is settled:
-    - **SimpleFIN** (where this landed) is directly callable from a browser —
-      no server, no client secret, no developer account, nothing of ours in
-      the middle — for a flat **$1.50/mo or $15/yr** paid straight to the
-      bridge. The owner's instruction, verbatim: "switch to simple fin,
-      FINALIZE EVERYTHING. I will pay the flat rate."
-    - **Teller** looked free and was tried first, and its API is genuinely
-      good, but it has **no self-serve signup any more** — every signup route
-      404s and the only auth link on the site is a sign-in form with no way
-      to create an account. Verified directly; don't re-attempt it without
-      checking that has changed.
-    - **Plaid** was tried after Teller as the free-and-self-serve option:
-      `dashboard.plaid.com/signup` does work, and its **Limited Production**
-      allowance is real (200 live calls per product). But requesting
-      production access — even for the narrowest possible scope, `auth` +
-      `balance` alone, nothing else — routes through a "Submit request" screen
-      that demands a payment method and agreement to a **real, metered pricing
-      schedule** (Balance $0.10/call, Auth $1.50 one-time, and so on) before
-      it will hand out a working secret. The owner's rule is genuinely zero
-      cost (see the memory on not paying for services), so this was a dead
-      end regardless of how the marketing page reads. If revisiting this,
-      verify against the actual dashboard request flow, not the pricing page.
-    - Given the choice was between "free in theory, paid in the dashboard's
-      actual flow" (Plaid) and "paid outright, but small, flat, and honest
-      about it" (SimpleFIN), the owner chose to just pay SimpleFIN. Don't
-      re-open this by chasing a free option again without asking first.
-    - **The claim step must stay a *simple* request.** The bridge has no
-      OPTIONS handler on the claim path (it answers 404), so any custom
-      header or content type turns the POST into a preflighted one and the
-      browser blocks it before it is sent. Bare
-      `fetch(claimUrl, { method: 'POST' })`, nothing else. Balance reads are
-      fine to send an `Authorization` header, which the bridge does allow.
-    - An access URL carries its credentials in the URL itself
-      (`https://user:pass@host/…`), which a browser will not `fetch()`
-      directly — `parseAccessUrl()` splits the userinfo out and it is sent as
-      a Basic `Authorization` header instead.
-    - Reads pass `balances-only=1`, which keeps transactions off the wire
-      entirely — this app does not log spending and must never ask for them.
-    - `js/link.js` is the only file that makes a network request, and it only
-      ever talks to the owner's own bridge, which a browser test asserts.
-      `js/core/link.js` is the only file that interprets what comes back, and
-      it is pure — no network, no browser globals.
-    - The access URL lives sealed in the vault (rule 7) and a read only works
-      while the strongbox is open.
-    - A sync may change **only** the balance and its date. Name, role, rate,
-      pots and sealed details are the owner's; a bank renaming an account must
-      not rewrite the book. `planSync()` enforces this and a unit test pins it.
-    - A balance that hasn't moved is not a new reading (rule 8 still holds).
+15. **The book prices what it holds; it is not told what it is worth.**
+    Three attempts at aggregation ran aground on "completely free", and the
+    history is here so nobody re-treads it:
+    - **SimpleFIN** is browser-callable and good, and costs ~$15/yr.
+    - **Teller** has **no self-serve signup any more** — every signup route
+      404s and the only auth link is a sign-in form. Verified directly.
+    - **Plaid** does have self-serve signup, and its Limited Production
+      allowance is real, but requesting production access — even for the
+      narrowest scope, `auth` + `balance` alone — routes through a screen
+      demanding a payment method and a metered pricing agreement before it
+      will issue a working secret. Verified against the dashboard's own flow,
+      not the pricing page.
+    So 6.0 inverted the problem: **holdings change rarely, prices change
+    daily**, so the book stores positions and prices them itself.
+    - Prices come from Twelve Data, which answers
+      `Access-Control-Allow-Origin: *` — checked by probe before it was
+      chosen. Yahoo's endpoints send no CORS headers at all and cannot be
+      called from a browser, whatever the internet says.
+    - **One request prices the whole book.** The feed takes a comma-separated
+      list, so twenty holdings cost one of the free allowance, not twenty.
+      Don't loop over symbols.
+    - **Never let a float touch a figure.** Shares and prices are scaled
+      integers (1e6) and multiplied in BigInt, rounded once at the end into
+      cents. `tests/holdings.test.js` pins the awkward cases against exact
+      rational arithmetic.
+    - A holding the feed will not quote is **reported, never counted as
+      nothing**, and never filed (see rule 8).
+    - If a broker ever becomes reachable for free, the place to add it is a
+      new file beside `js/prices.js` that produces positions; nothing else
+      should need to know. Robinhood's agent API is the likeliest candidate —
+      it is a public OAuth client with PKCE and `Access-Control-Allow-Origin:
+      *`, verified live, so it needs no server. It does require opening a
+      dedicated Robinhood "Agentic" account, and its schema is undocumented.
 
 ## Design
 
@@ -352,6 +355,20 @@ thing twice on one spread is the mistake a second page exists to avoid.
   on a 360px page that margin is 20px — a 12px ribbon at `left: 4px` left
   only 4px of air, and the sway spent it, colliding with the chapter title
   intermittently. Leave real clearance and keep the rotation small.
+- **`percent()` takes a fraction, not basis points.** It is `Intl` with
+  `style: 'percent'`, so it multiplies by 100. Passing `bp / 100` renders
+  everything a hundred times too large — "80%" for a 0.8% day — which reads
+  as plausible nonsense rather than an obvious bug, and no unit test on basis
+  points will catch it. Pass `bp / 10_000`. A browser test now asserts that
+  no percentage on the page exceeds 100%.
+- **`tests/project.test.js` parses `FILES` out of `sw.js` by pattern**, so any
+  `'./…'` string literal elsewhere in that file looks like a precached path.
+  A push handler defaulting to `'./#/fund'` broke it; write `'#/fund'` and
+  resolve against `self.location.href`.
+- **A test at spread width matches every selector twice.** From 820px the
+  facing page and the inline copy both exist in the DOM — one is hidden by
+  CSS, but `waitForSelector` still resolves two. Drive flows at phone width
+  unless the spread itself is what is being tested.
 - **`pkill -f`:** never use it with a pattern that also appears in your own shell command; it kills the shell.
 - **German number format** puts a non-breaking space before `€`. Normalise whitespace in assertions.
 
